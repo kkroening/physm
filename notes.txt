@@ -1,0 +1,582 @@
+- generalizing things into matrix equations instead of discrete points
+- seems to be helpful to think of things as components, each with its own pivot point attached to
+  a parent
+- components form a dag
+- each component has a transformation matrix that transforms points relative to the component's
+  frame / coordinate system
+- the key thing is that downstream/child components inherit translation but not rotation to keep
+  things hopefully quite a bit simpler when it comes to crunching the equations
+- each component has a set of points, each with its own amount of mass
+  - to get the continuous/non-discrete version, swap the summation symbol with integration.  the
+    integration may be parameterized however is desired.  for mass organized along a (potentially
+    bendy) line, it's a single integral.  for a 2d surface it's double integral. etc.
+- I'm not entirely sure about the matrix derivatives.  just using what seems like should be the
+  way it should work, e.g. by applying the product rule of differentiation to matrix products.
+  hopefully it's correct.
+- representing things in this manner produces some fairly elegant equations with some matrices in
+  the middle.
+- the transformation matrix for each component is designed in such a way that transforming the
+  origin of the component yields the attachment point in global coordinates
+- the matrices so far seem to always produce global coordinates (i.e. relative to the world root)
+  rather than producing coordinates that are relative to the parent.  hopefully this simplifies
+  things and that there aren't any extra derivative influencers floating around that I missed when
+  taking the kinetic+potential energy derivatives.
+- there's a handy thing that happens with the potential energy formula: it simplifies down to a
+  dot product, whereas the kinetic energy formula is an entire quadratic form
+- still gotta figure out how to differentiate a quadratic form with respect to a parameter that
+  generates the matrix.
+- http://michael.orlitzky.com/articles/the_derivative_of_a_quadratic_form.xhtml
+  - interesting/useful, but doesn't say how to differentiate a quadratic form with respect to
+    a parameter of the matrix
+  - this article mentions that the derivative of a quadratic form with respect to x is a row
+    vector.  not sure why this is the case or if I've been doing it wrong in my approach.
+  - should probably confirm that the A' matrix is actually correct.  I'm not entirely sure what
+    A' even represents at this point.  I guess it's a measure of how much the basis vectors of A
+    are changing with respect to time (which affects theta which in turn generates A).
+- wait a sec, if these equations are true then this is a bit miraculous: the velocity of any point
+  can be expressed as a matrix times a local position.  seems too good to be true.  I would think
+  that having a chain of connected rotating bodies would make the downstream things have really
+  complicated motion that would consist of doing a bunch of nested rotations.
+  - should probably check this with a simpler example or plug in the double pendulum equation to
+    make sure it all checks out
+- many matrix identities are based on eigenvectors.  I wonder if the eigenvectors are useful here,
+  considering that all the matrices are plain-old affine transformations with actual geometric
+  meaning.
+  - https://alyssaq.github.io/2015/understanding-eigenvectors-and-eigenvalues-visually/
+
+
+
+=== 2019/11/30 ===================================================================================
+- let frame F_i represent a "frame"
+- everything is attached to some sort of frame
+- frames are attached to parent frames at some point in the parent's coordinate space
+- this is surprisingly challenging to think about even though it seems like it should be pretty
+  simple.  gotta just do some braindump to get things going
+- what makes this so hard to think about?
+  - one thing is that there are so many different coordinate systems.  each frame is attached to
+    another frame at some position+rotation relative to the parent frame's coordinate system.
+    then within the child frame, other points can be represented as relative to a transformed
+    coordinate system, since the child frame can move and rotate independently of the parent (but
+    still relative to the parent)
+  - so I think this means that each frame actually has two coordinate systems.  one is the 
+    coordinate system directly relative to the parent frame, and the other is the space where
+    child points exist.
+- think of frames as having at least a position (and maybe also a rotation) that's relative to the
+  parent frame.
+- the parent frame can transform the child frame's position
+- sidenote: even though frame identifiers are a preordered set rather than plain integers, I'm
+  going to for now let frame `i-1` represent the parent of frame i.  so that means that
+  `F_i-1 == F_j-1` does not imply `i == j`.
+- let `G_i = A_i-n * A_i-n+1 * ... * A_i-2 * A_i-1 * A_i`; in other words, G_i transforms a point
+  in frame i's local coordinate space into global coordinates.
+- let w_i be frame i's offset relative to frame i's parent.  `G_i-1 * w_i` is frame i's base point
+  as a global coordinate.  `A_i-1 * w_i` is frame i's base point in frame i-1's local coordinate
+  space.
+- each frame can have mass attached to it at certain spots.  let u_ij be the jth element of mass
+  m_ij in frame i.  u_ij represents a local coordinate in the frame.  the global coordinate of
+  u_ij is G_i-1 * T_  .... uhhh hmmm, stumped
+- are there any translation matrices besides just the translation matrix that moves local
+  coordinates to parent frame coordinates?  maybe not.  I guess it's really just that there are
+  two transformations for each frame, and it's just a matter of applying them in the right order.
+- in other words, 
+- for background, the latest attempt of this has been to treat each frame as being purely a
+  translation relative to the parent.  I figured this would simplify some of the math, and it
+  probably does at least for the cases I had been thinking of.   the main situation I've been
+  considering is where each frame is just a rotation about some point.  then if any of the parents
+  are reconfigured then it's still just a rotation about some point and it doesn't need to inherit
+  the parent's orientation to be valid.  it allows the parent to be perturbed without having to
+  recalculate all of the child orientations - just calculate what would happen if they were to
+  slide in a way that's proportional to the anchor point of the direct descendent of the frame
+  attached to the frame that's being perturbed.
+- I need some terminology to avoid confusion here.
+  - (local) anchor point: the position where a frame is attached to a parent frame in the parent
+    frame's coordinate system.  by default it's assumed that "anchor point" refers to the point in
+    the parent frame's coordinate system rather than being a global anchor point, even though it's
+    possible to calculate the position in global coordinates if needed.
+  - frame parameter: a generalized coordinate that affects the transformation matrix of a frame.
+    parameters are attached to a specific frame.  for simplicity, I'm initially thinking of frames
+    as having exactly one parameter, but that assumption may be relaxed later.
+  - descendent frame: a frame that is a child of another frame, either directly or indirectly.
+    whether it includes the frame itself.  e.g. "frame A is a descendent of frame B" could mean
+    that frame A is the direct child of frame B, or frame B is the child of a frame that's the
+    parent of frame B, or frame A is frame B itself.  maybe call it "inclusive descendent" versus
+    "exclusive descendent."
+  - ancestor frame: reverse of descendent frame.  "frame A is an [inclusive|exclusive] ancestor
+    of frame B" means that frame A is the parent of frame B or frame A is the parent of a parent
+    of frame B, or if we're talking about inclusive ancestor then frame A may be frame B.
+- describing frames relative to other frames is tricky.  we have the frame that's being varied,
+  the childmost frame, and the frame that's attached to the frame that's being varied.  we can't
+  use the term "parent" here because it's ambiguous whether we're talking about the topmost parent
+  or the parent of the childmost frame.  and even "topmost" is ambiguous because it's unclear
+  whether we're talking about the absolute global top/root frame that has no other parents, or the
+  frame that's being varied.
+  - maybe use letters based on the hierarchical ordering:
+      - frame A: the frame containing the parameter being varied
+      - frame B: the direct descendent of frame A that's an ascedent of frame C
+      - frame C: the parent of frame D
+      - frame D: the frame being observed to see the affect the variation has
+    - here, we have A <= B <= C <= D
+  - meets and joins:
+    - `i ^ j`: the common ancestor of frame i and j.  may evaluate to i or j or some other common
+      ancestor depending on the situation.  may be read as "i meet j."
+    - `i | j`: the most ascendent frame that's an inclusive descendent of both frame i and frame
+      j.  may be read as "i join j."
+    - examples:
+      - A | B = B
+      - A ^ B = A
+      - A | D = D
+      - A | B | C = C
+  - parent prefix operator: `^i` refers to the parent of frame i.  equivalently `i-1`
+  - ancestor collection operator: `^^i` refers to the set of all ancestors of a frame, including
+    the frame itself.
+- kay, back to better brainstorming.  with this terminology in mind, let's think about coordinate
+  spaces and eventually how to do all the variational calculations and get a matrix that can be
+  crunched to find the equations of motion.
+- the long story short is that we need to be able to hypothetically vary each of the parameters
+  and see what happesn to the kinetic and potential energy of the system.  I say "hypothetically"
+  because we don't actually try changing the values - we just look at what would happen if we were
+  to do such variations.  if we solve this symbolically we get equations of motion, but we need
+  to be able to do this dynamically, and the way we structure the system has to lend itself well
+  to such automated analysis.
+- so far I keep coming back to the idea where every frame can be represented as a time-varying
+  transformation matrix.
+
+=== 2019/12/06 ===================================================================================
+- the algorithm is pretty well figured out at this point - got the equations all worked out and
+  now I just have to implement it
+- brainstorming how to implement the scene graph.  
+- the old fuzix scene had some useful ideas - "connectors" and "specs"
+- specs are created as standalone python objects with no parent.  they just contain all the
+  desired parameters attached to a type of scene object
+- connectors are attached to a parent spec (or in some cases, multiple parent specs) and have a
+  `|` operator that takes a spec and attaches the spec to the parent and returns a new connector
+- connectors can thus be used to construct scene graphs in a fluent-style interface, e.g.
+  ```
+  (
+    Connector()
+    | Hinge()
+    | Rod(length=5)
+    | Ball(mass=3)
+    | Hinge()
+    | Rod(length=5)
+    | Ball(mass=10)
+  )
+  ```
+- with the new algorithm, there's quite a bit more flexibility + capability.  there's a notion of
+  coordinate frames that have an arbitrary transformation matrix, so long as it's a function of
+  some parameter `q`.
+- coordinate frames can have one or more masses attached to them at various locations.
+- coordinate frames can have other coordinate frames attached to them
+- on one level, there's a tree of coordinate frames.  but on another, there's a sorta larger scene
+  graph that includes the masses attached to the coordinate frames and any other things like
+  springs that may be a function of more than one coordinate frame, forming a dag.  it's not
+  clear whether these should be separate graphs or if the framegraph should just be a subset of
+  the full graph
+- masses could be attached to frames with the normal fluent interface or through some other thing
+  like constructor args.  I'm leaning towards constructor args, because otherwise it gets kinda
+  ambiguous when you chain a mass to another mass to another mass.  i.e. do these masses inherit
+  coordinates or do they reset from the same parent frame?
+- should probably try both approaches. first approach is to allow masses to be passed in via
+  constructor:
+  ```
+  (
+    Connector()
+    | HingeFrame([Rod(length=5), Ball(mass=10, offset=[0, 5]))
+    | HingeFrame([Ball(mass=10)])
+  )
+  ```
+  - This approach is obviously shit.
+- alternate approach is to mix-and-match frame specs with other kinds of specs and have the
+  scene graph just deal with it:
+  ```
+  (
+    Connector()
+    | Hinge()  # starts a new coordinate frame
+    | Rod(length=5, angle=-90)  # adds a decal to the frame starting at the origin facing downwards
+    | Ball(mass=5)  # adds a ball decal+mass 5 units down from the origin and attaches it to the frame
+    | Hinge()  # starts a new coordinate frame
+    # ... etc
+  )
+  ```
+- Obviously the latter one is way better, at least in this case.
+- branching might be tricky.  example1:
+  ```
+  ball1 = Connector() | Rod(length=5, angle=-45) | Ball(mass=5)
+  ball2 = Connector() | Rod(length=5, angle=-135) | Ball(mass=5)
+  (
+    Connector()
+    | Hinge()
+    | (ball1, ball2)
+  )
+  ```
+- example2:
+  ```
+  (
+      Hinge()
+      | (
+          Rod(length=5, angle=-45)
+          | Ball(mass=5)
+          | Hinge()
+          | Rod(length=5, angle=-90)
+          | Ball(mass=3),
+          Rod(length=5, angle=-135)
+          | Ball(mass=5)
+          | Hinge()
+          | Rod(length=5, angle=-90)
+          | Ball(mass=7),
+      )
+  )
+  ```
+- example3:
+  ```
+  (
+      Hinge()
+      | Spring(
+          Rod(length=5, angle=-45)
+          | Ball(mass=5)
+          | Hinge()
+          | Rod(length=5, angle=-90)
+          | Ball(mass=3),
+          Rod(length=5, angle=-135)
+          | Ball(mass=5)
+          | Hinge()
+          | Rod(length=5, angle=-90)
+          | Ball(mass=7),
+      )
+  )
+  ```
+- example4:
+
+  ```
+  pendulum1 = (
+      Hinge()
+      | Rod(length=5, angle=-90)
+      | Ball(mass=3)
+  )
+  pendulum2 = (
+      Hinge()
+      | Rod(length=5, angle=-90)
+      | Ball(mass=7)
+  )
+  pendulum3 = (
+      Hinge()
+      | Rod(length=5, angle=-90)
+      | Ball(mass=7)
+  )
+  (
+      Hinge()
+      | Spring(pendulum1, pendulum2)
+      | Spring(pendulum1, pendulum3)
+      | Spring(pendulum2, pendulum3)
+  )
+  ```
+- example5:
+  ```
+  def Pendulum(length=5, angle=-90, mass=5):
+      return (
+          Hinge()
+          Rod(length=length, angle=angle)
+          Ball(mass=mass)
+      )
+
+  (
+      Pendulum()
+      | Pendulum()
+      | Pendulum()
+      | Pendulum()
+  )
+  ```
+- example6:
+  ```
+  track = Track(length=(-10, 10), angle=0)
+  Spring(
+      track,
+      track
+      | Cart(mass=10)
+      | Pendulum()
+      | Pendulum()
+  )
+  ```
+- example7:
+  ```
+  motor = Motor()
+  (
+      Track()
+      | motor
+      | Cart()
+  )
+  def controller(q_map, qd_map):
+      return {motor: 10}
+  ```
+- summary of the above:
+  - any chain of `|` inherits parent coordinates, except for groups or springs
+  - decals and masses don't change the coordinates
+  - tuples are a shorthand for attaching a set of things without changing the coordinates
+  - specs can be constructed with no parent and then attached to a parent connector later, i.e.
+    a form of currying.
+- there's going to need to be a bit of analysis to get the scene graph turned into something
+  easily digestable, i.e. a set of coordinate frames with masses and decals
+- I started adding matrix functions on the Spec class but then decided that specs should contain
+  the bare minimum of the scene specification.  the specs should then be transformed into actual
+  scene objects as a separate step.
+
+
+=== 2019/12/07 ===================================================================================
+more brainstorming summary:
+- construction of the scene graph from the fluent-style interface should be its own layer
+- then a function transforms the fluent-style scene graph into a more condensed form with the
+  following components:
+  - Frame: a coordinate frame with a dynamically variable parameter, optionally connected to a
+    parent frame or scene.
+  - Decal: a renderable thing that gets drawn onto the frame, e.g. a line or a circle
+  - Mass: a point mass attached at a particular point on the frame
+  - Relation: a thing that relates points on two (or maybe even more) frames, e.g. a spring.
+- all of the above things are attachable to a frame and have a local offset.  a frame's local
+  offset may be dynamic, but all others are static / relative to the parent frame's local
+  coordinate system.
+- a scene consists of a set of frames, decals, and relations
+- we'll avoid bidirectional dependencies by having the scene point to its children, and those
+  things point to their children, and so on, rather than having things point to their parents.
+  - note that this is actually opposite from the scenebuilder's perspective, which constructs
+    things in the opposite direction.  both representations have all the necessary information
+    though, and if something needs to go the reverse direction then it just needs a satellite
+    data structure (i.e. hashmap).
+- need some terminology for the two layers above.  one is the scenebuilder graph and the other is
+  another kind of scene graph.  ideas for terms:
+  - analyzed scene-graph
+  - condensed scene-graph
+  - processed scene-graph
+  - intermediate scene-graph
+- going with "condensed" scene-graph for now
+- ideally, the scenebuilder graph can be rendered reactively/functionally, so that if an altered
+  scenebuilder graph is needed, then the graph is just re-rendered dynamically while keeping track
+  of the existing state.  (I'm using the term "render" here in the reactive sense, not the
+  rasterization sense).  but if possible, the render should be incremental/memoized so that if the
+  render function is called with the same args, it takes no computational effort to return the
+  memoized version, and downstream compilation stages are unaffected.
+- the condensed scene graph needs to take this into account so that the condensed form can be
+  updated incrementally, and again hopefully functionally/immutably.
+  - example:
+    ```
+    @memoized
+    def render(thing_count):
+        return [
+            Offset(x=i * 5)
+            | Hinge(init_angle=-45, key=f'ball{i}')
+            | Rod(length=5)
+            | Ball(mass=10)
+            for i in range(thing_count)
+        ]
+    ```
+  - the above scenebuilder graph turns into the following condensed scene graph when
+    thing_count=3:
+    ```
+    Scene(
+        frames=[
+            HingeFrame(
+                offset=(0, 0),
+                init_angle=-np.pi/4,
+                decals=[
+                    LineDecal(offsets=((0, 0), (5, 0))),
+                    CircleDecal(offset=(5, 0), radius=2),
+                ],
+                masses=[Mass(mass=10, offset=(5, 0))],
+            ),
+            HingeFrame(
+                offset=(5, 0),
+                decals=[
+                    LineDecal(offsets=((0, 0), (5, 0))),
+                    CircleDecal(offset=(5, 0), radius=2),
+                ],
+                masses=[Mass(mass=10, offset=(5, 0))],
+            ),
+            HingeFrame(
+                offset=(10, 0),
+                decals=[
+                    LineDecal(offsets=((0, 0), (5, 0))),
+                    CircleDecal(offset=(5, 0), radius=2),
+                ],
+                masses=[Mass(mass=10, offset=(5, 0))],
+            )
+        ]
+    )
+    ```
+  - a mapping is also produced to go from scenebuilder nodes to condensed scenegraph nodes and
+    vice-versa.
+  - state + initial conditions can be specified in terms of either kind of graph node or by key.
+    but the low-level tick function requires the state to be expressed in terms of the condensed
+    scene graph, i.e. as a mapping from frame reference to q and qd value.
+    - actually this is TBD.  it might make more sense to have these be a flat list and then have
+      a mapping to assign a unique index to each frame.
+
+=== 2019/12/08 ===================================================================================
+- got naivesolver mostly working last night except for one mysterious bug.  fixed it today and
+  now getting some of the first working simulations.
+- also implemented springs, but needs an equilibrium point.
+- things to do:
+  - design and implement scene builder interface
+  - [done] integrate runge-kutta method into solver
+  - [done] implement spring rendering
+  - implement spring equilibrium
+  - write solver test cases
+
+=== 2019/12/09 ===================================================================================
+- figured out scene builder interface syntax and got it into a graph representation, but the graph
+  needs to be transformed into a more condensed representation.  but at least all the information
+  is there, and the pythonic dsl feels pretty smooth.
+
+=== 2019/12/10 ===================================================================================
+- graph transformations are hard.  there are a number of seemingly simple graph operations that
+  I need to do but there aren't obvious ways to do them.  I find myself writing crazy hackish code
+  that has odd transient state and lots of confusion, lots of going back and forth over the graph
+  multiple times.  there obviously has to be better ways to do this, but at this point I'm just
+  trying to wrap my head around the overall process, regardless of how hacky it is.
+- so far what I've gotten it down to is a set of transformation stages:
+  - transform any connectors that have a right-hand-side of unbound connectors.  definitely need
+    better terminology here.  the situation is resemblant of partial function application, where
+    in this case there's a chunk of scene graph that's floating around and not yet bound to
+    any particular context.  for example:
+    ```
+    unbound = LineDecal((1, 0)) | StaticTranslation((1, 0)) | Mass()
+    frame = RotationalFrame() | unbound
+    ```
+  - what this results in is a chain of connectors for the unbound, then a connector that binds
+    the unbound onto the frame.  in the graph representation, the binding looks somewhat
+    backwards because the connectors normally work in a forwards direction.  but if you look
+    closely at the execution order here, the line -> translation -> mass connections get created
+    before the rotation frame gets created as compared to the following:
+    ```
+    frame = RotationalFrame() | LineDecal((1, 0)) | StaticTranslation((1, 0)) | Mass()
+    ```
+  - in the latter case, the connections happen in a more left-to-right order
+  - I think this is all pretty sensible when getting down to the details of it, but it's not
+    intuitively obvious at first, and it gets tricky to reason about.  we need better terminology
+    for this.  maybe a term like LazyBinding instead of the ambiguous Connection.
+    - but if the term LazyBinding is used, does it represent the connection between
+      `RotationalFrame()` and `unbound` above, or does it represent the not-yet-connected
+      LineDecal?
+  - in any case, aside from terminology (or lack thereof), the first graph transformation stage
+    is to rebind any of these lazy binded things and reorganize the graph into a more
+    sequential/monotonic view.  so far, this transformation step is actually just a special walk
+    function that walks the graph in a particular way and then emits nodes in the desired order.
+    in a sense, it's a way to induce an ordering on the set of nodes in the graph while skipping
+    over the bindings nodes.
+
+=== 2019/12/12 ===================================================================================
+- spent a bit of time thinking about graph transformations and finally concluded that the most
+  powerful and useful graph transformation technique is just an ordinary function with a typical
+  programming language call stack.  all the things like depth-first search, visitor patterns, and
+  other sorts of building blocks are available in a general purpose way.  the daglet toposort is
+  conceptually not that much different and has only a dubious amount of value on top of doing
+  plain python code.  in particular, it uses a local variable stack to avoid recursion limits and
+  does local mutation to keep track of visited nodes, whereas a pure function would need to do
+  other gymnastics to accomplish the same thing.  but aside from those two things, an ordinary
+  function can do all the same sorts of things, and more.
+- got lots of stuff working.  some bugs here and there and ux annoyances but not too bad.
+- TODO: figure out how to do toposort with pure functions
+  - http://web.engr.oregonstate.edu/~erwig/papers/InductiveGraphs_JFP01.pdf
+  - looks like it's actually fairly challenging
+  - interesting related articles: http://web.engr.oregonstate.edu/~erwig/papers/abstracts.html#JFP01
+- TODO: fix commit timestamp
+
+=== 2019/12/13 ===================================================================================
+- do a bunch of example simulations
+  - everything seems to be working pretty well.  performance is the biggest pain point, as well as
+    the desire for new features.
+- feature requests:
+  - scene transformation node map - needed for generating force_map
+  - anonymous springs, e.g. thing1 | Spring() | thing2
+  - anonymous lines, e.g. thing1 | LineDecal() | thing2
+  - get rid of dumb matplotlib border
+    - better resolution
+  - progress bar for simulation + rendering
+  - better scene validity error messages
+    - e.g. `TrackFrame() | RotationalFrame()` results in gimbal lock
+      - gimbal lock is possible in the opposite order too
+    - reactive scene generation - keep track of keys so that state can map from a dynamically
+      modified scene graph
+  - constraints / lagrange multipliers
+  - unit tests + modularity
+  - bug: stage 4 (frame ordering) fails to connect root scene unless there's an extra node after
+    a root frame.  e.g.
+    ```
+    wheel                 | Group(*spokes)  # doesn't work
+    wheel | CircleDecal() | Group(*spokes)  # works
+    ```
+  - coerce input arguments for things like mass parameters
+- I've decided that friction + external work are highest priority, because even though it'd be
+  nice to get better performance, I kinda have to figure those out before starting to optimize the
+  algorithm, or else it will be in vain and/or make it more difficult to add friction+work.
+- looks like friction shouldn't be too difficult to implement.  the hardest part is finding
+  resources that explain how to add friction/work dissipation terms, as there seems to be
+  widespread confusion and misinformation on the topic.  it seems to be surprisingly simple -
+  just include another term in the EL equations that measures the change in energy due to
+  dissipation in terms of the partial derivative of such term with respect to q' and/or q.  in
+  some cases (at least friction, or maybe all cases) I guess this is the Rayleigh dissipation
+  function.
+  - useful articles:
+    - https://arxiv.org/pdf/1409.4041.pdf : rayleigh dissipation.  talks about how the rayleigh
+      dissipation is often misunderstood/underestimated, and a lot of alternative methods have
+      been created because people don't realize how useful rayleigh dissipation actually is.
+    - http://web.mst.edu/~stutts/SupplementalNotes/EL10.pdf : concise but thorough run-through
+      of lagrangian mechanics
+      - #33 shows virtual external work
+  - kinds of friction:
+    - rotational
+    - track
+    - spring
+
+=== 2019/12/14 ===================================================================================
+- goals for the day:
+  - friction
+  - take a stab at constraints
+    - might not get 'em working but going to at least try so that they're on the radar
+  - unit testing + code modularization
+  - optimization
+- if all goes well then tomorrow I can probably either start working on GPU support or start
+  studying reinforcement learning or make a better UI
+- implemented friction, woo!
+  - TODO: scale friction for nonlinear tracks such as quadratic frame
+  - TODO: add safeguards against setting friction too high, which causes overshoot in velocity
+  - TODO: support spring equilibrium distance
+  - TODO: support attaching of springs to root frame
+  - TODO: stop simulating if nan encountered
+- made tons of progress, and sorta got constraints implemented, but struggling to get it to
+  produce reasonable results
+  - the simulation seems to be unstable, such that it appears that the lagrange multipliers are
+    encouraging the acceleration constraint, but it does nothing to prevent displacement+velocity
+    drift.
+
+=== 2019/12/15 ===================================================================================
+- working more on constraints.  I was originally thinking I wouldn't even try, since it might be
+  too difficult, but it seems like it might sorta actually be possible, so I think it's worth
+  the effort considering how much more capability it would bring to the simulator.  in fact,
+  one could argue that the simulator is severely limited if it doesn't support constraints.
+- as I understand it, the lagrange multiplier method aims to keep the acceleration of the
+  generalized coordinates such that the relative displacement+velocity of the constraint remains
+  constant. and as far as I'm aware, there's nothing built into it to prevent drift.  in the case
+  where the EL equations are solved algebraically/analytically, it produces a solution that
+  perfectly honors the constraint, but in practice the EL equations usually need to be
+  approximated through some numerical approximation, which can inevitably drift if no other
+  safeguards are in place.
+- so the goals of this are multifold:
+  - use lagrange multipliers in such a way that minimizes drift
+  - compensate for drift somehow
+- it seems like it's possible to come up with an equation to adjust the parameters in a way that
+  reduces drift, simply by (symbolically) measuring the drift and then differentiating it with
+  respect to each parameter.  this produces a set of ratios of how much each parameter would
+  affect the displacement, and the ratios could be used to select perturbations to the parameters
+  that would move the displacement towards the desired amount.  however, these derivatives are
+  only linear approximations, and changing any one parameter affects the ratios, as it's
+  essentially a differential equation.  I'm not sure if this would be considered an ODE or if it
+  could be crunched by something like runge kutta.
+- started studying basic quantum + hamiltonian stuff:
+  - https://cds.cern.ch/record/399399/files/p1.pdf
+
+=== 2019/12/21 ===================================================================================
+- idea: make simulation popular in the iot / diy robotics / makerspace world.  as reinforcement
+  learning becomes more integrated into diy robotics, people will need simulators.
+- in the future, will robotics be dominated by a few major organizations or will indie robot
+  devs be more prominent?  seems like organized robotics would blow indie devs out of the water.
+  but it'd be really cool if there could be a market for indie robot devs
+
