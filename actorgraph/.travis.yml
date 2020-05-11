@@ -1,0 +1,50 @@
+language: python
+matrix:
+  include:
+    - python: 2.7
+      env:
+      - TOX_ENV=py27
+    - python: 3.4
+      env:
+      - TOX_ENV=py34
+    - python: 3.5
+      env:
+      - TOX_ENV=py35
+    - python: 3.6
+      env:
+      - TOX_ENV=py36
+    - python: pypy
+      env:
+      - TOX_ENV=pypy
+    - python: pypy
+      env:
+      - TOX_ENV=pypy3
+before_install:
+  - |
+    set -e
+    if [[ $TOX_ENV == pypy* ]]; then
+        # Travis pypy versions are super old, so download manually.
+        if [[ $TOX_ENV == pypy ]]; then
+            PYTHON_NAME="pypy"
+            DOWNLOAD_URL="https://bitbucket.org/pypy/pypy/downloads/pypy2-v5.8.0-linux64.tar.bz2"
+        elif [[ $TOX_ENV == pypy3 ]]; then
+            PYTHON_NAME="pypy3"
+            DOWNLOAD_URL="https://bitbucket.org/pypy/pypy/downloads/pypy3-v5.8.0-linux64.tar.bz2"
+        fi
+
+        PYTHON_DIR="~/.cache/${PYTHON_NAME}"
+        if [ ! -d ${PYTHON_DIR} ] ; then
+            mkdir -p ${PYTHON_DIR}
+            curl -Lo- ${DOWNLOAD_URL} | tar jxf - --strip-components=1 -C ${PYTHON_DIR}
+        fi
+        export PATH=${PYTHON_DIR}/bin:${PATH}
+    fi
+    set +e
+install:
+  - pip install tox
+script:
+  - tox -e $TOX_ENV
+cache:
+  directories:
+    - .cache
+    - .tox

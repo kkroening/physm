@@ -1,0 +1,69 @@
+<html>
+<head>
+    <p class="auto-hidden" id="hats">IM WEARING A HAT</p>
+    <title>S4L</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+
+<div id="container" >
+
+<div class="auto-hidden default-action">
+    <p>Access token: <span id="access-token"></span></p>
+    <p><a id="create-live-video-url" href="">Create live video</a></p>
+</div>
+
+<div class="auto-hidden" id="video-info">
+    <p>Video ID: <span id="video-id"></span></p>
+    <p>Stream URL: <span id="stream-url"></span></p>
+    <p>Get-stuff: <a href="" id="get-stuff-url">(here)</a></p>
+    <p>Like count: <a href="" id="like-count-url">(here)</a></p>
+    <p>Love count: <a href="" id="love-count-url">(here)</a></p>
+    <p>Haha count: <a href="" id="haha-count-url">(here)</a></p>
+    <p>Wow count: <a href="" id="wow-count-url">(here)</a></p>
+    <p>Sad count: <a href="" id="sad-count-url">(here)</a></p>
+    <p>Angry count: <a href="" id="angry-count-url">(here)</a></p>
+</div>
+
+<div class="auto-hidden create-live-video-action">
+</div>
+
+<div class="auto-hidden get-stuff-action">
+    Getting stuff...
+</div>
+
+<div class="auto-hidden reaction-count-action">
+    <span id="reaction-count">0</span>
+</div>
+
+
+</div>
+
+
+<script src="node_modules/jquery/dist/jquery.min.js"></script>
+<script>window.jquery = $;</script>
+<script src="__javascript__/client.js"></script>
+<!--<script>
+    (function(d, s, id){
+         var js, fjs = d.getElementsByTagName(s)[0];
+         if (d.getElementById(id)) {return;}
+         js = d.createElement(s); js.id = id;
+         js.src = "//connect.facebook.net/en_US/sdk.js";
+         fjs.parentNode.insertBefore(js, fjs);
+     }(document, 'script', 'facebook-jssdk'));
+</script>-->
+<script>
+window.dbg = function(text) {
+    var node = document.createElement("LI");
+    var textnode = document.createTextNode(text);
+    node.appendChild(textnode);
+    document.getElementById("container").appendChild(node); 
+}
+</script>
+<script src="fb_sdk_patched.min.js"></script>
+
+
+
+</body>
+</html>

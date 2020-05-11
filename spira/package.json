@@ -1,0 +1,23 @@
+{
+  "name": "spira",
+  "version": "1.0.0",
+  "description": "Kral's Spiffy Spirograph ========================",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kkroening/spiffo.git"
+  },
+  "author": "Karl Kroening <karlk@kralnet.us> (https://kralnet.us)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kkroening/spiffo/issues"
+  },
+  "homepage": "https://github.com/kkroening/spiffo#readme",
+  "dependencies": {
+    "dat-gui": "^0.5.0",
+    "three": "^0.75.0"
+  }
+}

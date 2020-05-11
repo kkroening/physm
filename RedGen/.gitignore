@@ -1,0 +1,7 @@
+.gradle
+build
+eclipse
+bin
+.classpath
+eclipse/.metadata/.plugins/org.eclipse.core.resources/.projects/Minecraft/.location
+.project

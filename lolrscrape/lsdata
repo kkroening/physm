@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+cd $(dirname $0)
+if [ $# -gt 0 ]; then
+    cd $1
+else
+    cd ../out
+fi
+for d in $(ls); do echo "$d: $(ls $d/data 2>/dev/null | wc -l)"; done

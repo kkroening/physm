@@ -1,0 +1,35 @@
+{
+  "name": "blog",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "gatsby build",
+    "develop": "gatsby develop",
+    "start": "npm run develop",
+    "serve": "gatsby serve",
+    "deploy": "npm run build && firebase deploy"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "gatsby": "^2.4.2",
+    "gatsby-plugin-google-analytics": "^2.0.19",
+    "gatsby-plugin-typography": "^2.2.13",
+    "gatsby-source-filesystem": "^2.0.33",
+    "gatsby-transformer-remark": "^2.3.12",
+    "react": "^16.8.6",
+    "react-dom": "^16.8.6",
+    "react-typography": "^0.16.19",
+    "rehype-react": "^3.1.0",
+    "three": "^0.104.0",
+    "typography": "^0.16.19",
+    "typography-theme-parnassus": "^0.16.19"
+  },
+  "devDependencies": {
+    "eslint-plugin-react": "^7.13.0",
+    "firebase-tools": "^6.8.0",
+    "gatsby-cli": "^2.5.12",
+    "prettier": "^1.17.0"
+  }
+}

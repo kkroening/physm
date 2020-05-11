@@ -1,0 +1,1 @@
+/Users/karlk/src/redgen/src/main/java/us/kralnet/redgen/jacksontst.java

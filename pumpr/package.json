@@ -1,0 +1,39 @@
+{
+  "name": "pumpr",
+  "version": "0.0.2",
+  "description": "pumpr: pump data reactively",
+  "main": "dist/main.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "boot test test-cljs",
+    "build": "boot dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kkroening/pumpr.git"
+  },
+  "keywords": [
+    "reactive",
+    "streams",
+    "react",
+    "flux",
+    "redux",
+    "rxjs",
+    "cycle",
+    "bacon",
+    "mori",
+    "clojure",
+    "clojurescript",
+    "clj",
+    "cljs",
+    "immutable"
+  ],
+  "author": "Karl Kroening <karlk@kralnet.us> (https://kralnet.us)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kkroening/pumpr/issues"
+  },
+  "homepage": "https://github.com/kkroening/pumpr#readme"
+}

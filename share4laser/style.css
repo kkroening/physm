@@ -1,0 +1,12 @@
+.container {
+    background-color: blue;
+}
+
+.auto-hidden {
+    display: none;
+}
+
+.lorem {
+    background-color: red;
+    color: white;
+}

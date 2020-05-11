@@ -1,0 +1,5 @@
+future
+gevent
+git+https://github.com/kkroening/goless.git@actorgraph
+pytest
+sphinx

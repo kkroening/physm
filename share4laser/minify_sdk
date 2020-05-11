@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+./node_modules/.bin/uglifyjs fb_sdk_patched.js > fb_sdk_patched.min.js
