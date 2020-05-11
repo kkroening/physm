@@ -60,7 +60,10 @@ Sorted scales:
 python circle5_anim.py
 ```
 
-Note: if the terminal output doesn't show up properly (e.g. garbled characters appear), install `colorama` inside of a python virtualenv before running the script:
+<img src="https://raw.githubusercontent.com/kkroening/misc/master/circle5/circle5.gif" alt="animation" width="75%" />
+
+
+Note: if the terminal output doesn't show up properly (e.g. garbled characters appear), try installing `colorama` inside of a python virtualenv before running the script:
 ```bash
 virtualenv venv
 venv/bin/activate           # (Windows)
