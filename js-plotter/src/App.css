@@ -1,0 +1,23 @@
+.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.Plot__background {
+  fill: #ffffff;
+}
+
+.Plot__line {
+  stroke: rgb(255,0,0);
+  stroke-width: 4;
+}
