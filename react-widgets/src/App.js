@@ -1,7 +1,10 @@
-import React, { useEffect, useRef } from 'react';
-import logo from './logo.svg';
-import 'normalize.css';
 import './App.css';
+import 'normalize.css';
+import logo from './logo.svg';
+import React from 'react';
+import { useEffect } from 'react';
+import { useRef } from 'react';
+import { useState } from 'react';
 
 function renderToCanvas(canvas) {
   const ctx = canvas.getContext('2d');
@@ -16,15 +19,11 @@ function renderToCanvas(canvas) {
   ctx.restore();
 }
 
-function VBox({children}) {
-  return (
-    <div className="vbox">
-      {children}
-    </div>
-  )
+function VBox({ children }) {
+  return <div className="vbox">{children}</div>;
 }
 
-function Slider({name, value}) {
+function Slider({ name, value }) {
   return (
     <div className="slider">
       <label className="slider__label">{name}</label>
@@ -58,20 +57,71 @@ function Plot() {
     <div className="plot">
       <p className="plot__title">This is a plot.</p>
       <div className="plot__main">
-        <canvas width={400} height={400} className="plot__canvas" ref={canvasRef} />
+        <canvas
+          width={400}
+          height={400}
+          className="plot__canvas"
+          ref={canvasRef}
+        />
         <svg className="plot__svg">
-          <line className="plot__line" x1={20} y1={30} x2={200} y2={220} strokeWidth={3} />
-          <circle className="plot__circle" cx="50" cy="50" r="20" fill="blue"/>
+          <line
+            className="plot__line"
+            x1={20}
+            y1={30}
+            x2={200}
+            y2={220}
+            strokeWidth={3}
+          />
+          <circle
+            className="plot__circle"
+            cx="50"
+            cy="50"
+            r="20"
+            fill="green"
+          />
         </svg>
       </div>
     </div>
   );
 }
 
+function useKeyboard(callback) {
+  const pressedKeys = useRef(new Set());
+  const [pressedKeysState, setPressedKeysState] = useState(new Set());
+
+  useEffect(() => {
+    function handleKeyDown({ code, keyCode }) {
+      if (!pressedKeys.current.has(keyCode)) {
+        pressedKeys.current.add(keyCode);
+        setPressedKeysState(new Set(pressedKeys.current));
+        callback && callback({ name: code, id: keyCode, pressed: true });
+      };
+    }
+    function handleKeyUp({ code, keyCode }) {
+      if (pressedKeys.current.has(keyCode)) {
+        pressedKeys.current.delete(keyCode);
+        setPressedKeysState(new Set(pressedKeys.current));
+        callback && callback({ name: code, id: keyCode, pressed: false });
+      };
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [callback]);
+
+  return pressedKeysState;
+}
+
 function App() {
+  const pressedKeys = useKeyboard();
   return (
     <div className="app__main">
       <img src={logo} className="app__logo" alt="logo" />
+      <p>{[...pressedKeys].join(', ')}</p>
       <ControlPanel />
       <Plot />
     </div>

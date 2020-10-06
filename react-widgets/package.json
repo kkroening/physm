@@ -32,6 +32,7 @@
     ]
   },
   "devDependencies": {
+    "immer": "^7.0.9",
     "normalize.css": "^8.0.1"
   }
 }

@@ -1,8 +1,12 @@
+import './index.css';
+import * as serviceWorker from './serviceWorker';
+import App from './App';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import './index.css';
-import App from './App';
-import * as serviceWorker from './serviceWorker';
+import {enableMapSet} from "immer"
+
+enableMapSet()
+
 
 ReactDOM.render(
   <React.StrictMode>
