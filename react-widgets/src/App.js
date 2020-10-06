@@ -124,11 +124,39 @@ function useKeyboard(callback) {
   return pressedKeys;
 }
 
+const useAnimationFrame = (callback, params) => {
+  const fps = (params && params.fps) || 60;
+  const state = React.useRef({prevTime: 0});
+  const requestRef = React.useRef();
+  const timerRef = React.useRef();
+  state.current.callback = callback;
+
+  React.useEffect(() => {
+    function animate(time) {
+      const deltaTime = (time - state.current.prevTime) / 1000;
+      state.current.callback(deltaTime);
+      state.current.prevTime = time;
+      timerRef.current = setTimeout(() => {
+        requestRef.current = requestAnimationFrame(animate);
+      }, 1000 / fps - deltaTime);
+    };
+
+    requestRef.current = requestAnimationFrame(animate);
+    return () => {
+      cancelAnimationFrame(requestRef.current);
+      timerRef.current && clearTimeout(timerRef.current);
+    }
+  }, [fps]);
+};
+
 function App() {
   const pressedKeys = useKeyboard();
+  const [count, setCount] = useState(0);
+  useAnimationFrame((deltaTime) => setCount((count) => count + deltaTime));
   return (
     <div className="app__main">
       <img src={logo} className="app__logo" alt="logo" />
+      <h2>{Math.round(count * 10) / 10}</h2>
       <p>{[...pressedKeys].join(', ')}</p>
       <ControlPanel />
       <Plot />
