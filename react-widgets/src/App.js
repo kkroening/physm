@@ -7,19 +7,6 @@ import { useEffect } from 'react';
 import { useRef } from 'react';
 import { useState } from 'react';
 
-function renderToCanvas(canvas) {
-  const ctx = canvas.getContext('2d');
-  const width = canvas.width;
-  const height = canvas.height;
-  ctx.save();
-  ctx.beginPath();
-  ctx.clearRect(0, 0, width, height);
-  ctx.translate(width / 2, height / 2);
-  ctx.fillStyle = '#4397AC';
-  ctx.fillRect(-width / 4, -height / 4, width / 2, height / 2);
-  ctx.restore();
-}
-
 function VBox({ children }) {
   return <div className="vbox">{children}</div>;
 }
@@ -51,32 +38,16 @@ function ControlPanel() {
   );
 }
 
-function Plot() {
-  const canvasRef = useRef(null);
-  useEffect(() => renderToCanvas(canvasRef.current));
+function Plot({ x, y }) {
   return (
     <div className="plot">
       <p className="plot__title">This is a plot.</p>
       <div className="plot__main">
-        <canvas
-          width={400}
-          height={400}
-          className="plot__canvas"
-          ref={canvasRef}
-        />
         <svg className="plot__svg">
-          <line
-            className="plot__line"
-            x1={20}
-            y1={30}
-            x2={200}
-            y2={220}
-            strokeWidth={3}
-          />
           <circle
             className="plot__circle"
-            cx="50"
-            cy="50"
+            cx={x}
+            cy={y}
             r="20"
             fill="green"
           />
@@ -88,26 +59,28 @@ function Plot() {
 
 function useKeyboard(callback) {
   const [pressedKeys, setPressedKeys] = useState(new Set());
+  const callbackRef = useRef();
+  callbackRef.current = callback;
 
   useEffect(() => {
     function handleKeyDown({ code, keyCode }) {
       setPressedKeys((pressedKeys) => {
-        if (!pressedKeys.has(keyCode)) {
+        if (!pressedKeys.has(code)) {
           pressedKeys = producer(pressedKeys, (draft) => {
-            draft.add(keyCode);
+            draft.add(code);
           });
-          callback && callback({ name: code, id: keyCode, pressed: true });
+          callbackRef.current && callbackRef.current({ keyName: code, keyId: keyCode, pressed: true });
         }
         return pressedKeys;
       });
     }
     function handleKeyUp({ code, keyCode }) {
       setPressedKeys((pressedKeys) => {
-        if (pressedKeys.has(keyCode)) {
+        if (pressedKeys.has(code)) {
           pressedKeys = producer(pressedKeys, (draft) => {
-            draft.delete(keyCode);
+            draft.delete(code);
           });
-          callback && callback({ name: code, id: keyCode, pressed: false });
+          callbackRef.current && callbackRef.current({ keyName: code, keyId: keyCode, pressed: false });
         }
         return pressedKeys;
       });
@@ -119,7 +92,7 @@ function useKeyboard(callback) {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [callback]);
+  }, []);
 
   return pressedKeys;
 }
@@ -150,16 +123,33 @@ const useAnimationFrame = (callback, params) => {
 };
 
 function App() {
+  const [[x, y], setXY] = useState([50, 50]);
   const pressedKeys = useKeyboard();
   const [count, setCount] = useState(0);
-  useAnimationFrame((deltaTime) => setCount((count) => count + deltaTime));
+  useAnimationFrame((deltaTime) => {
+    setCount((count) => count + deltaTime);
+    if (pressedKeys.has('KeyD')) {
+      setXY(([x, y]) => [x + deltaTime * 150, y]);
+    }
+    if (pressedKeys.has('KeyA')) {
+      setXY(([x, y]) => [x - deltaTime * 150, y]);
+    }
+    if (pressedKeys.has('KeyW')) {
+      setXY(([x, y]) => [x, y - deltaTime * 150]);
+    }
+    if (pressedKeys.has('KeyS')) {
+      setXY(([x, y]) => [x, y + deltaTime * 150]);
+    }
+  });
   return (
     <div className="app__main">
       <img src={logo} className="app__logo" alt="logo" />
       <h2>{Math.round(count * 10) / 10}</h2>
-      <p>{[...pressedKeys].join(', ')}</p>
+      {
+        //<p>{[...pressedKeys].join(', ')}</p>
+      }
       <ControlPanel />
-      <Plot />
+      <Plot x={x} y={y} />
     </div>
   );
 }
