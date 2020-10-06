@@ -1,6 +1,7 @@
 import './App.css';
 import 'normalize.css';
 import logo from './logo.svg';
+import producer from 'immer';
 import React from 'react';
 import { useEffect } from 'react';
 import { useRef } from 'react';
@@ -86,23 +87,30 @@ function Plot() {
 }
 
 function useKeyboard(callback) {
-  const pressedKeys = useRef(new Set());
-  const [pressedKeysState, setPressedKeysState] = useState(new Set());
+  const [pressedKeys, setPressedKeys] = useState(new Set());
 
   useEffect(() => {
     function handleKeyDown({ code, keyCode }) {
-      if (!pressedKeys.current.has(keyCode)) {
-        pressedKeys.current.add(keyCode);
-        setPressedKeysState(new Set(pressedKeys.current));
-        callback && callback({ name: code, id: keyCode, pressed: true });
-      };
+      setPressedKeys((pressedKeys) => {
+        if (!pressedKeys.has(keyCode)) {
+          pressedKeys = producer(pressedKeys, (draft) => {
+            draft.add(keyCode);
+          });
+          callback && callback({ name: code, id: keyCode, pressed: true });
+        }
+        return pressedKeys;
+      });
     }
     function handleKeyUp({ code, keyCode }) {
-      if (pressedKeys.current.has(keyCode)) {
-        pressedKeys.current.delete(keyCode);
-        setPressedKeysState(new Set(pressedKeys.current));
-        callback && callback({ name: code, id: keyCode, pressed: false });
-      };
+      setPressedKeys((pressedKeys) => {
+        if (pressedKeys.has(keyCode)) {
+          pressedKeys = producer(pressedKeys, (draft) => {
+            draft.delete(keyCode);
+          });
+          callback && callback({ name: code, id: keyCode, pressed: false });
+        }
+        return pressedKeys;
+      });
     }
 
     window.addEventListener('keydown', handleKeyDown);
@@ -113,7 +121,7 @@ function useKeyboard(callback) {
     };
   }, [callback]);
 
-  return pressedKeysState;
+  return pressedKeys;
 }
 
 function App() {
