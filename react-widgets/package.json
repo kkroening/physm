@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@tensorflow/tfjs": "^2.5.0",
     "@testing-library/jest-dom": "^4.2.4",
     "@testing-library/react": "^9.3.2",
     "@testing-library/user-event": "^7.1.2",
@@ -32,7 +33,9 @@
     ]
   },
   "devDependencies": {
+    "faker": "^5.1.0",
     "immer": "^7.0.9",
-    "normalize.css": "^8.0.1"
+    "normalize.css": "^8.0.1",
+    "react-test-renderer": "^16.13.1"
   }
 }
