@@ -1,4 +1,3 @@
-import * as tf from '@tensorflow/tfjs';
 import Decal from './Decal';
 import React from 'react';
 import { coercePositionVector } from './utils';
@@ -10,16 +9,14 @@ export default class LineDecal extends Decal {
     this.startPos = coercePositionVector(startPos);
     this.endPos = coercePositionVector(endPos);
     this.lineWidth = lineWidth;
-    //this._positions = tf.concat([this.startPos, this.endPos], 1);
     this.color = color;
   }
 
   xform(xformMatrix) {
-    const scale = 1; // TODO: detect from xformMatrix.
     return LineDecal({
       endPos: xformMatrix.matMul(this.endPos),
       startPos: xformMatrix.matMul(this.startPos),
-      lineWidth: this.lineWidth * scale,
+      lineWidth: this.lineWidth, // TODO: transform using xformMatrix.
       color: this.color,
     });
   }

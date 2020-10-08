@@ -14,7 +14,7 @@ export default class Frame {
     frames = [],
     resistance = 0,
     initialState = ZERO_STATE,
-    id,
+    id = null,
   } = {}) {
     this.id = id != null ? id : generateRandomId();
     this.position = coercePositionVector(position);
@@ -34,11 +34,11 @@ export default class Frame {
   }
 
   getAccelMatrix(q) {
-    return tf.zeros((3, 3));
+    return tf.zeros([3, 3]);
   }
 
   getDomElement(stateMap, xformMatrix, { key } = {}) {
-    const [positionState, _] = this.id in stateMap ? stateMap[this.id] : ZERO_STATE;
+    const [positionState,] = this.id in stateMap ? stateMap[this.id] : ZERO_STATE;
     xformMatrix = xformMatrix.matMul(this.getPosMatrix(positionState));
     return (
       <g className="frame" key={key}>

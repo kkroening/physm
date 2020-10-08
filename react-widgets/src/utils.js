@@ -62,11 +62,40 @@ export function coerceStateTuple(state) {
   return state;
 }
 
+export function getScaleMatrix(x, y) {
+  return tf.tensor2d([
+    [x, 0, 0],
+    [0, y, 0],
+    [0, 0, 1],
+  ]);
+}
+
+export function getRotationMatrix(angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return tf.tensor2d([
+    [c, -s, 0],
+    [s, c, 0],
+    [0, 0, 1],
+  ]);
+}
+
 export function getTranslationMatrix(offset) {
   offset = coercePositionVector(offset).dataSync();
   return tf.tensor2d([
     [1, 0, offset[0]],
     [0, 1, offset[1]],
+    [0, 0, 1],
+  ]);
+}
+
+export function getRotationTranslationMatrix(angle, offset) {
+  offset = coercePositionVector(offset).dataSync();
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return tf.tensor2d([
+    [c, -s, offset[0]],
+    [s, c, offset[1]],
     [0, 0, 1],
   ]);
 }

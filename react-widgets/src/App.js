@@ -1,17 +1,18 @@
 import './App.css';
 import 'normalize.css';
 import * as tf from '@tensorflow/tfjs';
+import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
 import LineDecal from './LineDecal';
 import logo from './logo.svg';
 import producer from 'immer';
 import React from 'react';
 import RotationalFrame from './RotationalFrame';
+import TrackFrame from './TrackFrame';
 import { getTranslationMatrix } from './utils';
 import { useEffect } from 'react';
 import { useRef } from 'react';
 import { useState } from 'react';
-
 
 const frame2 = new RotationalFrame({
   decals: [
@@ -29,6 +30,18 @@ const frame1 = new RotationalFrame({
   frames: [frame2],
 });
 
+const frame0 = new TrackFrame({
+  decals: [
+    new LineDecal({ startPos: [-300, 0], endPos: [300, 0], color: 'gray' }), // TODO: move to scene.
+    new BoxDecal({
+      width: 40,
+      height: 40 / 1.618,
+      color: 'blue',
+      lineWidth: 6,
+    }),
+  ],
+  frames: [frame1],
+});
 
 function VBox({ children }) {
   return <div className="vbox">{children}</div>;
@@ -62,14 +75,18 @@ function ControlPanel() {
 }
 
 function Plot({ x, y }) {
-  const stateMap = {[frame1.id]: [x, 0], [frame2.id]: [y, 0]};
+  const stateMap = {
+    [frame0.id]: [x, 0],
+    [frame1.id]: [y, 0],
+    [frame2.id]: [y * -1.73, 0],
+  };
   const xformMatrix = getTranslationMatrix([150, 150]);
   return (
     <div className="plot">
       <p className="plot__title">This is a plot.</p>
       <div className="plot__main">
         <svg className="plot__svg">
-          {frame1.getDomElement(stateMap, xformMatrix)}
+          {frame0.getDomElement(stateMap, xformMatrix)}
         </svg>
       </div>
     </div>
@@ -157,17 +174,17 @@ function App() {
   const [count, setCount] = useState(0);
   useAnimationFrame((deltaTime) => {
     setCount((count) => count + deltaTime);
-    if (pressedKeys.has('KeyD')) {
-      setXY(([x, y]) => [x + deltaTime * 3, y]);
-    }
     if (pressedKeys.has('KeyA')) {
-      setXY(([x, y]) => [x - deltaTime * 3, y]);
+      setXY(([x, y]) => [x - deltaTime * 150, y]);
+    }
+    if (pressedKeys.has('KeyD')) {
+      setXY(([x, y]) => [x + deltaTime * 150, y]);
     }
     if (pressedKeys.has('KeyW')) {
-      setXY(([x, y]) => [x, y - deltaTime * 3]);
+      setXY(([x, y]) => [x, y - deltaTime * 4]);
     }
     if (pressedKeys.has('KeyS')) {
-      setXY(([x, y]) => [x, y + deltaTime * 3]);
+      setXY(([x, y]) => [x, y + deltaTime * 4]);
     }
   });
   const debug = tf.add(tf.tensor1d([1, 2]), tf.tensor1d([3, 4])).toString();
