@@ -10,7 +10,7 @@ export default class Frame {
   constructor({
     position = ZERO_POS,
     decals = [],
-    masses = [],
+    weights = [],
     frames = [],
     resistance = 0,
     initialState = ZERO_STATE,
@@ -19,7 +19,7 @@ export default class Frame {
     this.id = id != null ? id : generateRandomId();
     this.position = coercePositionVector(position);
     this.decals = decals;
-    this.masses = masses;
+    this.weights = weights;
     this.frames = frames;
     this.resistance = resistance;
     this.initialState = coerceStateTuple(initialState);

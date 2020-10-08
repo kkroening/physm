@@ -7,7 +7,7 @@ export default class RotationalFrame extends Frame {
   constructor({
     position = ZERO_POS,
     decals = [],
-    masses = [],
+    weights = [],
     frames = [],
     resistance = 0,
     initialState = ZERO_STATE,
@@ -16,7 +16,7 @@ export default class RotationalFrame extends Frame {
     super({
       position: position,
       decals: decals,
-      masses: masses,
+      weights: weights,
       frames: frames,
       resistance: resistance,
       initialState: initialState,
@@ -24,11 +24,11 @@ export default class RotationalFrame extends Frame {
     });
   }
 
-  xform(xformMatrix, { decals = null, masses = null, frames = null }) {
+  xform(xformMatrix, { decals = null, weights = null, frames = null }) {
     return new RotationalFrame({
       position: xformMatrix.matMul(this.position),
       decals: decals != null ? decals : this.decals,
-      masses: masses != null ? masses : this.masses,
+      weights: weights != null ? weights : this.weights,
       frames: frames != null ? frames : this.frames,
       resistance: this.resistance,
       initialState: this.initialState,

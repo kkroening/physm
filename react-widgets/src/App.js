@@ -4,6 +4,7 @@ import * as tf from '@tensorflow/tfjs';
 import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
 import LineDecal from './LineDecal';
+import Weight from './Weight';
 import logo from './logo.svg';
 import producer from 'immer';
 import React from 'react';
@@ -14,20 +15,25 @@ import { useEffect } from 'react';
 import { useRef } from 'react';
 import { useState } from 'react';
 
+const ball1Position = [60, 0];
+const ball2Position = [80, 0];
+
 const frame2 = new RotationalFrame({
   decals: [
-    new LineDecal({ endPos: [80, 0] }),
-    new CircleDecal({ position: [80, 0], radius: 15, color: 'green' }),
+    new LineDecal({ endPos: ball2Position }),
+    new CircleDecal({ position: ball2Position, radius: 15, color: 'green' }),
   ],
   position: [60, 0],
+  weights: [new Weight(10, { position: ball2Position })],
 });
 
 const frame1 = new RotationalFrame({
   decals: [
-    new LineDecal({ endPos: [60, 0] }),
-    new CircleDecal({ position: [60, 0], radius: 15, color: 'red' }),
+    new LineDecal({ endPos: ball1Position }),
+    new CircleDecal({ position: ball1Position, radius: 15, color: 'red' }),
   ],
   frames: [frame2],
+  weights: [new Weight(5, { position: ball1Position })],
 });
 
 const frame0 = new TrackFrame({
@@ -41,6 +47,7 @@ const frame0 = new TrackFrame({
     }),
   ],
   frames: [frame1],
+  weights: [new Weight(20)],
 });
 
 function VBox({ children }) {

@@ -9,7 +9,7 @@ export default class TrackFrame extends Frame {
     position = ZERO_POS,
     angle = 0,
     decals = [],
-    masses = [],
+    weights = [],
     frames = [],
     resistance = 0,
     initialState = ZERO_STATE,
@@ -18,7 +18,7 @@ export default class TrackFrame extends Frame {
     super({
       angle: angle,
       decals: decals,
-      masses: masses,
+      weights: weights,
       frames: frames,
       resistance: resistance,
       initialState: initialState,
@@ -28,12 +28,12 @@ export default class TrackFrame extends Frame {
     this.angle = angle;
   }
 
-  xform(xformMatrix, { decals = null, masses = null, frames = null }) {
+  xform(xformMatrix, { decals = null, weights = null, frames = null }) {
     return new TrackFrame({
       position: xformMatrix.matMul(this.position),
       angle: this.angle, // TODO: transform using xformMatrix.
       decals: decals != null ? decals : this.decals,
-      masses: masses != null ? masses : this.masses,
+      weights: weights != null ? weights : this.weights,
       frames: frames != null ? frames : this.frames,
       resistance: this.resistance,
       initialState: this.initialState,
