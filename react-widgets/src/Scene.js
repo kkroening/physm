@@ -40,7 +40,11 @@ export default class Scene {
     );
   }
 
-  getDomElement(stateMap, xformMatrix = tf.eye(3), { key }) {
+  getDomElement(
+    stateMap = required('stateMap'),
+    xformMatrix = tf.eye(3),
+    { key = undefined } = {},
+  ) {
     return (
       <g className="scene" key={key}>
         {this.decals.map((decal, index) =>
@@ -53,7 +57,7 @@ export default class Scene {
     );
   }
 
-  getInitialStateMap(randomize = False) {
+  getInitialStateMap({ randomize = false } = {}) {
     const frames = daglet.toposort(this.frames, (frame) => frame.frames);
     let getInitialState;
     if (randomize) {

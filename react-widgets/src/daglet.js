@@ -64,8 +64,6 @@ export function transform(
     getNodeKey = undefined,
     visitNode = undefined,
     visitEdge = undefined,
-    nodeMapCache = new Map(),
-    edgeMapCache = new Map(),
   } = {},
 ) {
   getNodeParents = getNodeParents || defaultGetNodeParents;
@@ -73,39 +71,22 @@ export function transform(
   visitNode = visitNode || ((node, parentValues) => null);
   visitEdge = visitEdge || ((node, parentNode, parentValue) => parentValue);
   let lazyGetNodeParents;
-  if (nodeMapCache) {
-    // Bypass traversal of nodes that are already in the cache:
-    // TODO: figure out whether this actually makes sense or not.
-    lazyGetNodeParents = (node) =>
-      nodeMapCache.has(getNodeKey(node)) ? [] : getNodeParents(node);
-  } else {
-    lazyGetNodeParents = getNodeParents;
-  }
   const sortedNodes = toposort(nodes, {
-    getNodeParents: lazyGetNodeParents,
+    getNodeParents: getNodeParents,
     getNodeKey: getNodeKey,
   });
-  const nodeMap = new Map(nodeMapCache);
-  const edgeMap = new Map(edgeMapCache);
+  const nodeMap = new Map();
+  const edgeMap = new Map();
   sortedNodes.forEach((node) => {
     const nodeKey = getNodeKey(node);
-    let nodeValue;
-    if (nodeMapCache.has(nodeKey)) {
-      nodeValue = nodeMapCache.get(nodeKey);
-    } else {
-      const parentNodes = getNodeParents(node);
-      const parentEdgeValues = parentNodes.map((parentNode) => {
-        const parentNodeKey = getNodeKey(parentNode);
-        const edgeValue = visitEdge(
-          node,
-          parentNode,
-          nodeMap.get(parentNodeKey),
-        );
-        edgeMap.set([parentNodeKey, nodeKey], edgeValue);
-        return edgeValue;
-      });
-      nodeValue = visitNode(node, parentEdgeValues);
-    }
+    const parentNodes = getNodeParents(node);
+    const parentEdgeValues = parentNodes.map((parentNode) => {
+      const parentNodeKey = getNodeKey(parentNode);
+      const edgeValue = visitEdge(node, parentNode, nodeMap.get(parentNodeKey));
+      edgeMap.set([parentNodeKey, nodeKey], edgeValue);
+      return edgeValue;
+    });
+    const nodeValue = visitNode(node, parentEdgeValues);
     nodeMap.set(nodeKey, nodeValue);
   });
   return [nodeMap, edgeMap];
@@ -117,14 +98,12 @@ export function transformNodes(
     getNodeParents = undefined,
     getNodeKey = undefined,
     visitNode = undefined,
-    nodeMapCache = new Map(),
   } = {},
 ) {
   const [nodeMap] = transform(nodes, {
     getNodeParents: getNodeParents,
     getNodeKey: getNodeKey,
     visitNode: visitNode,
-    nodeMapCache: nodeMapCache,
   });
   return nodeMap;
 }
@@ -135,14 +114,12 @@ export function transformEdges(
     getNodeParents = undefined,
     getNodeKey = undefined,
     visitEdge = undefined,
-    edgeMapCache = new Map(),
   } = {},
 ) {
   const [, edgeMap] = transform(nodes, {
     getNodeParents: getNodeParents,
     getNodeKey: getNodeKey,
     visitEdge: visitEdge,
-    edgeMapCache: edgeMapCache,
   });
   return edgeMap;
 }

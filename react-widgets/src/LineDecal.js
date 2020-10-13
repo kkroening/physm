@@ -2,18 +2,24 @@ import Decal from './Decal';
 import React from 'react';
 import { coercePositionVector } from './utils';
 import { getXformMatrixScaleFactor } from './utils';
+import { required } from './utils';
 import { ZERO_POS } from './utils';
 
 export default class LineDecal extends Decal {
-  constructor({ endPos, startPos = ZERO_POS, lineWidth = 2, color = 'k' }) {
-    super()
+  constructor({
+    endPos = required('endPos'),
+    startPos = ZERO_POS,
+    lineWidth = 2,
+    color = 'black',
+  } = {}) {
+    super();
     this.startPos = coercePositionVector(startPos);
     this.endPos = coercePositionVector(endPos);
     this.lineWidth = lineWidth;
     this.color = color;
   }
 
-  xform(xformMatrix) {
+  xform(xformMatrix = required('xformMatrix')) {
     const scale = getXformMatrixScaleFactor(xformMatrix);
     return LineDecal({
       endPos: xformMatrix.matMul(this.endPos),
@@ -23,9 +29,13 @@ export default class LineDecal extends Decal {
     });
   }
 
-  getDomElement(xformMatrix, { key }) {
+  getDomElement(
+    xformMatrix = required('xformMatrix'),
+    { key = undefined } = {},
+  ) {
     const startPos = xformMatrix.matMul(this.startPos).dataSync();
     const endPos = xformMatrix.matMul(this.endPos).dataSync();
+    const scale = getXformMatrixScaleFactor(xformMatrix);
     return (
       <line
         className="plot__line"
@@ -33,7 +43,7 @@ export default class LineDecal extends Decal {
         y1={startPos[1]}
         x2={endPos[0]}
         y2={endPos[1]}
-        strokeWidth={this.lineWidth}
+        strokeWidth={this.lineWidth * scale}
         stroke={this.color}
         key={key}
       />

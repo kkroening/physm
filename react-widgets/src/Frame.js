@@ -3,6 +3,7 @@ import React from 'react';
 import { coercePositionVector } from './utils';
 import { coerceStateTuple } from './utils';
 import { generateRandomId } from './utils';
+import { required } from './utils';
 import { ZERO_POS } from './utils';
 import { ZERO_STATE } from './utils';
 
@@ -25,20 +26,25 @@ export default class Frame {
     this.initialState = coerceStateTuple(initialState);
   }
 
-  getPosMatrix(q) {
+  getPosMatrix(q = required('q')) {
     return tf.eye(3);
   }
 
-  getVelMatrix(q) {
+  getVelMatrix(q = required('q')) {
     return tf.zeros([3, 3]);
   }
 
-  getAccelMatrix(q) {
+  getAccelMatrix(q = required('q')) {
     return tf.zeros([3, 3]);
   }
 
-  getDomElement(stateMap, xformMatrix, { key } = {}) {
-    const [positionState,] = this.id in stateMap ? stateMap[this.id] : ZERO_STATE;
+  getDomElement(
+    stateMap = required('stateMap'),
+    xformMatrix = required('xformMatrix'),
+    { key = undefined } = {},
+  ) {
+    const [positionState] =
+      this.id in stateMap ? stateMap[this.id] : ZERO_STATE;
     xformMatrix = xformMatrix.matMul(this.getPosMatrix(positionState));
     return (
       <g className="frame" key={key}>

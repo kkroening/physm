@@ -6,6 +6,7 @@ import { getRotationTranslationMatrix } from './utils';
 import { getScaleMatrix } from './utils';
 import { getXformMatrixRotationAngle } from './utils';
 import { getXformMatrixScaleFactor } from './utils';
+import { required } from './utils';
 import { ZERO_POS } from './utils';
 
 const CENTERED_SQUARE = tf
@@ -51,7 +52,7 @@ export default class BoxDecal extends Decal {
       .matMul(centered ? CENTERED_SQUARE : QUAD1_SQUARE);
   }
 
-  xform(xformMatrix) {
+  xform(xformMatrix = required('xformMatrix')) {
     const scale = getXformMatrixScaleFactor(xformMatrix);
     return new BoxDecal({
       width: this.width * scale,
@@ -65,10 +66,14 @@ export default class BoxDecal extends Decal {
     });
   }
 
-  getDomElement(xformMatrix, { key }) {
+  getDomElement(
+    xformMatrix = required('xformMatrix'),
+    { key = undefined } = {},
+  ) {
     const xformed = xformMatrix.matMul(this._cornerPositions).arraySync();
+    const scale = getXformMatrixScaleFactor(xformMatrix);
     const npoints = this._cornerPositions.shape[1];
-    let lines = [];
+    const lines = [];
     for (let i = 0; i < npoints; i++) {
       const j = (i + 1) % npoints;
       lines.push(
@@ -78,7 +83,7 @@ export default class BoxDecal extends Decal {
           y1={xformed[1][i]}
           x2={xformed[0][j]}
           y2={xformed[1][j]}
-          strokeWidth={this.lineWidth}
+          strokeWidth={this.lineWidth * scale}
           stroke={this.color}
           key={i}
         />,

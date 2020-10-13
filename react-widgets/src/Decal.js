@@ -1,9 +1,15 @@
+import { NotImplementedError } from './utils';
+import { required } from './utils';
+
 export default class Decal {
-  xform(xform_matrix) {
-    throw new Error('abstract method');
+  xform(xformMatrix = required('xformMatrix')) {
+    throw new NotImplementedError('abstract method');
   }
 
-  getDomElement(xform_matrix, { key }) {
-    throw new Error('abstract method');
+  getDomElement(
+    xformMatrix = required('xformMatrix'),
+    { key = undefined } = {},
+  ) {
+    throw new NotImplementedError('abstract method');
   }
 }

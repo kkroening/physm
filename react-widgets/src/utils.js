@@ -4,7 +4,15 @@ export const ZERO_POS = tf.tensor2d([[0], [0], [1]]);
 export const ZERO_VEL = tf.tensor2d([[0], [0], [0]]);
 export const ZERO_STATE = [0, 0];
 
-export function coercePositionVector(position) {
+export class MissingArgumentError extends Error {}
+
+export class NotImplementedError extends Error {}
+
+export function required(name) {
+  throw new MissingArgumentError(`Missing required function argument: ${name}`);
+}
+
+export function coercePositionVector(position = required('position')) {
   /**
    * Convert the input argument into a tensor of shape `[3, 1]`, corresponding
    * to an affine position vector where the final component is guaranteed to
@@ -37,7 +45,7 @@ export function coercePositionVector(position) {
   return position;
 }
 
-export function coerceStateTuple(state) {
+export function coerceStateTuple(state = required('state')) {
   /**
    * Convert the input into a pair of numbers as a `[position, velocity]`
    * list/tuple.
@@ -62,7 +70,7 @@ export function coerceStateTuple(state) {
   return state;
 }
 
-export function getScaleMatrix(x, y) {
+export function getScaleMatrix(x = required('x'), y = undefined) {
   if (y == null) {
     y = x;
   }
@@ -73,7 +81,7 @@ export function getScaleMatrix(x, y) {
   ]);
 }
 
-export function getRotationMatrix(angle) {
+export function getRotationMatrix(angle = required('angle')) {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
   return tf.tensor2d([
@@ -83,7 +91,7 @@ export function getRotationMatrix(angle) {
   ]);
 }
 
-export function getTranslationMatrix(offset) {
+export function getTranslationMatrix(offset = required('offset')) {
   offset = coercePositionVector(offset).dataSync();
   return tf.tensor2d([
     [1, 0, offset[0]],
@@ -92,7 +100,10 @@ export function getTranslationMatrix(offset) {
   ]);
 }
 
-export function getRotationTranslationMatrix(angle, offset) {
+export function getRotationTranslationMatrix(
+  angle = required('angle'),
+  offset = required('offset'),
+) {
   offset = coercePositionVector(offset).dataSync();
   const c = Math.cos(angle);
   const s = Math.sin(angle);
@@ -103,7 +114,7 @@ export function getRotationTranslationMatrix(angle, offset) {
   ]);
 }
 
-export function checkXformMatrixShape(mat) {
+export function checkXformMatrixShape(mat = required('mat')) {
   if (!(mat instanceof tf.Tensor)) {
     throw new TypeError(
       `Expected transformation matrix to be tf.Tensor instance; got ${mat}`,
@@ -116,20 +127,24 @@ export function checkXformMatrixShape(mat) {
   }
 }
 
-export function getXformMatrixDeterminant(mat) {
+export function getXformMatrixDeterminant(mat = required('mat')) {
   checkXformMatrixShape(mat);
   const data = mat.dataSync();
   return data[0] * data[4] - data[1] * data[3];
 }
 
-export function getXformMatrixScaleFactor(mat) {
+export function getXformMatrixScaleFactor(mat = required('mat')) {
   return Math.sqrt(getXformMatrixDeterminant(mat));
 }
 
-export function getXformMatrixRotationAngle(mat) {
+export function getXformMatrixRotationAngle(mat = required('mat')) {
   checkXformMatrixShape(mat);
   const data = mat.dataSync();
   return Math.atan2(data[1], -data[0]);
+}
+
+export function areTensorsEqual(t1, t2) {
+  return !!tf.all(t1.equal(t2)).dataSync()[0];
 }
 
 export function generateRandomId() {

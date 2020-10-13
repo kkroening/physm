@@ -2,6 +2,7 @@ import * as tf from '@tensorflow/tfjs';
 import Frame from './Frame';
 import { getTranslationMatrix } from './utils';
 import { getXformMatrixRotationAngle } from './utils';
+import { required } from './utils';
 import { ZERO_POS } from './utils';
 import { ZERO_STATE } from './utils';
 
@@ -14,7 +15,7 @@ export default class TrackFrame extends Frame {
     frames = [],
     resistance = 0,
     initialState = ZERO_STATE,
-    id = null,
+    id = undefined,
   } = {}) {
     super({
       angle: angle,
@@ -29,7 +30,10 @@ export default class TrackFrame extends Frame {
     this.angle = angle;
   }
 
-  xform(xformMatrix, { decals = null, weights = null, frames = null }) {
+  xform(
+    xformMatrix = required('xformMatrix'),
+    { decals = undefined, weights = undefined, frames = undefined } = {},
+  ) {
     return new TrackFrame({
       position: xformMatrix.matMul(this.position),
       angle: this.angle + getXformMatrixRotationAngle(xformMatrix),
@@ -41,7 +45,7 @@ export default class TrackFrame extends Frame {
     });
   }
 
-  getPosMatrix(q) {
+  getPosMatrix(q = required('q')) {
     const position = this.position.dataSync();
     return getTranslationMatrix([
       position[0] + q * Math.cos(this.angle),
@@ -49,7 +53,7 @@ export default class TrackFrame extends Frame {
     ]);
   }
 
-  getVelMatrix(q) {
+  getVelMatrix(q = required('q')) {
     return tf.tensor2d([
       [0, 0, Math.cos(this.angle)],
       [0, 0, Math.sin(this.angle)],

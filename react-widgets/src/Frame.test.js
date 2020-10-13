@@ -4,14 +4,35 @@ import Frame from './Frame';
 import LineDecal from './LineDecal';
 import React from 'react';
 import renderer from 'react-test-renderer';
+import { areTensorsEqual } from './utils';
 
 describe('Frame', () => {
-  test('constructor', () => {
+  test('constructor defaults', () => {
     const frame = new Frame();
     expect(frame.decals).toEqual([]);
+    expect(frame.weights).toEqual([]);
+    expect(frame.frames).toEqual([]);
+    expect(frame.resistance).toEqual(0);
+    expect(frame.initialState).toEqual([0, 0]);
   });
 
-  test('.render method', () => {
+  test('.getPosMatrix method', () => {
+    const frame = new Frame();
+    const posMatrix = frame.getPosMatrix(0);
+    expect(areTensorsEqual(posMatrix, tf.eye(3))).toBe(true);
+  });
+
+  test('.getVelMatrix method', () => {
+    const velMatrix = new Frame().getVelMatrix(0);
+    expect(areTensorsEqual(velMatrix, tf.zeros([3, 3]))).toBe(true);
+  });
+
+  test('.getAccelMatrix method', () => {
+    const accelMatrix = new Frame().getAccelMatrix(0);
+    expect(areTensorsEqual(accelMatrix, tf.zeros([3, 3]))).toBe(true);
+  });
+
+  test('.getDomElement method', () => {
     const frame = new Frame({
       decals: [
         new LineDecal({ endPos: [10, 20] }),
@@ -20,17 +41,17 @@ describe('Frame', () => {
     });
     const stateMap = {};
     const xformMatrix = tf.eye(3);
-    const thing = renderer.create(
+    const rendered = renderer.create(
       <svg>{frame.getDomElement(stateMap, xformMatrix)}</svg>,
     );
-    expect(thing.toJSON()).toEqual(
+    expect(rendered.toJSON()).toEqual(
       renderer
         .create(
           <svg>
             <g className="frame">
               <line
                 className="plot__line"
-                stroke="k"
+                stroke="black"
                 strokeWidth={2}
                 x1={0}
                 y1={0}

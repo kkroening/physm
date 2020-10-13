@@ -2,17 +2,18 @@ import Decal from './Decal';
 import React from 'react';
 import { coercePositionVector } from './utils';
 import { getXformMatrixScaleFactor } from './utils';
+import { required } from './utils';
 import { ZERO_POS } from './utils';
 
 export default class CircleDecal extends Decal {
-  constructor({ position = ZERO_POS, radius = 1, color = 'green' } = {}) {
+  constructor({ position = ZERO_POS, radius = 1, color = 'black' } = {}) {
     super();
     this.position = coercePositionVector(position);
     this.radius = radius;
     this.color = color;
   }
 
-  xform(xformMatrix) {
+  xform(xformMatrix = required('xformMatrix')) {
     const scale = getXformMatrixScaleFactor(xformMatrix);
     return CircleDecal({
       position: xformMatrix.matMul(this.position),
@@ -20,7 +21,10 @@ export default class CircleDecal extends Decal {
     });
   }
 
-  getDomElement(xformMatrix, { key }) {
+  getDomElement(
+    xformMatrix = required('xformMatrix'),
+    { key = undefined } = {},
+  ) {
     const xformed = xformMatrix.matMul(this.position).dataSync();
     const scale = getXformMatrixScaleFactor(xformMatrix);
     return (

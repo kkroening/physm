@@ -108,7 +108,6 @@ describe('transform', () => {
     [['node3', 'node4']]: ['node4', 'node3', ['node3', 1]],
     [['node4', 'node5']]: ['node5', 'node4', ['node4', 2]],
   });
-  // TODO: test nodeMapCache.
 });
 
 describe('transformNodes', () => {

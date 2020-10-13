@@ -1,5 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import Frame from './Frame';
+import { required } from './utils';
 import { ZERO_POS } from './utils';
 import { ZERO_STATE } from './utils';
 
@@ -24,7 +25,10 @@ export default class RotationalFrame extends Frame {
     });
   }
 
-  xform(xformMatrix, { decals = null, weights = null, frames = null }) {
+  xform(
+    xformMatrix = required('xformMatrix'),
+    { decals = undefined, weights = undefined, frames = undefined } = {},
+  ) {
     return new RotationalFrame({
       position: xformMatrix.matMul(this.position),
       decals: decals != null ? decals : this.decals,
@@ -35,7 +39,7 @@ export default class RotationalFrame extends Frame {
     });
   }
 
-  getPosMatrix(q) {
+  getPosMatrix(q = required('q')) {
     const position = this.position.dataSync();
     const c = Math.cos(q);
     const s = Math.sin(q);
@@ -46,7 +50,7 @@ export default class RotationalFrame extends Frame {
     ]);
   }
 
-  getVelMatrix(q) {
+  getVelMatrix(q = required('q')) {
     const c = Math.cos(q);
     const s = Math.sin(q);
     return tf.tensor2d([
@@ -56,7 +60,7 @@ export default class RotationalFrame extends Frame {
     ]);
   }
 
-  getAccelMatrix(q) {
+  getAccelMatrix(q = required('q')) {
     const c = Math.cos(q);
     const s = Math.sin(q);
     return tf.tensor2d([
