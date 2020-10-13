@@ -1,15 +1,14 @@
 import './App.css';
 import 'normalize.css';
-import * as tf from '@tensorflow/tfjs';
 import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
 import LineDecal from './LineDecal';
-import Weight from './Weight';
-import logo from './logo.svg';
 import producer from 'immer';
 import React from 'react';
 import RotationalFrame from './RotationalFrame';
 import TrackFrame from './TrackFrame';
+import Weight from './Weight';
+import { getScaleMatrix } from './utils';
 import { getTranslationMatrix } from './utils';
 import { useEffect } from 'react';
 import { useRef } from 'react';
@@ -49,56 +48,6 @@ const frame0 = new TrackFrame({
   frames: [frame1],
   weights: [new Weight(20)],
 });
-
-function VBox({ children }) {
-  return <div className="vbox">{children}</div>;
-}
-
-function Slider({ name, value }) {
-  return (
-    <div className="slider">
-      <label className="slider__label">{name}</label>
-      <div className="slider__container">
-        <div className="slider__track">
-          <span className="slider__knob" />
-        </div>
-      </div>
-      <div className="slider__readout">{value}</div>
-    </div>
-  );
-}
-
-function ControlPanel() {
-  return (
-    <div className="control-panel">
-      <p>Control panel</p>
-      <VBox>
-        <Slider name="slider1" value={1} />
-        <Slider name="slider2" value={3.14} />
-        <Slider name="slider with long name" value={123.456} />
-      </VBox>
-    </div>
-  );
-}
-
-function Plot({ x, y }) {
-  const stateMap = {
-    [frame0.id]: [x, 0],
-    [frame1.id]: [y, 0],
-    [frame2.id]: [y * -1.73, 0],
-  };
-  const xformMatrix = getTranslationMatrix([150, 150]);
-  return (
-    <div className="plot">
-      <p className="plot__title">This is a plot.</p>
-      <div className="plot__main">
-        <svg className="plot__svg">
-          {frame0.getDomElement(stateMap, xformMatrix)}
-        </svg>
-      </div>
-    </div>
-  );
-}
 
 function useKeyboard(callback) {
   const [pressedKeys, setPressedKeys] = useState(new Set());
@@ -177,34 +126,47 @@ const useAnimationFrame = (callback, params) => {
 
 function App() {
   const [[x, y], setXY] = useState([0, 0]);
+  const [[translationX, translationY], setTranslation] = useState([300, 300]);
+  const [scale, setScale] = useState(1);
   const pressedKeys = useKeyboard();
-  const [count, setCount] = useState(0);
+  const stateMap = {
+    [frame0.id]: [x, 0],
+    [frame1.id]: [y, 0],
+    [frame2.id]: [y * -1.73, 0],
+  };
+  const xformMatrix = getTranslationMatrix([translationX, translationY]).matMul(
+    getScaleMatrix(scale),
+  );
+
   useAnimationFrame((deltaTime) => {
-    setCount((count) => count + deltaTime);
-    if (pressedKeys.has('KeyA')) {
-      setXY(([x, y]) => [x - deltaTime * 150, y]);
-    }
-    if (pressedKeys.has('KeyD')) {
-      setXY(([x, y]) => [x + deltaTime * 150, y]);
-    }
-    if (pressedKeys.has('KeyW')) {
-      setXY(([x, y]) => [x, y - deltaTime * 4]);
-    }
-    if (pressedKeys.has('KeyS')) {
-      setXY(([x, y]) => [x, y + deltaTime * 4]);
-    }
+    Object.entries({
+      KeyA: () => setXY(([x, y]) => [x - deltaTime * 150, y]),
+      KeyD: () => setXY(([x, y]) => [x + deltaTime * 150, y]),
+      KeyW: () => setXY(([x, y]) => [x, y - deltaTime * 4]),
+      KeyS: () => setXY(([x, y]) => [x, y + deltaTime * 4]),
+      Minus: () => setScale(scale * Math.exp(-deltaTime)),
+      Equal: () => setScale(scale * Math.exp(deltaTime)),
+      BracketLeft: () => setTranslation(([x, y]) => [x + deltaTime * 150, y]),
+      BracketRight: () => setTranslation(([x, y]) => [x - deltaTime * 150, y]),
+    }).forEach(([keyName, func]) => pressedKeys.has(keyName) && func());
   });
-  const debug = tf.add(tf.tensor1d([1, 2]), tf.tensor1d([3, 4])).toString();
+
   return (
     <div className="app__main">
-      <img src={logo} className="app__logo" alt="logo" />
-      <h2>{Math.round(count * 10) / 10}</h2>
-      <p>{debug}</p>
-      {
-        //<p>{[...pressedKeys].join(', ')}</p>
-      }
-      <ControlPanel />
-      <Plot x={x} y={y} />
+      <div className="plot">
+        <h2 className="plot__title">Smashteroids</h2>
+        {
+          //<p>Keys: {[...pressedKeys].join(', ')}</p>
+        }
+        {
+          //<p>Scale: {scale.toFixed(2)}</p>
+        }
+        <div className="plot__main">
+          <svg className="plot__svg">
+            {frame0.getDomElement(stateMap, xformMatrix)}
+          </svg>
+        </div>
+      </div>
     </div>
   );
 }

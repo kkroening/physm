@@ -43,10 +43,10 @@ export default class Frame {
     return (
       <g className="frame" key={key}>
         {this.decals.map((decal, index) =>
-          decal.getDomElement(xformMatrix, { key: index }),
+          decal.getDomElement(xformMatrix, { key: 'decal' + index }),
         )}
         {this.frames.map((frame, index) =>
-          frame.getDomElement(stateMap, xformMatrix, { key: index }),
+          frame.getDomElement(stateMap, xformMatrix, { key: 'frame' + index }),
         )}
       </g>
     );

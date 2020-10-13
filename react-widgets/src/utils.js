@@ -63,6 +63,9 @@ export function coerceStateTuple(state) {
 }
 
 export function getScaleMatrix(x, y) {
+  if (y == null) {
+    y = x;
+  }
   return tf.tensor2d([
     [x, 0, 0],
     [0, y, 0],
@@ -98,6 +101,35 @@ export function getRotationTranslationMatrix(angle, offset) {
     [s, c, offset[1]],
     [0, 0, 1],
   ]);
+}
+
+export function checkXformMatrixShape(mat) {
+  if (!(mat instanceof tf.Tensor)) {
+    throw new TypeError(
+      `Expected transformation matrix to be tf.Tensor instance; got ${mat}`,
+    );
+  }
+  if (mat.shape.length !== 2 || mat.shape[0] !== 3 || mat.shape[1] !== 3) {
+    throw new Error(
+      `Expected transformation matrix to have shape [3, 3]; got ${mat.shape}`,
+    );
+  }
+}
+
+export function getXformMatrixDeterminant(mat) {
+  checkXformMatrixShape(mat);
+  const data = mat.dataSync();
+  return data[0] * data[4] - data[1] * data[3];
+}
+
+export function getXformMatrixScaleFactor(mat) {
+  return Math.sqrt(getXformMatrixDeterminant(mat));
+}
+
+export function getXformMatrixRotationAngle(mat) {
+  checkXformMatrixShape(mat);
+  const data = mat.dataSync();
+  return Math.atan2(data[1], -data[0]);
 }
 
 export function generateRandomId() {

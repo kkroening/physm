@@ -1,6 +1,7 @@
 import Decal from './Decal';
 import React from 'react';
 import { coercePositionVector } from './utils';
+import { getXformMatrixScaleFactor } from './utils';
 import { ZERO_POS } from './utils';
 
 export default class CircleDecal extends Decal {
@@ -11,22 +12,23 @@ export default class CircleDecal extends Decal {
     this.color = color;
   }
 
-  xform(xform_matrix) {
-    const scale = 1; // TODO: detect from xform_matrix.
+  xform(xformMatrix) {
+    const scale = getXformMatrixScaleFactor(xformMatrix);
     return CircleDecal({
-      position: xform_matrix.matMul(this.position),
+      position: xformMatrix.matMul(this.position),
       radius: this.radius * scale,
     });
   }
 
-  getDomElement(xform_matrix, { key }) {
-    const xformed = xform_matrix.matMul(this.position).dataSync();
+  getDomElement(xformMatrix, { key }) {
+    const xformed = xformMatrix.matMul(this.position).dataSync();
+    const scale = getXformMatrixScaleFactor(xformMatrix);
     return (
       <circle
         className="plot__circle"
         cx={xformed[0]}
         cy={xformed[1]}
-        r={this.radius}
+        r={this.radius * scale}
         fill={this.color}
         key={key}
       />

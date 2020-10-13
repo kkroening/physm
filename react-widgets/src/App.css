@@ -94,8 +94,8 @@ html {
 .plot__main {
   background-color: #cde1ef;
   border: 1px solid black;
-  width: 400px;
-  height: 400px;
+  width: 600px;
+  height: 600px;
   position: relative;
 }
 

@@ -2,8 +2,10 @@ import * as tf from '@tensorflow/tfjs';
 import Decal from './Decal';
 import React from 'react';
 import { coercePositionVector } from './utils';
-import { getScaleMatrix } from './utils';
 import { getRotationTranslationMatrix } from './utils';
+import { getScaleMatrix } from './utils';
+import { getXformMatrixRotationAngle } from './utils';
+import { getXformMatrixScaleFactor } from './utils';
 import { ZERO_POS } from './utils';
 
 const CENTERED_SQUARE = tf
@@ -50,12 +52,12 @@ export default class BoxDecal extends Decal {
   }
 
   xform(xformMatrix) {
-    const scale = 1; // TODO: detect using xformMatrix.
+    const scale = getXformMatrixScaleFactor(xformMatrix);
     return new BoxDecal({
       width: this.width * scale,
       height: this.height * scale,
       position: xformMatrix.matMul(this.position),
-      angle: this.angle, // TODO: transform using xformMatrix.
+      angle: this.angle + getXformMatrixRotationAngle(xformMatrix),
       centered: this.centered,
       solid: this.solid,
       lineWidth: this.lineWidth * scale,

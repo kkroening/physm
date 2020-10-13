@@ -1,6 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import Frame from './Frame';
 import { getTranslationMatrix } from './utils';
+import { getXformMatrixRotationAngle } from './utils';
 import { ZERO_POS } from './utils';
 import { ZERO_STATE } from './utils';
 
@@ -31,7 +32,7 @@ export default class TrackFrame extends Frame {
   xform(xformMatrix, { decals = null, weights = null, frames = null }) {
     return new TrackFrame({
       position: xformMatrix.matMul(this.position),
-      angle: this.angle, // TODO: transform using xformMatrix.
+      angle: this.angle + getXformMatrixRotationAngle(xformMatrix),
       decals: decals != null ? decals : this.decals,
       weights: weights != null ? weights : this.weights,
       frames: frames != null ? frames : this.frames,

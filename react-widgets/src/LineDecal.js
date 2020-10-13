@@ -1,6 +1,7 @@
 import Decal from './Decal';
 import React from 'react';
 import { coercePositionVector } from './utils';
+import { getXformMatrixScaleFactor } from './utils';
 import { ZERO_POS } from './utils';
 
 export default class LineDecal extends Decal {
@@ -13,10 +14,11 @@ export default class LineDecal extends Decal {
   }
 
   xform(xformMatrix) {
+    const scale = getXformMatrixScaleFactor(xformMatrix);
     return LineDecal({
       endPos: xformMatrix.matMul(this.endPos),
       startPos: xformMatrix.matMul(this.startPos),
-      lineWidth: this.lineWidth, // TODO: transform using xformMatrix.
+      lineWidth: this.lineWidth * scale,
       color: this.color,
     });
   }
