@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from './tfjs';
 import faker from 'faker';
 import BoxDecal from './BoxDecal';
 import React from 'react';

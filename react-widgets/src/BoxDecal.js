@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from './tfjs';
 import Decal from './Decal';
 import React from 'react';
 import { coercePositionVector } from './utils';

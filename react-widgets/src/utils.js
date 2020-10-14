@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from './tfjs';
 
 export const ZERO_POS = tf.tensor2d([[0], [0], [1]]);
 export const ZERO_VEL = tf.tensor2d([[0], [0], [0]]);

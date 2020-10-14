@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from './tfjs';
 import Frame from './Frame';
 import { getTranslationMatrix } from './utils';
 import { getXformMatrixRotationAngle } from './utils';

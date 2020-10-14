@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from './tfjs';
 import React from 'react';
 import { coercePositionVector } from './utils';
 import { coerceStateTuple } from './utils';

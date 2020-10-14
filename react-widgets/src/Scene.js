@@ -16,28 +16,33 @@ export default class Scene {
     this.constraints = constraints;
     this.gravity = gravity;
 
-    // TODO: clean this up:
-    visitPath = (frame, paths) => [
+    const visitFramePath = (frame, paths) => [
       ...paths.reduce((x, y) => [...x, ...y], []),
       frame,
     ];
-    getChildren = (frame) => frames.frames;
-    this.sortedFrames = daglet.toposort(this.frames, getChildren).reverse();
-    this.frameParentsMap = daglet.getChildMap(this.sortedFrames, getChildren);
+    const getFrameParents = (frame) => frames.frames;
+    const getFrameId = (frame) => frame.id;
+    this.sortedFrames = daglet
+      .toposort(this.frames, {
+        getNodeParents: getFrameParents,
+        getNodeKey: getFrameId,
+      })
+      .reverse();
+    this.frameParentsMap = daglet.getChildMap(this.sortedFrames, {
+      getNodeParents: getFrameParents,
+      getNodeKey: getFrameId,
+    });
     if (Object.values(this.frameParentsMap).some((x) => len(x) > 1)) {
       throw new Error('Frames should only have one parent'); // TODO: use AssertionError?
     }
     this.frameParentMap = Object.fromEntries(
-      Object.entries(this.frameParentsMap).map(([frame, parents]) => [
-        frame,
-        parents[0],
-      ]),
+      [...this.frameParentsMap].map(([frame, parents]) => [frame, parents[0]]),
     );
-    this.framePathMap = daglet.transformVertices(
-      this.sortedFrames,
-      this.frameParentsMap.get,
-      visitPath,
-    );
+    this.framePathMap = daglet.transformNodes(this.sortedFrames, {
+      getNodeParents: (frame) => this.frameParentsMap.get(frame),
+      getNodeKey: getFrameId,
+      visitNode: visitFramePath,
+    });
   }
 
   getDomElement(

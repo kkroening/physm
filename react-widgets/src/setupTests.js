@@ -1,6 +1,12 @@
 import '@testing-library/jest-dom/extend-expect';
-import * as immer from 'immer';
-import * as tf from '@tensorflow/tfjs';
+import * as tf from '@tensorflow/tfjs-node';
 
-tf.setBackend('cpu');
-immer.enableMapSet();
+jest.mock('./tfjs')
+
+beforeAll(() => {
+  //tf.setBackend('cpu');
+})
+
+afterAll(() => {
+  tf.ENV.platform = null;
+})

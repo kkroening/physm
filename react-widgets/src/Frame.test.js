@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from './tfjs';
 import CircleDecal from './CircleDecal';
 import Frame from './Frame';
 import LineDecal from './LineDecal';

@@ -1,10 +1,10 @@
 import './index.css';
+import * as immer from 'immer';
 import * as serviceWorker from './serviceWorker';
+import * as tf from '@tensorflow/tfjs';
 import App from './App';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import * as immer from 'immer';
-import * as tf from '@tensorflow/tfjs';
 
 tf.setBackend('cpu');
 immer.enableMapSet();
