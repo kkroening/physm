@@ -44,15 +44,18 @@ export function getChildMap(
   getNodeKey = getNodeKey || defaultGetNodeKey;
   const sortedNodes = toposort(nodes, {
     getNodeParents: getNodeParents,
-    getNodekey: getNodeKey,
+    getNodeKey: getNodeKey,
   });
   const childMap = new Map();
   sortedNodes.forEach((node) => {
     const nodeKey = getNodeKey(node);
-    if (!childMap.has(nodeKey)) {
-      childMap.set(nodeKey, new Set());
-    }
-    childMap.get(nodeKey).add(node);
+    const parents = getNodeParents(node);
+    childMap.has(nodeKey) || childMap.set(nodeKey, new Set());
+    parents.forEach((parent) => {
+      const parentKey = getNodeKey(parent);
+      childMap.has(parentKey) || childMap.set(parentKey, new Set());
+      childMap.get(parentKey).add(node);
+    });
   });
   return childMap;
 }

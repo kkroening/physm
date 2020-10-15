@@ -73,6 +73,7 @@ describe('getChildMap', () => {
     ['node4', new Set(['node5'])],
     ['node5', new Set()],
   ]);
+  expect(childMap).toEqual(expectedChildMap);
 });
 
 describe('transform', () => {

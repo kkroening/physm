@@ -38,6 +38,9 @@ describe('Frame', () => {
         new LineDecal({ endPos: [10, 20] }),
         new CircleDecal({ radius: 7, color: 'purple' }),
       ],
+      frames: [
+        new Frame({ decals: [new CircleDecal({ radius: 5, color: 'blue' })] }),
+      ],
     });
     const stateMap = {};
     const xformMatrix = tf.eye(3);
@@ -65,6 +68,15 @@ describe('Frame', () => {
                 fill="purple"
                 r={7}
               />
+              <g className="frame">
+                <circle
+                  className="plot__circle"
+                  cx={0}
+                  cy={0}
+                  fill="blue"
+                  r={5}
+                />
+              </g>
             </g>
           </svg>,
         )

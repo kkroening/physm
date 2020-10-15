@@ -1,6 +1,7 @@
 import * as daglet from './daglet';
+import React from 'react';
 
-const DEFAULT_GRAVITY = 10;
+export const DEFAULT_GRAVITY = 10;
 
 export default class Scene {
   constructor({
@@ -16,32 +17,35 @@ export default class Scene {
     this.constraints = constraints;
     this.gravity = gravity;
 
-    const visitFramePath = (frame, paths) => [
-      ...paths.reduce((x, y) => [...x, ...y], []),
-      frame,
-    ];
-    const getFrameParents = (frame) => frames.frames;
+    const getFrameChildren = (frame) => frame.frames;
     const getFrameId = (frame) => frame.id;
     this.sortedFrames = daglet
       .toposort(this.frames, {
-        getNodeParents: getFrameParents,
+        getNodeParents: getFrameChildren,
         getNodeKey: getFrameId,
       })
       .reverse();
-    this.frameParentsMap = daglet.getChildMap(this.sortedFrames, {
-      getNodeParents: getFrameParents,
+    this.frameMap = new Map(
+      this.sortedFrames.map((frame) => [frame.id, frame]),
+    );
+    const frameIdParentsMap = daglet.getChildMap(this.sortedFrames, {
+      getNodeParents: getFrameChildren,
       getNodeKey: getFrameId,
     });
-    if (Object.values(this.frameParentsMap).some((x) => len(x) > 1)) {
+    if ([...frameIdParentsMap.values()].some((parents) => parents.size > 1)) {
       throw new Error('Frames should only have one parent'); // TODO: use AssertionError?
     }
-    this.frameParentMap = Object.fromEntries(
-      [...this.frameParentsMap].map(([frame, parents]) => [frame, parents[0]]),
+    this.frameIdParentMap = new Map(
+      [...frameIdParentsMap].map(([frameId, parents]) => [
+        frameId,
+        parents.size ? [...parents][0].id : null,
+      ]),
     );
-    this.framePathMap = daglet.transformNodes(this.sortedFrames, {
-      getNodeParents: (frame) => this.frameParentsMap.get(frame),
+    this.frameIdPathMap = daglet.transformNodes(this.sortedFrames, {
+      getNodeParents: (frame) => [...frameIdParentsMap.get(frame.id)],
       getNodeKey: getFrameId,
-      visitNode: visitFramePath,
+      visitNode: (frame, parentPaths) =>
+        parentPaths.length ? [...parentPaths[0], frame.id] : [frame.id],
     });
   }
 
@@ -63,7 +67,6 @@ export default class Scene {
   }
 
   getInitialStateMap({ randomize = false } = {}) {
-    const frames = daglet.toposort(this.frames, (frame) => frame.frames);
     let getInitialState;
     if (randomize) {
       const randPi = () => (Math.random() - 0.5) * Math.PI * 2; // TBD
@@ -71,8 +74,8 @@ export default class Scene {
     } else {
       getInitialState = (frame) => frame.initialState;
     }
-    stateMap = Object.fromEntries(frames.map(getInitialState));
-    let stateMap;
-    return state_map;
+    return new Map(
+      this.sortedFrames.map((frame) => [frame.id, getInitialState(frame)]),
+    );
   }
 }
