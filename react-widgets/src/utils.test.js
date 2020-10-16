@@ -1,7 +1,12 @@
 import * as tf from './tfjs';
 import React from 'react';
+import { areTensorsEqual } from './utils';
 import { coercePositionVector } from './utils';
 import { coerceStateTuple } from './utils';
+import { getRotationMatrix } from './utils';
+import { getRotationTranslationMatrix } from './utils';
+import { getTranslationMatrix } from './utils';
+import { invertXformMatrix } from './utils';
 import { render } from '@testing-library/react';
 
 test('coercePositionVector', () => {
@@ -30,4 +35,17 @@ test('coerceStateTuple', () => {
   expect(coerceStateTuple(3)).toEqual([3, 0]);
   expect(coerceStateTuple([3])).toEqual([3, 0]);
   expect(coerceStateTuple([3, 4])).toEqual([3, 4]);
+});
+
+test('invertXformMatrix', () => {
+  expect(areTensorsEqual(invertXformMatrix(tf.eye(3)), tf.eye(3))).toBe(true);
+  expect(
+    areTensorsEqual(
+      invertXformMatrix(getRotationMatrix(0.7)),
+      getRotationMatrix(-0.7),
+    ),
+  ).toBe(true);
+  const m1 = invertXformMatrix(getRotationTranslationMatrix(0.7, [3, 8]));
+  const m2 = getRotationMatrix(-0.7).matMul(getTranslationMatrix([-3, -8]));
+  expect(areTensorsEqual(m1, m2)).toBe(true);
 });

@@ -96,7 +96,7 @@ export function getTranslationMatrix(offset = required('offset')) {
   return tf.tensor2d([
     [1, 0, offset[0]],
     [0, 1, offset[1]],
-    [0, 0, 1],
+    [0, 0, offset[2]],
   ]);
 }
 
@@ -110,7 +110,7 @@ export function getRotationTranslationMatrix(
   return tf.tensor2d([
     [c, -s, offset[0]],
     [s, c, offset[1]],
-    [0, 0, 1],
+    [0, 0, offset[2]],
   ]);
 }
 
@@ -143,8 +143,47 @@ export function getXformMatrixRotationAngle(mat = required('mat')) {
   return Math.atan2(data[1], -data[0]);
 }
 
-export function areTensorsEqual(t1, t2) {
-  return !!tf.all(t1.equal(t2)).dataSync()[0];
+export function getXformMatrixTranslation(mat = required('mat')) {
+  checkXformMatrixShape(mat);
+  const data = mat.dataSync();
+  return tf.tensor2d([[data[2], data[5], data[8]]]);
+}
+
+export function invertXformMatrix(mat = required('mat')) {
+  checkXformMatrixShape(mat);
+  const data = mat.dataSync();
+  const det =
+    data[0] * data[4] * data[8] +
+    data[1] * data[5] * data[6] +
+    data[2] * data[3] * data[7] -
+    data[0] * data[5] * data[7] -
+    data[1] * data[3] * data[8] -
+    data[2] * data[4] * data[6];
+  return tf.tensor2d([
+    [
+      +(data[4] * data[8] - data[5] * data[7]) / det,
+      -(data[1] * data[8] - data[2] * data[7]) / det,
+      +(data[1] * data[5] - data[2] * data[4]) / det,
+    ],
+    [
+      -(data[3] * data[8] - data[5] * data[6]) / det,
+      +(data[0] * data[8] - data[2] * data[6]) / det,
+      -(data[0] * data[5] - data[2] * data[3]) / det,
+    ],
+    [
+      +(data[3] * data[7] - data[4] * data[6]) / det,
+      -(data[0] * data[7] - data[1] * data[6]) / det,
+      +(data[0] * data[4] - data[1] * data[3]) / det,
+    ],
+  ]);
+}
+
+export function areTensorsEqual(
+  t1 = required('t1'),
+  t2 = required('t2'),
+  { epsilon = 1e-6 } = {},
+) {
+  return !!tf.all(t1.sub(t2).abs().less(epsilon)).dataSync()[0];
 }
 
 export function generateRandomId() {
