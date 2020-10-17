@@ -229,27 +229,35 @@ describe('Solver', () => {
     // TODO: assert on other weightPosMap values.
   });
 
-  it('._getWeightVelMap method', () => {
-    const posMatMap = solver._getPosMatMap(stateMap);
-    const invPosMatMap = solver._getInvPosMatMap(posMatMap);
-    const velMatMap = solver._getVelMatMap(posMatMap, invPosMatMap, stateMap);
-    const velSumMatMap = solver._getVelSumMatMap(
-      posMatMap,
-      velMatMap,
-      stateMap,
-    );
-    const weightPosMap = solver._getWeightPosMap(posMatMap);
-    const weightVelMap = solver._getWeightVelMap(velSumMatMap, weightPosMap);
-    expect([...weightVelMap.keys()]).toEqual(Object.keys(frames));
-    expect(weightVelMap.get('cart').length).toBe(frames.cart.weights.length);
-    expect(weightVelMap.get('pendulum1').length).toBe(
-      frames.pendulum1.weights.length,
-    );
-    expect(weightVelMap.get('pendulum2').length).toBe(
-      frames.pendulum2.weights.length,
-    );
-    expect([...weightVelMap.get('cart')[0].dataSync()]).toEqual([1, 0, 0]);
-    expect([...weightVelMap.get('cart')[1].dataSync()]).toEqual([1, 0, 0]);
-    // TODO: assert on other weightVelMap values.
+  it('._isFrameDescendent method', () => {
+    // TODO: test.
+  });
+
+  it('._getDescendentFrame method', () => {
+    // TODO: test.
+  });
+
+  it('._getDescendentFrames method', () => {
+    // TODO: test.
+  });
+
+  it('._getCoefficientMatrixEntry method', () => {
+    // TODO: test.
+  });
+
+  it('._getCoefficientMatrix method', () => {
+    // TODO: test.
+  });
+
+  it('._getForceVectorEntry method', () => {
+    // TODO: test.
+  });
+
+  it('._getForceVector method', () => {
+    // TODO: test.
+  });
+
+  it('._getSystemOfEquations method', () => {
+    // TODO: test.
   });
 });
