@@ -3,10 +3,12 @@ import * as tf from './tfjs';
 export const ZERO_POS = tf.tensor2d([[0], [0], [1]]);
 export const ZERO_VEL = tf.tensor2d([[0], [0], [0]]);
 export const ZERO_STATE = [0, 0];
+export const DEFAULT_TOLERANCE = 1e-6;
 
 export class MissingArgumentError extends Error {}
-
 export class NotImplementedError extends Error {}
+export class DimensionError extends Error {}
+export class SingularMatrixError extends Error {}
 
 export function required(name) {
   throw new MissingArgumentError(`Missing required function argument: ${name}`);
@@ -23,23 +25,23 @@ export function coercePositionVector(position = required('position')) {
   if (position instanceof tf.Tensor) {
     const data = position.dataSync();
     if (data.length < 2 || data.length > 3) {
-      throw new Error(
-        `Expected position tensor to have 2 or 3 elements; got ${position}`,
+      throw new DimensionError(
+        `Expected \`position\` tensor to have 2 or 3 elements; got ${position}`,
       );
     }
     position = tf.tensor1d([data[0], data[1], 1]).reshape([3, 1]);
   } else if (position instanceof Array) {
     if (position.length < 2 || position.length > 3) {
-      throw new Error(
-        `Expected position array to have 2 or 3 elements; got ${position}`,
+      throw new DimensionError(
+        `Expected \`position\` array to have 2 or 3 elements; got ${position}`,
       );
     }
-    position = tf.tensor1d([position[0], position[1], 1]).reshape([3, 1]);
+    position = tf.tensor2d([[position[0]], [position[1]], [1]]);
   } else if (typeof position == 'number') {
-    position = tf.tensor1d([position, 0, 1]).reshape([3, 1]);
+    position = tf.tensor2d([[position], [0], [1]]);
   } else {
     throw new TypeError(
-      `Expected number, array, or tf.Tensor instance; got ${position}`,
+      `Expected \`position\` to be a number, array, or tf.Tensor instance; got ${position}`,
     );
   }
   return position;
@@ -59,13 +61,15 @@ export function coerceStateTuple(state = required('state')) {
     state = [state, 0];
   } else if (state instanceof Array) {
     if (state.length === 0 || state.length > 2) {
-      throw new Error(
-        `Expected state tuple to have 1 or 2 elements; got ${state}`,
+      throw new DimensionError(
+        `Expected \`state\` tuple/array to have 1 or 2 elements; got ${state}`,
       );
     }
     state = [state[0], state.length > 1 ? state[1] : 0];
   } else {
-    throw new TypeError(`Expected number of tf.Tensor instance; got ${state}`);
+    throw new TypeError(
+      `Expected \`state\` to be tf.Tensor instance; got ${state}`,
+    );
   }
   return state;
 }
@@ -117,12 +121,12 @@ export function getRotationTranslationMatrix(
 export function checkXformMatrixShape(mat = required('mat')) {
   if (!(mat instanceof tf.Tensor)) {
     throw new TypeError(
-      `Expected transformation matrix to be tf.Tensor instance; got ${mat}`,
+      `Expected transformation matrix \`mat\` to be tf.Tensor instance; got ${mat.toString()}`,
     );
   }
   if (mat.shape.length !== 2 || mat.shape[0] !== 3 || mat.shape[1] !== 3) {
-    throw new Error(
-      `Expected transformation matrix to have shape [3, 3]; got ${mat.shape}`,
+    throw new DimensionError(
+      `Expected transformation matrix \`mat\` to have shape [3, 3]; got ${mat.toString()}`,
     );
   }
 }
@@ -150,6 +154,9 @@ export function getXformMatrixTranslation(mat = required('mat')) {
 }
 
 export function invertXformMatrix(mat = required('mat')) {
+  /**
+   * Invert a 3x3 transformation matrix.
+   */
   checkXformMatrixShape(mat);
   const data = mat.dataSync();
   const det =
@@ -178,12 +185,63 @@ export function invertXformMatrix(mat = required('mat')) {
   ]);
 }
 
+export function solveLinearSystem(
+  aMat = required('aMat'),
+  bVec = required('bVec'),
+) {
+  /**
+   * Solve a linear system of equations using QR decomposition and
+   * back-substitution.
+   */
+  if (!(aMat instanceof tf.Tensor)) {
+    throw new TypeError(
+      `Expected \`aMat\` to be tf.Tensor instance; got ${aMat}`,
+    );
+  } else if (!(bVec instanceof tf.Tensor)) {
+    throw new TypeError(
+      `Expected \`bVec\` to be tf.Tensor instance; got ${bVec}`,
+    );
+  } else if (aMat.shape.length !== 2 || aMat.shape[0] != aMat.shape[1]) {
+    throw new DimensionError(
+      'Expected `aMat` to be a square matrix (2D tensor); ' +
+        `got tensor with shape ${JSON.stringify(aMat.shape)}`,
+    );
+  } else if (bVec.shape.length !== 2 || bVec.shape[1] != 1) {
+    throw new DimensionError(
+      'Expected `bVec` to be a column vector (2D tensor with one column); ' +
+        `got tensor with shape ${JSON.stringify(bVec.shape)}`,
+    );
+  } else if (aMat.shape[1] != bVec.shape[0]) {
+    throw new DimensionError(
+      'Expected `aMat` and `bVec` to have compatible shapes; ' +
+        `got aMat shape ${JSON.stringify(aMat.shape)} ` +
+        `and bVec shape ${JSON.stringify(bVec.shape)}`,
+    );
+  }
+  const n = bVec.shape[0];
+  const [qMat, rMat] = tf.linalg.qr(aMat);
+  const cVec = qMat.transpose().matMul(bVec).dataSync();
+  const rArray = rMat.arraySync();
+  const xArray = Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    if (Math.abs(rArray[i][i]) < DEFAULT_TOLERANCE) {
+      throw new SingularMatrixError(`Singular matrix: ${aMat.toString()}`);
+    }
+    let sum = 0;
+    for (let j = i + 1; j < n; j++) {
+      sum += rArray[i][j] * xArray[j];
+    }
+    xArray[i] = (cVec[i] - sum) / rArray[i][i];
+  }
+  return tf.tensor1d(xArray).reshape([n, 1]);
+}
+
 export function areTensorsEqual(
   t1 = required('t1'),
   t2 = required('t2'),
-  { epsilon = 1e-6 } = {},
+  { tolerance = DEFAULT_TOLERANCE } = {},
 ) {
-  return !!tf.all(t1.sub(t2).abs().less(epsilon)).dataSync()[0];
+  return !!tf.all(t1.sub(t2).abs().less(tolerance)).dataSync()[0];
 }
 
 export function generateRandomId() {
