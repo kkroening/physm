@@ -41,5 +41,6 @@
   },
   "jest": {
     "globalSetup": "./src/setupTestGlobals.js"
-  }
+  },
+  "homepage": "./"
 }

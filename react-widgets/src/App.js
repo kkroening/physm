@@ -199,7 +199,7 @@ function App() {
   return (
     <div className="app__main">
       <div className="plot">
-        <h2 className="plot__title">Poi-bot</h2>
+        <h2 className="plot__title">PoiBot</h2>
         {
           //<p>Keys: {[...pressedKeys].join(', ')}</p>
         }
