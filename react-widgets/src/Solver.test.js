@@ -26,7 +26,7 @@ describe('Solver', () => {
             frames: [
               new RotationalFrame({
                 id: 'pendulum2',
-                initialState: [-0.9, 1.5],
+                initialState: [-0.9, 1.8],
                 position: [10, 0],
                 weights: [new Weight(8, { position: [12, 0] })],
               }),
@@ -36,7 +36,7 @@ describe('Solver', () => {
       }),
       new TrackFrame({
         id: 'ball',
-        initialState: [0, 2],
+        initialState: [0, -2],
         position: [30, 0],
         angle: Math.PI / 4,
         weights: [new Weight(5)],
@@ -56,13 +56,6 @@ describe('Solver', () => {
   const stateMap = scene.getInitialStateMap();
   const externalForceMap = new Map();
   const solver = new Solver(scene);
-
-  test('._makeStateMap method', () => {
-    const states = scene.sortedFrames.map((frame) => frame.initialState);
-    const qs = states.map(([q]) => q);
-    const qds = states.map(([, qd]) => qd);
-    expect(solver._makeStateMap(qs, qds)).toEqual(stateMap);
-  });
 
   const posMatMap = solver._getPosMatMap(stateMap);
 
@@ -378,27 +371,46 @@ describe('Solver', () => {
   });
 
   test('._getSystemOfEquations method', () => {
-    const [aMat, bVec] = solver._getSystemOfEquations(stateMap, externalForceMap);
+    const [aMat, bVec] = solver._getSystemOfEquations(
+      stateMap,
+      externalForceMap,
+    );
     expect(aMat.shape).toEqual([numFrames, numFrames]);
     expect(bVec.shape).toEqual([numFrames, 1]);
   });
 
-  [false /*, true*/].forEach((rungeKutta) => {
+  test('._makeStateMap method', () => {
+    const states = scene.sortedFrames.map((frame) => frame.initialState);
+    const qs = states.map(([q]) => q);
+    const qds = states.map(([, qd]) => qd);
+    expect(solver._makeStateMap(qs, qds)).toEqual(stateMap);
+  });
+
+  [false, true].forEach((rungeKutta) => {
     test(`.tick method with rungeKutta=${rungeKutta}`, () => {
-      const deltaTime = 1 / 60;
-      const newStateMap = solver.tick(stateMap, deltaTime, undefined, {
-        rungeKutta: rungeKutta,
-      });
-      expect(stateMap).not.toEqual(newStateMap);
-      [...newStateMap].forEach(([frameId, [newQ, newQd]]) => {
-        const [q, qd] = stateMap.get(frameId);
-        expect(newQ).not.toBeNaN();
-        expect(newQd).not.toBeNaN();
-        expect(newQ).not.toBeCloseTo(q);
-        expect(newQd).not.toBeCloseTo(qd);
-        expect(Math.abs(newQ - q)).toBeLessThan(0.5);
-        expect(Math.abs(newQd - qd)).toBeLessThan(0.5);
-      });
+      const MAX_TIME_INDEX = 20;
+      const DELTA_TIME = 1 / 60;
+      let curStateMap = stateMap;
+      for (let timeIndex = 0; timeIndex < MAX_TIME_INDEX; timeIndex++) {
+        const newStateMap = solver.tick(curStateMap, DELTA_TIME, undefined, {
+          rungeKutta: rungeKutta,
+        });
+        expect(curStateMap).not.toEqual(newStateMap);
+        [...newStateMap].forEach(([frameId, [newQ, newQd]]) => {
+          const [q, qd] = curStateMap.get(frameId);
+          expect(newQ).not.toBeNaN();
+          expect(newQd).not.toBeNaN();
+          expect(newQ).not.toBeCloseTo(q);
+          expect(newQd).not.toBeCloseTo(qd);
+          if (frameId == 'ball' || timeIndex >= 10) {
+            // The ball accelerates quickly; skip the following expectations.
+          } else {
+            expect(Math.abs(newQ - q)).toBeLessThan(1);
+            expect(Math.abs(newQd - qd)).toBeLessThan(1);
+          }
+        });
+        curStateMap = newStateMap;
+      }
     });
   });
 });

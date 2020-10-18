@@ -74,7 +74,6 @@ export default class BoxDecal extends Decal {
     const scale = getXformMatrixScaleFactor(xformMatrix);
     const cornerPositions = xformMatrix.matMul(this._cornerPositions).arraySync();
     if (this.solid) {
-      const position = xformMatrix.matMul(this.position).dataSync();
       element = (
         <rect
           x={cornerPositions[0][3]}
