@@ -18,6 +18,41 @@ import { useState } from 'react';
 
 const pendulum1Length = 5;
 const pendulum2Length = 5;
+const pendulum3Length = 5;
+const pendulum4Length = 5;
+
+const pendulum4 = new RotationalFrame({
+  id: 'pendulum4',
+  initialState: [0, 0],
+  decals: [
+    new LineDecal({ endPos: [pendulum4Length, 0], lineWidth: 0.2 }),
+    new CircleDecal({
+      position: [pendulum4Length, 0],
+      radius: 1,
+      //color: 'green',
+    }),
+  ],
+  position: [pendulum1Length, 0],
+  weights: [new Weight(10, { position: [pendulum4Length, 0] })],
+  resistance: 4,
+});
+
+const pendulum3 = new RotationalFrame({
+  id: 'pendulum3',
+  initialState: [0, 0],
+  decals: [
+    new LineDecal({ endPos: [pendulum3Length, 0], lineWidth: 0.2 }),
+    new CircleDecal({
+      position: [pendulum3Length, 0],
+      radius: 0.4,
+      //color: 'green',
+    }),
+  ],
+  frames: [pendulum4],
+  position: [pendulum1Length, 0],
+  weights: [new Weight(2, { position: [pendulum3Length, 0] })],
+  resistance: 4,
+});
 
 const pendulum2 = new RotationalFrame({
   id: 'pendulum2',
@@ -26,12 +61,13 @@ const pendulum2 = new RotationalFrame({
     new LineDecal({ endPos: [pendulum2Length, 0], lineWidth: 0.2 }),
     new CircleDecal({
       position: [pendulum2Length, 0],
-      radius: 1,
+      radius: 0.4,
       //color: 'green',
     }),
   ],
+  frames: [pendulum3],
   position: [pendulum1Length, 0],
-  weights: [new Weight(10, { position: [pendulum2Length, 0] })],
+  weights: [new Weight(2, { position: [pendulum2Length, 0] })],
   resistance: 4,
 });
 
@@ -42,11 +78,11 @@ const pendulum1 = new RotationalFrame({
     new LineDecal({ endPos: [pendulum1Length, 0], lineWidth: 0.2 }),
     new CircleDecal({
       position: [pendulum1Length, 0],
-      radius: 1,
+      radius: 0.4,
     }),
   ],
   frames: [pendulum2],
-  weights: [new Weight(5, { position: [pendulum1Length, 0] })],
+  weights: [new Weight(2, { position: [pendulum1Length, 0] })],
   resistance: 4,
 });
 
@@ -158,12 +194,12 @@ function isValidStateMap(stateMap) {
 }
 
 function App() {
-  const [[translationX, translationY], setTranslation] = useState([300, 300]);
-  const [scale, setScale] = useState(15);
+  const [[translationX, translationY], setTranslation] = useState([0, 0]);
+  const [scale, setScale] = useState(10);
   const pressedKeys = useKeyboard();
-  const xformMatrix = getTranslationMatrix([translationX, translationY]).matMul(
-    getScaleMatrix(scale, -scale),
-  );
+  const xformMatrix = getTranslationMatrix([300, 300])
+    .matMul(getScaleMatrix(scale, -scale))
+    .matMul(getTranslationMatrix([translationX, translationY]));
   const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
 
   useAnimationFrame((deltaTime) => {
@@ -177,10 +213,10 @@ function App() {
       },
       Minus: () => setScale(scale * Math.exp(-deltaTime)),
       Equal: () => setScale(scale * Math.exp(deltaTime)),
-      ArrowLeft: () => setTranslation(([x, y]) => [x + deltaTime * 150, y]),
-      ArrowRight: () => setTranslation(([x, y]) => [x - deltaTime * 150, y]),
-      ArrowUp: () => setTranslation(([x, y]) => [x, y + deltaTime * 150]),
-      ArrowDown: () => setTranslation(([x, y]) => [x, y - deltaTime * 150]),
+      ArrowLeft: () => setTranslation(([x, y]) => [x + deltaTime * 20, y]),
+      ArrowRight: () => setTranslation(([x, y]) => [x - deltaTime * 20, y]),
+      ArrowUp: () => setTranslation(([x, y]) => [x, y - deltaTime * 20]),
+      ArrowDown: () => setTranslation(([x, y]) => [x, y + deltaTime * 20]),
     }).forEach(([keyName, func]) => pressedKeys.has(keyName) && func());
     const externalForceMap = new Map([[cart.id, cartForce]]);
     let newStateMap = stateMap;
@@ -199,7 +235,7 @@ function App() {
   return (
     <div className="app__main">
       <div className="plot">
-        <h2 className="plot__title">PoiBot</h2>
+        <h2 className="plot__title">CartPoi</h2>
         {
           //<p>Keys: {[...pressedKeys].join(', ')}</p>
         }
