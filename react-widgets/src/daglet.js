@@ -73,7 +73,6 @@ export function transform(
   getNodeKey = getNodeKey || defaultGetNodeKey;
   visitNode = visitNode || ((node, parentValues) => null);
   visitEdge = visitEdge || ((node, parentNode, parentValue) => parentValue);
-  let lazyGetNodeParents;
   const sortedNodes = toposort(nodes, {
     getNodeParents: getNodeParents,
     getNodeKey: getNodeKey,

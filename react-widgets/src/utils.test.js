@@ -10,29 +10,56 @@ import { render } from '@testing-library/react';
 import { SingularMatrixError } from './utils';
 import { solveLinearSystem } from './utils';
 
-test('coercePositionVector', () => {
-  expect(coercePositionVector(3).arraySync()).toEqual([[3], [0], [1]]);
-  expect(coercePositionVector([3, 4]).arraySync()).toEqual([[3], [4], [1]]);
-  expect(coercePositionVector([3, 4, 5]).arraySync()).toEqual([[3], [4], [1]]);
-  expect(coercePositionVector(tf.tensor2d([[3, 4]])).arraySync()).toEqual([
-    [3],
-    [4],
-    [1],
-  ]);
-  expect(coercePositionVector(tf.tensor2d([[3, 4, 5]])).arraySync()).toEqual([
-    [3],
-    [4],
-    [1],
-  ]);
-  expect(
-    coercePositionVector(tf.tensor2d([[3, 4, 5]]).transpose()).arraySync(),
-  ).toEqual([[3], [4], [1]]);
-  expect(
-    coercePositionVector(tf.tensor1d([3, 4, 5]).transpose()).arraySync(),
-  ).toEqual([[3], [4], [1]]);
+describe('coercePositionVector function', () => {
+  test('number input', () => {
+    expect(coercePositionVector(3).arraySync()).toEqual([[3], [0], [1]]);
+  });
+  test('two-element array input', () => {
+    expect(coercePositionVector([3, 4]).arraySync()).toEqual([[3], [4], [1]]);
+  });
+  test('three-element array input', () => {
+    expect(coercePositionVector([3, 4, 5]).arraySync()).toEqual([
+      [3],
+      [4],
+      [1],
+    ]);
+  });
+  test('1x2 tensor input', () => {
+    expect(coercePositionVector(tf.tensor2d([[3, 4]])).arraySync()).toEqual([
+      [3],
+      [4],
+      [1],
+    ]);
+  });
+  test('2x1 tensor input', () => {
+    expect(coercePositionVector(tf.tensor2d([[3], [4]])).arraySync()).toEqual([
+      [3],
+      [4],
+      [1],
+    ]);
+  });
+  test('1x3 tensor input', () => {
+    expect(coercePositionVector(tf.tensor2d([[3, 4, 5]])).arraySync()).toEqual([
+      [3],
+      [4],
+      [1],
+    ]);
+  });
+  test('3x1 tensor input', () => {
+    expect(
+      coercePositionVector(tf.tensor2d([[3], [4], [5]])).arraySync(),
+    ).toEqual([[3], [4], [1]]);
+  });
+  test('three-element 1D tensor input', () => {
+    expect(coercePositionVector(tf.tensor1d([3, 4, 5])).arraySync()).toEqual([
+      [3],
+      [4],
+      [1],
+    ]);
+  });
 });
 
-describe('coerceStateTuple', () => {
+describe('coerceStateTuple function', () => {
   test('number input', () => {
     expect(coerceStateTuple(3)).toEqual([3, 0]);
   });
@@ -44,7 +71,7 @@ describe('coerceStateTuple', () => {
   });
 });
 
-describe('invertXformMatrix', () => {
+describe('invertXformMatrix function', () => {
   test('rotation matrix', () => {
     expect(areTensorsEqual(invertXformMatrix(tf.eye(3)), tf.eye(3))).toBe(true);
     expect(
@@ -63,8 +90,17 @@ describe('invertXformMatrix', () => {
   });
 });
 
-describe('solveLinearSystem', () => {
-  test('identity matrix', () => {
+describe('solveLinearSystem function', () => {
+  test('identity matrix with array output', () => {
+    const array = solveLinearSystem(tf.eye(3), tf.tensor2d([[1], [2], [3]]), {
+      asTensor: false,
+    });
+    expect(array).toBeInstanceOf(Array);
+    expect(areTensorsEqual(tf.tensor1d(array), tf.tensor1d([1, 2, 3]))).toBe(
+      true,
+    );
+  });
+  test('identity matrix with tensor output', () => {
     expect(
       areTensorsEqual(
         solveLinearSystem(tf.eye(3), tf.tensor2d([[1], [2], [3]])),

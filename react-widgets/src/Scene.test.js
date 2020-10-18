@@ -7,7 +7,7 @@ import renderer from 'react-test-renderer';
 import Scene from './Scene';
 import { DEFAULT_GRAVITY } from './Scene';
 
-describe('Scene', () => {
+describe('Scene class', () => {
   test('constructor with default arguments', () => {
     const scene = new Scene();
     expect(scene.decals).toEqual([]);
@@ -69,7 +69,7 @@ describe('Scene', () => {
         }),
       ],
     });
-    const stateMap = {};
+    const stateMap = new Map();
     const xformMatrix = tf.eye(3);
     const rendered = renderer.create(
       <svg>{scene.getDomElement(stateMap, xformMatrix)}</svg>,

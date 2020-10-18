@@ -9,6 +9,7 @@ import Weight from './Weight';
 import { areTensorsEqual } from './utils';
 import { getRotationTranslationMatrix } from './utils';
 import { getTranslationMatrix } from './utils';
+import { invertXformMatrix } from './utils';
 
 describe('Solver', () => {
   const scene = new Scene({
@@ -16,42 +17,56 @@ describe('Solver', () => {
       new TrackFrame({
         id: 'cart',
         initialState: [5, 1],
+        weights: [new Weight(20), new Weight(3, { position: [0, 5] })],
         frames: [
           new RotationalFrame({
             id: 'pendulum1',
             initialState: [0.3, -1.2],
+            weights: [new Weight(5, { position: [10, 0] })],
             frames: [
               new RotationalFrame({
                 id: 'pendulum2',
-                initialState: [-0.5, 1.5],
+                initialState: [-0.9, 1.5],
                 position: [10, 0],
-                weights: [new Weight(6)],
+                weights: [new Weight(8, { position: [12, 0] })],
               }),
             ],
-            weights: [new Weight(5)],
           }),
         ],
-        weights: [new Weight(20), new Weight(3, { position: [0, 5] })],
+      }),
+      new TrackFrame({
+        id: 'ball',
+        initialState: [0, 2],
+        position: [30, 0],
+        angle: Math.PI / 4,
+        weights: [new Weight(5)],
       }),
     ],
   });
+  const numFrames = scene.sortedFrames.length;
   const frames = {
     cart: scene.frameMap.get('cart'),
     pendulum1: scene.frameMap.get('pendulum1'),
     pendulum2: scene.frameMap.get('pendulum2'),
+    ball: scene.frameMap.get('ball'),
   };
+  const frameIndexes = Object.fromEntries(
+    scene.sortedFrames.map((frame, index) => [frame.id, index]),
+  );
   const stateMap = scene.getInitialStateMap();
+  const externalForceMap = new Map();
   const solver = new Solver(scene);
 
-  it('._makeStateMap method', () => {
+  test('._makeStateMap method', () => {
     const states = scene.sortedFrames.map((frame) => frame.initialState);
     const qs = states.map(([q]) => q);
     const qds = states.map(([, qd]) => qd);
     expect(solver._makeStateMap(qs, qds)).toEqual(stateMap);
   });
 
-  it('._getPosMatMap method', () => {
-    const posMatMap = solver._getPosMatMap(stateMap);
+  const posMatMap = solver._getPosMatMap(stateMap);
+
+  test('._getPosMatMap method', () => {
     expect([...posMatMap.keys()]).toEqual(Object.keys(frames));
     expect(
       areTensorsEqual(
@@ -81,11 +96,17 @@ describe('Solver', () => {
           ),
       ),
     ).toBe(true);
+    expect(
+      areTensorsEqual(
+        posMatMap.get('ball'),
+        frames.ball.getPosMatrix(frames.ball.initialState[0]),
+      ),
+    ).toBe(true);
   });
 
-  it('._getInvPosMatMap method', () => {
-    const posMatMap = solver._getPosMatMap(stateMap);
-    const invPosMatMap = solver._getInvPosMatMap(posMatMap);
+  const invPosMatMap = solver._getInvPosMatMap(posMatMap);
+
+  test('._getInvPosMatMap method', () => {
     expect([...invPosMatMap.keys()]).toEqual(Object.keys(frames));
     expect(
       areTensorsEqual(
@@ -93,12 +114,19 @@ describe('Solver', () => {
         getTranslationMatrix([-frames.cart.initialState[0], 0]),
       ),
     ).toBe(true);
+    expect(
+      areTensorsEqual(
+        invPosMatMap.get('ball'),
+        invertXformMatrix(
+          frames.ball.getPosMatrix(frames.ball.initialState[0]),
+        ),
+      ),
+    ).toBe(true);
   });
 
-  it('._getVelMatMap method', () => {
-    const posMatMap = solver._getPosMatMap(stateMap);
-    const invPosMatMap = solver._getInvPosMatMap(posMatMap);
-    const velMatMap = solver._getVelMatMap(posMatMap, invPosMatMap, stateMap);
+  const velMatMap = solver._getVelMatMap(posMatMap, invPosMatMap, stateMap);
+
+  test('._getVelMatMap method', () => {
     expect([...velMatMap.keys()]).toEqual(Object.keys(frames));
     expect(
       areTensorsEqual(
@@ -128,14 +156,9 @@ describe('Solver', () => {
     ).toBe(true);
   });
 
-  it('._getAccelMatMap method', () => {
-    const posMatMap = solver._getPosMatMap(stateMap);
-    const invPosMatMap = solver._getInvPosMatMap(posMatMap);
-    const accelMatMap = solver._getAccelMatMap(
-      posMatMap,
-      invPosMatMap,
-      stateMap,
-    );
+  const accelMatMap = solver._getAccelMatMap(posMatMap, invPosMatMap, stateMap);
+
+  test('._getAccelMatMap method', () => {
     expect([...accelMatMap.keys()]).toEqual(Object.keys(frames));
     expect(
       areTensorsEqual(
@@ -165,47 +188,29 @@ describe('Solver', () => {
     ).toBe(true);
   });
 
-  it('._getVelSumMatMap method', () => {
-    const posMatMap = solver._getPosMatMap(stateMap);
-    const invPosMatMap = solver._getInvPosMatMap(posMatMap);
-    const velMatMap = solver._getVelMatMap(posMatMap, invPosMatMap, stateMap);
-    const velSumMatMap = solver._getVelSumMatMap(
-      posMatMap,
-      velMatMap,
-      stateMap,
-    );
+  const velSumMatMap = solver._getVelSumMatMap(posMatMap, velMatMap, stateMap);
+
+  test('._getVelSumMatMap method', () => {
     expect([...velSumMatMap.keys()]).toEqual(Object.keys(frames));
     // TODO: assert on velSumMatMap values.
   });
 
-  it('._getAccelSumMatMap method', () => {
-    const posMatMap = solver._getPosMatMap(stateMap);
-    const invPosMatMap = solver._getInvPosMatMap(posMatMap);
-    const velMatMap = solver._getVelMatMap(posMatMap, invPosMatMap, stateMap);
-    const accelMatMap = solver._getAccelMatMap(
-      posMatMap,
-      invPosMatMap,
-      stateMap,
-    );
-    const velSumMatMap = solver._getVelSumMatMap(
-      posMatMap,
-      velMatMap,
-      stateMap,
-    );
-    const accelSumMatMap = solver._getAccelSumMatMap(
-      posMatMap,
-      velMatMap,
-      accelMatMap,
-      velSumMatMap,
-      stateMap,
-    );
+  const accelSumMatMap = solver._getAccelSumMatMap(
+    posMatMap,
+    velMatMap,
+    accelMatMap,
+    velSumMatMap,
+    stateMap,
+  );
+
+  test('._getAccelSumMatMap method', () => {
     expect([...accelSumMatMap.keys()]).toEqual(Object.keys(frames));
     // TODO: assert on accelSumMatMap values.
   });
 
-  it('._getWeightPosMap method', () => {
-    const posMatMap = solver._getPosMatMap(stateMap);
-    const weightPosMap = solver._getWeightPosMap(posMatMap);
+  const weightPosMap = solver._getWeightPosMap(posMatMap);
+
+  test('._getWeightPosMap method', () => {
     expect([...weightPosMap.keys()]).toEqual(Object.keys(frames));
     expect(weightPosMap.get('cart').length).toBe(frames.cart.weights.length);
     expect(weightPosMap.get('pendulum1').length).toBe(
@@ -229,35 +234,171 @@ describe('Solver', () => {
     // TODO: assert on other weightPosMap values.
   });
 
-  it('._isFrameDescendent method', () => {
-    // TODO: test.
+  test('._isFrameDescendent method', () => {
+    expect(solver._isFrameDescendent(frames.cart, frames.cart)).toBe(true);
+    expect(solver._isFrameDescendent(frames.cart, frames.pendulum1)).toBe(
+      false,
+    );
+    expect(solver._isFrameDescendent(frames.pendulum1, frames.cart)).toBe(true);
+    expect(solver._isFrameDescendent(frames.pendulum1, frames.pendulum2)).toBe(
+      false,
+    );
   });
 
-  it('._getDescendentFrame method', () => {
-    // TODO: test.
+  test('._getDescendentFrame method', () => {
+    expect(solver._getDescendentFrame(frames.cart, frames.cart).id).toBe(
+      frames.cart.id,
+    );
+    expect(solver._getDescendentFrame(frames.cart, frames.pendulum1).id).toBe(
+      frames.pendulum1.id,
+    );
+    expect(solver._getDescendentFrame(frames.pendulum1, frames.cart).id).toBe(
+      frames.pendulum1.id,
+    );
+    expect(solver._getDescendentFrame(frames.cart, frames.ball)).toBe(null);
   });
 
-  it('._getDescendentFrames method', () => {
-    // TODO: test.
+  test('._getDescendentFrames method', () => {
+    const getIds = (frames) => frames.map((frame) => frame.id);
+    expect(getIds(solver._getDescendentFrames(frames.cart))).toEqual([
+      'cart',
+      'pendulum1',
+      'pendulum2',
+    ]);
+    expect(getIds(solver._getDescendentFrames(frames.pendulum1))).toEqual([
+      'pendulum1',
+      'pendulum2',
+    ]);
+    expect(getIds(solver._getDescendentFrames(frames.pendulum2))).toEqual([
+      'pendulum2',
+    ]);
+    expect(getIds(solver._getDescendentFrames(frames.ball))).toEqual(['ball']);
   });
 
-  it('._getCoefficientMatrixEntry method', () => {
-    // TODO: test.
+  test('._getCoefficientMatrixEntry method', () => {
+    const getCoefficient = (rowIndex, colIndex) =>
+      solver._getCoefficientMatrixEntry(
+        rowIndex,
+        colIndex,
+        velMatMap,
+        weightPosMap,
+      );
+    const getNorm = (vector) => vector.matMul(vector, true).dataSync()[0];
+    expect(getCoefficient(frameIndexes.ball, frameIndexes.cart)).toEqual(0);
+    expect(getCoefficient(frameIndexes.cart, frameIndexes.ball)).toEqual(0);
+    expect(getCoefficient(frameIndexes.ball, frameIndexes.ball)).toEqual(
+      frames.ball.weights[0].mass *
+        getNorm(
+          velMatMap
+            .get(frames.ball.id)
+            .matMul(weightPosMap.get(frames.ball.id)[0]),
+        ),
+    );
+    const cartDescendentFrameIds = ['cart', 'pendulum1', 'pendulum2'];
+    cartDescendentFrameIds.forEach((frameId1, index1) => {
+      cartDescendentFrameIds.slice(index1).forEach((frameId2, index2) => {
+        const coefficient1 = getCoefficient(
+          frameIndexes[frameId1],
+          frameIndexes[frameId2],
+        );
+        const coefficient2 = getCoefficient(
+          frameIndexes[frameId2],
+          frameIndexes[frameId1],
+        );
+        expect(coefficient1).not.toBeCloseTo(0);
+        expect(coefficient1).toEqual(coefficient2);
+      });
+    });
   });
 
-  it('._getCoefficientMatrix method', () => {
-    // TODO: test.
+  test('._getCoefficientMatrix method', () => {
+    const getCoefficient = (rowIndex, colIndex) =>
+      solver._getCoefficientMatrixEntry(
+        rowIndex,
+        colIndex,
+        velMatMap,
+        weightPosMap,
+      );
+    const coefficientMatrix = solver._getCoefficientMatrix(
+      velMatMap,
+      weightPosMap,
+    );
+    expect(coefficientMatrix.shape).toEqual([numFrames, numFrames]);
+    const data = coefficientMatrix.arraySync();
+    scene.sortedFrames.forEach((_, rowIndex) => {
+      scene.sortedFrames.forEach((_, colIndex) => {
+        expect(data[rowIndex][colIndex]).toBeCloseTo(
+          getCoefficient(rowIndex, colIndex),
+        );
+      });
+    });
   });
 
-  it('._getForceVectorEntry method', () => {
-    // TODO: test.
+  test('._getForceVectorEntry method', () => {
+    scene.sortedFrames.forEach((frame) => {
+      const entry = solver._getForceVectorEntry(
+        frame,
+        velMatMap,
+        velSumMatMap,
+        accelSumMatMap,
+        weightPosMap,
+        stateMap,
+        externalForceMap,
+      );
+      expect(entry).not.toBeNaN();
+      expect(entry).not.toBeCloseTo(0);
+    });
+    // TODO: add more assertions.
   });
 
-  it('._getForceVector method', () => {
-    // TODO: test.
+  test('._getForceVector method', () => {
+    const getEntry = (frame) =>
+      solver._getForceVectorEntry(
+        frame,
+        velMatMap,
+        velSumMatMap,
+        accelSumMatMap,
+        weightPosMap,
+        stateMap,
+        externalForceMap,
+      );
+    const forceVector = solver._getForceVector(
+      velMatMap,
+      velSumMatMap,
+      accelSumMatMap,
+      weightPosMap,
+      stateMap,
+      externalForceMap,
+    );
+    expect(forceVector.shape).toEqual([numFrames, 1]);
+    const data = forceVector.dataSync();
+    scene.sortedFrames.forEach((frame, index) => {
+      expect(data[index]).toBeCloseTo(getEntry(frame));
+    });
   });
 
-  it('._getSystemOfEquations method', () => {
-    // TODO: test.
+  test('._getSystemOfEquations method', () => {
+    const [aMat, bVec] = solver._getSystemOfEquations(stateMap, externalForceMap);
+    expect(aMat.shape).toEqual([numFrames, numFrames]);
+    expect(bVec.shape).toEqual([numFrames, 1]);
+  });
+
+  [false /*, true*/].forEach((rungeKutta) => {
+    test(`.tick method with rungeKutta=${rungeKutta}`, () => {
+      const deltaTime = 1 / 60;
+      const newStateMap = solver.tick(stateMap, deltaTime, undefined, {
+        rungeKutta: rungeKutta,
+      });
+      expect(stateMap).not.toEqual(newStateMap);
+      [...newStateMap].forEach(([frameId, [newQ, newQd]]) => {
+        const [q, qd] = stateMap.get(frameId);
+        expect(newQ).not.toBeNaN();
+        expect(newQd).not.toBeNaN();
+        expect(newQ).not.toBeCloseTo(q);
+        expect(newQd).not.toBeCloseTo(qd);
+        expect(Math.abs(newQ - q)).toBeLessThan(0.5);
+        expect(Math.abs(newQd - qd)).toBeLessThan(0.5);
+      });
+    });
   });
 });

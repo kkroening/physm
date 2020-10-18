@@ -138,7 +138,7 @@ export function getXformMatrixDeterminant(mat = required('mat')) {
 }
 
 export function getXformMatrixScaleFactor(mat = required('mat')) {
-  return Math.sqrt(getXformMatrixDeterminant(mat));
+  return Math.sqrt(Math.abs(getXformMatrixDeterminant(mat)));
 }
 
 export function getXformMatrixRotationAngle(mat = required('mat')) {
@@ -188,6 +188,7 @@ export function invertXformMatrix(mat = required('mat')) {
 export function solveLinearSystem(
   aMat = required('aMat'),
   bVec = required('bVec'),
+  { asTensor = true } = {},
 ) {
   /**
    * Solve a linear system of equations using QR decomposition and
@@ -201,17 +202,17 @@ export function solveLinearSystem(
     throw new TypeError(
       `Expected \`bVec\` to be tf.Tensor instance; got ${bVec}`,
     );
-  } else if (aMat.shape.length !== 2 || aMat.shape[0] != aMat.shape[1]) {
+  } else if (aMat.shape.length !== 2 || aMat.shape[0] !== aMat.shape[1]) {
     throw new DimensionError(
       'Expected `aMat` to be a square matrix (2D tensor); ' +
         `got tensor with shape ${JSON.stringify(aMat.shape)}`,
     );
-  } else if (bVec.shape.length !== 2 || bVec.shape[1] != 1) {
+  } else if (bVec.shape.length !== 2 || bVec.shape[1] !== 1) {
     throw new DimensionError(
       'Expected `bVec` to be a column vector (2D tensor with one column); ' +
         `got tensor with shape ${JSON.stringify(bVec.shape)}`,
     );
-  } else if (aMat.shape[1] != bVec.shape[0]) {
+  } else if (aMat.shape[1] !== bVec.shape[0]) {
     throw new DimensionError(
       'Expected `aMat` and `bVec` to have compatible shapes; ' +
         `got aMat shape ${JSON.stringify(aMat.shape)} ` +
@@ -233,7 +234,7 @@ export function solveLinearSystem(
     }
     xArray[i] = (cVec[i] - sum) / rArray[i][i];
   }
-  return tf.tensor1d(xArray).reshape([n, 1]);
+  return asTensor ? tf.tensor1d(xArray).reshape([n, 1]) : xArray;
 }
 
 export function areTensorsEqual(

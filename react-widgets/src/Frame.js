@@ -43,9 +43,8 @@ export default class Frame {
     xformMatrix = required('xformMatrix'),
     { key = undefined } = {},
   ) {
-    const [positionState] =
-      this.id in stateMap ? stateMap[this.id] : ZERO_STATE;
-    xformMatrix = xformMatrix.matMul(this.getPosMatrix(positionState));
+    const [q] = stateMap.has(this.id) ? stateMap.get(this.id) : ZERO_STATE;
+    xformMatrix = xformMatrix.matMul(this.getPosMatrix(q));
     return (
       <g className="frame" key={key}>
         {this.decals.map((decal, index) =>

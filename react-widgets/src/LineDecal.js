@@ -9,7 +9,7 @@ export default class LineDecal extends Decal {
   constructor({
     endPos = required('endPos'),
     startPos = ZERO_POS,
-    lineWidth = 2,
+    lineWidth = 1,
     color = 'black',
   } = {}) {
     super();

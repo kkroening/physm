@@ -8,7 +8,7 @@ import { coercePositionVector } from './utils';
 import { getScaleMatrix } from './utils';
 import { ZERO_POS } from './utils';
 
-describe('LineDecal', () => {
+describe('LineDecal class', () => {
   const SAMPLE_POS = coercePositionVector([
     faker.random.number(),
     faker.random.number(),

@@ -5,7 +5,7 @@ import { transform } from './daglet';
 import { transformEdges } from './daglet';
 import { transformNodes } from './daglet';
 
-describe('toposort', () => {
+describe('toposort function', () => {
   test('default parameters', () => {
     const node1 = { name: 'node1', parents: [] };
     const node2 = { name: 'node2', parents: [] };
@@ -56,7 +56,7 @@ describe('toposort', () => {
   });
 });
 
-describe('getChildMap', () => {
+test('getChildMap function', () => {
   const parentMap = {
     node1: [],
     node2: [],
@@ -76,7 +76,7 @@ describe('getChildMap', () => {
   expect(childMap).toEqual(expectedChildMap);
 });
 
-describe('transform', () => {
+test('transform function', () => {
   const parentMap = {
     node1: [],
     node2: [],
@@ -112,7 +112,7 @@ describe('transform', () => {
   });
 });
 
-describe('transformNodes', () => {
+test('transformNodes function', () => {
   const parentMap = {
     node1: [],
     node2: [],
@@ -135,7 +135,7 @@ describe('transformNodes', () => {
   });
 });
 
-describe('transformEdges', () => {
+test('transformEdges function', () => {
   const parentMap = {
     node1: [],
     node2: [],

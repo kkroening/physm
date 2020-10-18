@@ -1,5 +1,7 @@
 import * as daglet from './daglet';
+import * as tf from './tfjs';
 import React from 'react';
+import { required } from './utils';
 
 export const DEFAULT_GRAVITY = 10;
 

@@ -70,25 +70,40 @@ export default class BoxDecal extends Decal {
     xformMatrix = required('xformMatrix'),
     { key = undefined } = {},
   ) {
-    const xformed = xformMatrix.matMul(this._cornerPositions).arraySync();
+    let element;
     const scale = getXformMatrixScaleFactor(xformMatrix);
-    const npoints = this._cornerPositions.shape[1];
-    const lines = [];
-    for (let i = 0; i < npoints; i++) {
-      const j = (i + 1) % npoints;
-      lines.push(
-        <line
-          className="plot__line"
-          x1={xformed[0][i]}
-          y1={xformed[1][i]}
-          x2={xformed[0][j]}
-          y2={xformed[1][j]}
-          strokeWidth={this.lineWidth * scale}
-          stroke={this.color}
-          key={i}
-        />,
+    const cornerPositions = xformMatrix.matMul(this._cornerPositions).arraySync();
+    if (this.solid) {
+      const position = xformMatrix.matMul(this.position).dataSync();
+      element = (
+        <rect
+          x={cornerPositions[0][3]}
+          y={cornerPositions[1][3]}
+          width={this.width * scale}
+          height={this.height * scale}
+          key={key}
+        />
       );
+    } else {
+      const npoints = this._cornerPositions.shape[1];
+      const lines = [];
+      for (let i = 0; i < npoints; i++) {
+        const j = (i + 1) % npoints;
+        lines.push(
+          <line
+            className="plot__line"
+            x1={cornerPositions[0][i]}
+            y1={cornerPositions[1][i]}
+            x2={cornerPositions[0][j]}
+            y2={cornerPositions[1][j]}
+            strokeWidth={this.lineWidth * scale}
+            stroke={this.color}
+            key={i}
+          />,
+        );
+      }
+      element = <g key={key}>{lines}</g>;
     }
-    return <g key={key}>{lines}</g>;
+    return element;
   }
 }

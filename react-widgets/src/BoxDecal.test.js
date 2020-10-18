@@ -8,7 +8,7 @@ import { coercePositionVector } from './utils';
 import { getScaleMatrix } from './utils';
 import { ZERO_POS } from './utils';
 
-describe('BoxDecal', () => {
+describe('BoxDecal class', () => {
   const SAMPLE_POS = coercePositionVector([
     faker.random.number(),
     faker.random.number(),
@@ -21,7 +21,7 @@ describe('BoxDecal', () => {
     expect(areTensorsEqual(decal.position, SAMPLE_POS)).toBe(true);
   });
 
-  test('.getDomElement method', () => {
+  test('.getDomElement method with non-solid rendering', () => {
     const posX = SAMPLE_POS.dataSync()[0];
     const posY = SAMPLE_POS.dataSync()[1];
     const width = faker.random.number();
@@ -30,6 +30,7 @@ describe('BoxDecal', () => {
       width: width,
       height: height,
       position: SAMPLE_POS,
+      solid: false,
     });
     const scale = 1.5;
     const xformMatrix = getScaleMatrix(scale);
@@ -78,6 +79,38 @@ describe('BoxDecal', () => {
                 y2={(posY - height / 2) * scale}
               />
             </g>
+          </svg>,
+        )
+        .toJSON(),
+    );
+  });
+
+  test('.getDomElement method with solid rendering', () => {
+    const posX = SAMPLE_POS.dataSync()[0];
+    const posY = SAMPLE_POS.dataSync()[1];
+    const width = faker.random.number();
+    const height = faker.random.number();
+    const decal = new BoxDecal({
+      width: width,
+      height: height,
+      position: SAMPLE_POS,
+      solid: true,
+    });
+    const scale = 1.5;
+    const xformMatrix = getScaleMatrix(scale);
+    const rendered = renderer.create(
+      <svg>{decal.getDomElement(xformMatrix)}</svg>,
+    );
+    expect(rendered.toJSON()).toEqual(
+      renderer
+        .create(
+          <svg>
+            <rect
+              x={(posX - width / 2) * scale}
+              y={(posY + height / 2) * scale}
+              width={width * scale}
+              height={height * scale}
+            />
           </svg>,
         )
         .toJSON(),

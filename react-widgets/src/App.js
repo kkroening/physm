@@ -6,6 +6,8 @@ import LineDecal from './LineDecal';
 import producer from 'immer';
 import React from 'react';
 import RotationalFrame from './RotationalFrame';
+import Scene from './Scene';
+import Solver from './Solver';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { getScaleMatrix } from './utils';
@@ -14,40 +16,67 @@ import { useEffect } from 'react';
 import { useRef } from 'react';
 import { useState } from 'react';
 
-const ball1Position = [60, 0];
-const ball2Position = [80, 0];
+const pendulum1Length = 5;
+const pendulum2Length = 5;
 
-const frame2 = new RotationalFrame({
+const pendulum2 = new RotationalFrame({
+  id: 'pendulum2',
+  initialState: [0, 0],
   decals: [
-    new LineDecal({ endPos: ball2Position }),
-    new CircleDecal({ position: ball2Position, radius: 15, color: 'green' }),
-  ],
-  position: [60, 0],
-  weights: [new Weight(10, { position: ball2Position })],
-});
-
-const frame1 = new RotationalFrame({
-  decals: [
-    new LineDecal({ endPos: ball1Position }),
-    new CircleDecal({ position: ball1Position, radius: 15, color: 'red' }),
-  ],
-  frames: [frame2],
-  weights: [new Weight(5, { position: ball1Position })],
-});
-
-const frame0 = new TrackFrame({
-  decals: [
-    new LineDecal({ startPos: [-300, 0], endPos: [300, 0], color: 'gray' }), // TODO: move to scene.
-    new BoxDecal({
-      width: 40,
-      height: 40 / 1.618,
-      color: 'blue',
-      lineWidth: 6,
+    new LineDecal({ endPos: [pendulum2Length, 0], lineWidth: 0.2 }),
+    new CircleDecal({
+      position: [pendulum2Length, 0],
+      radius: 1,
+      //color: 'green',
     }),
   ],
-  frames: [frame1],
-  weights: [new Weight(20)],
+  position: [pendulum1Length, 0],
+  weights: [new Weight(10, { position: [pendulum2Length, 0] })],
+  resistance: 4,
 });
+
+const pendulum1 = new RotationalFrame({
+  id: 'pendulum1',
+  initialState: [Math.PI * -0.3, 0],
+  decals: [
+    new LineDecal({ endPos: [pendulum1Length, 0], lineWidth: 0.2 }),
+    new CircleDecal({
+      position: [pendulum1Length, 0],
+      radius: 1,
+    }),
+  ],
+  frames: [pendulum2],
+  weights: [new Weight(5, { position: [pendulum1Length, 0] })],
+  resistance: 4,
+});
+
+const cart = new TrackFrame({
+  id: 'cart',
+  decals: [
+    new BoxDecal({
+      width: 3,
+      height: 3 / 1.618,
+      //color: 'blue',
+      lineWidth: 0.2,
+    }),
+  ],
+  frames: [pendulum1],
+  weights: [new Weight(100)],
+  resistance: 10,
+});
+
+const scene = new Scene({
+  frames: [cart],
+  decals: [
+    new LineDecal({
+      startPos: [-300, 0],
+      endPos: [300, 0],
+      color: 'gray',
+      lineWidth: 0.1,
+    }),
+  ],
+});
+const solver = new Solver(scene);
 
 function useKeyboard(callback) {
   const [pressedKeys, setPressedKeys] = useState(new Set());
@@ -124,37 +153,53 @@ const useAnimationFrame = (callback, params) => {
   }, [fps]);
 };
 
+function isValidStateMap(stateMap) {
+  return [...stateMap].every(([frameId, [q, qd]]) => !isNaN(q) && !isNaN(qd));
+}
+
 function App() {
-  const [[x, y], setXY] = useState([0, 0]);
   const [[translationX, translationY], setTranslation] = useState([300, 300]);
-  const [scale, setScale] = useState(1);
+  const [scale, setScale] = useState(15);
   const pressedKeys = useKeyboard();
-  const stateMap = {
-    [frame0.id]: [x, 0],
-    [frame1.id]: [y, 0],
-    [frame2.id]: [y * -1.73, 0],
-  };
   const xformMatrix = getTranslationMatrix([translationX, translationY]).matMul(
-    getScaleMatrix(scale),
+    getScaleMatrix(scale, -scale),
   );
+  const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
 
   useAnimationFrame((deltaTime) => {
+    let cartForce = 0;
     Object.entries({
-      KeyA: () => setXY(([x, y]) => [x - deltaTime * 150, y]),
-      KeyD: () => setXY(([x, y]) => [x + deltaTime * 150, y]),
-      KeyW: () => setXY(([x, y]) => [x, y - deltaTime * 4]),
-      KeyS: () => setXY(([x, y]) => [x, y + deltaTime * 4]),
+      KeyA: () => {
+        cartForce -= 2000;
+      },
+      KeyD: () => {
+        cartForce += 2000;
+      },
       Minus: () => setScale(scale * Math.exp(-deltaTime)),
       Equal: () => setScale(scale * Math.exp(deltaTime)),
-      BracketLeft: () => setTranslation(([x, y]) => [x + deltaTime * 150, y]),
-      BracketRight: () => setTranslation(([x, y]) => [x - deltaTime * 150, y]),
+      ArrowLeft: () => setTranslation(([x, y]) => [x + deltaTime * 150, y]),
+      ArrowRight: () => setTranslation(([x, y]) => [x - deltaTime * 150, y]),
+      ArrowUp: () => setTranslation(([x, y]) => [x, y + deltaTime * 150]),
+      ArrowDown: () => setTranslation(([x, y]) => [x, y - deltaTime * 150]),
     }).forEach(([keyName, func]) => pressedKeys.has(keyName) && func());
+    const externalForceMap = new Map([[cart.id, cartForce]]);
+    let newStateMap = stateMap;
+    for (let i = 0; i < 10; i++) {
+      newStateMap = solver.tick(newStateMap, deltaTime / 10, externalForceMap);
+    }
+    if (!isValidStateMap(newStateMap)) {
+      console.warn(
+        'Encountered invalid state map; resetting to initial state...',
+      );
+      newStateMap = scene.getInitialStateMap();
+    }
+    setStateMap(newStateMap);
   });
 
   return (
     <div className="app__main">
       <div className="plot">
-        <h2 className="plot__title">Smashteroids</h2>
+        <h2 className="plot__title">Poi-bot</h2>
         {
           //<p>Keys: {[...pressedKeys].join(', ')}</p>
         }
@@ -163,7 +208,7 @@ function App() {
         }
         <div className="plot__main">
           <svg className="plot__svg">
-            {frame0.getDomElement(stateMap, xformMatrix)}
+            {scene.getDomElement(stateMap, xformMatrix)}
           </svg>
         </div>
       </div>

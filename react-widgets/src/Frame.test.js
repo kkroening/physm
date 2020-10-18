@@ -6,7 +6,7 @@ import React from 'react';
 import renderer from 'react-test-renderer';
 import { areTensorsEqual } from './utils';
 
-describe('Frame', () => {
+describe('Frame class', () => {
   test('constructor defaults', () => {
     const frame = new Frame();
     expect(frame.decals).toEqual([]);
@@ -42,7 +42,7 @@ describe('Frame', () => {
         new Frame({ decals: [new CircleDecal({ radius: 5, color: 'blue' })] }),
       ],
     });
-    const stateMap = {};
+    const stateMap = new Map();
     const xformMatrix = tf.eye(3);
     const rendered = renderer.create(
       <svg>{frame.getDomElement(stateMap, xformMatrix)}</svg>,
@@ -55,7 +55,7 @@ describe('Frame', () => {
               <line
                 className="plot__line"
                 stroke="black"
-                strokeWidth={2}
+                strokeWidth={1}
                 x1={0}
                 y1={0}
                 x2={10}
