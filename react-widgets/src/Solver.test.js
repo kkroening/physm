@@ -379,13 +379,6 @@ describe('Solver', () => {
     expect(bVec.shape).toEqual([numFrames, 1]);
   });
 
-  test('._makeStateMap method', () => {
-    const states = scene.sortedFrames.map((frame) => frame.initialState);
-    const qs = states.map(([q]) => q);
-    const qds = states.map(([, qd]) => qd);
-    expect(solver._makeStateMap(qs, qds)).toEqual(stateMap);
-  });
-
   [false, true].forEach((rungeKutta) => {
     test(`.tick method with rungeKutta=${rungeKutta}`, () => {
       const MAX_TIME_INDEX = 20;

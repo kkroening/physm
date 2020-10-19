@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@tensorflow/tfjs": "^2.5.0",
+    "@tensorflow/tfjs-backend-wasm": "^2.6.0",
     "@testing-library/jest-dom": "^4.2.4",
     "@testing-library/react": "^9.3.2",
     "@testing-library/user-event": "^7.1.2",
@@ -12,8 +13,9 @@
     "react-scripts": "3.4.1"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "cpwasm": "cp node_modules/@tensorflow/tfjs-backend-wasm/dist/tfjs-backend-wasm.wasm ./public",
+    "start": "npm run cpwasm && react-scripts start",
+    "build": "npm run cpwasm && react-scripts build",
     "test": "react-scripts test --verbose",
     "eject": "react-scripts eject"
   },

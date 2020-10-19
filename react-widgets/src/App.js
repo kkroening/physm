@@ -16,20 +16,22 @@ import { useEffect } from 'react';
 import { useRef } from 'react';
 import { useState } from 'react';
 
-const poiMass = 40;
-const poiDrag = 12;
-const ropeSegmentLength = 6;
-const ropeSegmentDrag = 5;
+const poiMass = 60;
+const poiDrag = 15;
+const ropeSegmentLength = 5;
+const ropeSegmentDrag = 15;
 const ropeSegmentMass = 1;
-const ropeSegmentResistance = 30;
-const ropeSegmentCount = 2;
-const cartForce = 5000;
+const ropeSegmentResistance = 20;
+const ropeSegmentCount = 3;
+const cartMass = 250;
+const cartForce = 7000;
 const cartResistance = 5;
-const rungeKutta = false;
 
-const MIN_ANIMATION_FPS = 1;
+const initialScale = 10;
+const rungeKutta = false;
+const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 30;
-const TARGET_PHYSICS_FPS = 80;
+const TARGET_PHYSICS_FPS = 250;
 
 const poi = new RotationalFrame({
   id: 'poi',
@@ -91,7 +93,7 @@ const cart = new TrackFrame({
     }),
   ],
   frames: segments,
-  weights: [new Weight(150)],
+  weights: [new Weight(cartMass)],
   resistance: cartResistance,
 });
 
@@ -252,7 +254,7 @@ function getViewXformMatrix(translation, scale) {
 
 function App() {
   const [translation, setTranslation] = useState([0, 0]);
-  const [scale, setScale] = useState(10);
+  const [scale, setScale] = useState(initialScale);
   const pressedKeys = useKeyboard();
   const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
   const viewXformMatrix = getViewXformMatrix(translation, scale);

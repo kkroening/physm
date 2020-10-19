@@ -363,15 +363,6 @@ export default class Solver {
     return this._applyDeltas(stateMap, deltaTime, qddArray);
   }
 
-  _makeStateMap(qs = required('qs'), qds = required('qds')) {
-    return new Map(
-      this.scene.sortedFrames.map((frame, index) => [
-        frame.id,
-        [qs[index], qds[index]],
-      ]),
-    );
-  }
-
   _tickRungeKutta(
     stateMap = required('stateMap'),
     deltaTime = required('deltaTime'),

@@ -10,5 +10,6 @@
 /node_modules/
 /out/
 npm-debug.log*
+public/tfjs-backend-wasm.wasm
 yarn-debug.log*
 yarn-error.log*
