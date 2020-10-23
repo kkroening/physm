@@ -1,9 +1,10 @@
 import * as tf from './tfjs';
-import faker from 'faker';
 import BoxDecal from './BoxDecal';
+import faker from 'faker';
 import React from 'react';
 import renderer from 'react-test-renderer';
-import { areTensorsEqual } from './utils';
+import { areTensorsEqual } from './testutils';
+import { checkTfMemory } from './testutils';
 import { coercePositionVector } from './utils';
 import { getScaleMatrix } from './utils';
 import { ZERO_POS } from './utils';
@@ -15,10 +16,21 @@ describe('BoxDecal class', () => {
   ]);
 
   test('constructor', () => {
-    const decal = new BoxDecal({
-      position: SAMPLE_POS,
-    });
+    const decal = checkTfMemory(
+      () =>
+        new BoxDecal({
+          position: SAMPLE_POS,
+        }),
+    );
     expect(areTensorsEqual(decal.position, SAMPLE_POS)).toBe(true);
+  });
+
+  test('.dispose method', () => {
+    checkTfMemory(() => {
+      new BoxDecal({
+        position: SAMPLE_POS,
+      }).dispose();
+    });
   });
 
   test('.getDomElement method with non-solid rendering', () => {
@@ -34,9 +46,8 @@ describe('BoxDecal class', () => {
     });
     const scale = 1.5;
     const xformMatrix = getScaleMatrix(scale);
-    const rendered = renderer.create(
-      <svg>{decal.getDomElement(xformMatrix)}</svg>,
-    );
+    const domElement = checkTfMemory(() => decal.getDomElement(xformMatrix));
+    const rendered = renderer.create(<svg>{domElement}</svg>);
     expect(rendered.toJSON()).toEqual(
       renderer
         .create(
@@ -98,9 +109,8 @@ describe('BoxDecal class', () => {
     });
     const scale = 1.5;
     const xformMatrix = getScaleMatrix(scale);
-    const rendered = renderer.create(
-      <svg>{decal.getDomElement(xformMatrix)}</svg>,
-    );
+    const domElement = checkTfMemory(() => decal.getDomElement(xformMatrix));
+    const rendered = renderer.create(<svg>{domElement}</svg>);
     expect(rendered.toJSON()).toEqual(
       renderer
         .create(

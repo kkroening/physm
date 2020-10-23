@@ -26,15 +26,22 @@ export default class Frame {
     this.initialState = coerceStateTuple(initialState);
   }
 
-  getPosMatrix(q = required('q')) {
+  dispose() {
+    this.frames.forEach((frame) => frame.dispose());
+    this.weights.forEach((weight) => weight.dispose());
+    this.decals.forEach((decals) => decals.dispose());
+    this.position.dispose();
+  }
+
+  getLocalPosMatrix(q = required('q')) {
     return tf.eye(3);
   }
 
-  getVelMatrix(q = required('q')) {
+  getLocalVelMatrix(q = required('q')) {
     return tf.zeros([3, 3]);
   }
 
-  getAccelMatrix(q = required('q')) {
+  getLocalAccelMatrix(q = required('q')) {
     return tf.zeros([3, 3]);
   }
 
@@ -44,16 +51,20 @@ export default class Frame {
     { key = undefined } = {},
   ) {
     const [q] = stateMap.has(this.id) ? stateMap.get(this.id) : ZERO_STATE;
-    xformMatrix = xformMatrix.matMul(this.getPosMatrix(q));
-    return (
+    xformMatrix = tf.tidy(() => xformMatrix.matMul(this.getLocalPosMatrix(q)));
+    const domElement = (
       <g className="frame" key={key}>
         {this.decals.map((decal, index) =>
           decal.getDomElement(xformMatrix, { key: 'decal' + index }),
         )}
         {this.frames.map((frame, index) =>
-          frame.getDomElement(stateMap, xformMatrix, { key: 'frame' + index }),
+          frame.getDomElement(stateMap, xformMatrix, {
+            key: 'frame' + index,
+          }),
         )}
       </g>
     );
+    xformMatrix.dispose();
+    return domElement;
   }
 }

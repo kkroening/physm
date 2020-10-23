@@ -1,9 +1,10 @@
 import * as tf from './tfjs';
-import faker from 'faker';
 import CircleDecal from './CircleDecal';
+import faker from 'faker';
 import React from 'react';
 import renderer from 'react-test-renderer';
-import { areTensorsEqual } from './utils';
+import { areTensorsEqual } from './testutils';
+import { checkTfMemory } from './testutils';
 import { coercePositionVector } from './utils';
 import { getScaleMatrix } from './utils';
 import { ZERO_POS } from './utils';
@@ -15,10 +16,21 @@ describe('CircleDecal class', () => {
   ]);
 
   test('constructor', () => {
-    const decal = new CircleDecal({
-      position: SAMPLE_POS,
-    });
+    const decal = checkTfMemory(
+      () =>
+        new CircleDecal({
+          position: SAMPLE_POS,
+        }),
+    );
     expect(areTensorsEqual(decal.position, SAMPLE_POS)).toBe(true);
+  });
+
+  test('.dispose method', () => {
+    checkTfMemory(() => {
+      new CircleDecal({
+        position: SAMPLE_POS,
+      }).dispose();
+    });
   });
 
   test('.getDomElement method', () => {
@@ -27,9 +39,8 @@ describe('CircleDecal class', () => {
     });
     const scale = 1.5;
     const xformMatrix = getScaleMatrix(scale);
-    const rendered = renderer.create(
-      <svg>{decal.getDomElement(xformMatrix)}</svg>,
-    );
+    const domElement = checkTfMemory(() => decal.getDomElement(xformMatrix));
+    const rendered = renderer.create(<svg>{domElement}</svg>);
     expect(rendered.toJSON()).toEqual(
       renderer
         .create(

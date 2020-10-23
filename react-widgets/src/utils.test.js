@@ -1,6 +1,7 @@
 import * as tf from './tfjs';
 import React from 'react';
-import { areTensorsEqual } from './utils';
+import { areTensorsEqual } from './testutils';
+import { checkTfMemory } from './testutils';
 import { coercePositionVector } from './utils';
 import { coerceStateTuple } from './utils';
 import { getRotationMatrix } from './utils';
@@ -12,50 +13,52 @@ import { solveLinearSystem } from './utils';
 
 describe('coercePositionVector function', () => {
   test('number input', () => {
-    expect(coercePositionVector(3).arraySync()).toEqual([[3], [0], [1]]);
+    const input = 3;
+    const actual = checkTfMemory(() => coercePositionVector(input)).arraySync();
+    const expected = [[3], [0], [1]];
+    expect(actual).toEqual(expected);
   });
   test('two-element array input', () => {
-    expect(coercePositionVector([3, 4]).arraySync()).toEqual([[3], [4], [1]]);
+    const input = [3, 4];
+    const actual = checkTfMemory(() => coercePositionVector(input)).arraySync();
+    const expected = [[3], [4], [1]];
+    expect(actual).toEqual(expected);
   });
   test('three-element array input', () => {
-    expect(coercePositionVector([3, 4, 5]).arraySync()).toEqual([
-      [3],
-      [4],
-      [1],
-    ]);
+    const input = [3, 4, 5];
+    const actual = checkTfMemory(() => coercePositionVector(input)).arraySync();
+    const expected = [[3], [4], [1]];
+    expect(actual).toEqual(expected);
   });
   test('1x2 tensor input', () => {
-    expect(coercePositionVector(tf.tensor2d([[3, 4]])).arraySync()).toEqual([
-      [3],
-      [4],
-      [1],
-    ]);
+    const input = tf.tensor2d([[3, 4]]);
+    const actual = checkTfMemory(() => coercePositionVector(input)).arraySync();
+    const expected = [[3], [4], [1]];
+    expect(actual).toEqual(expected);
   });
   test('2x1 tensor input', () => {
-    expect(coercePositionVector(tf.tensor2d([[3], [4]])).arraySync()).toEqual([
-      [3],
-      [4],
-      [1],
-    ]);
+    const input = tf.tensor2d([[3], [4]]);
+    const actual = checkTfMemory(() => coercePositionVector(input)).arraySync();
+    const expected = [[3], [4], [1]];
+    expect(actual).toEqual(expected);
   });
   test('1x3 tensor input', () => {
-    expect(coercePositionVector(tf.tensor2d([[3, 4, 5]])).arraySync()).toEqual([
-      [3],
-      [4],
-      [1],
-    ]);
+    const input = tf.tensor2d([[3, 4, 5]]);
+    const actual = checkTfMemory(() => coercePositionVector(input)).arraySync();
+    const expected = [[3], [4], [1]];
+    expect(actual).toEqual(expected);
   });
   test('3x1 tensor input', () => {
-    expect(
-      coercePositionVector(tf.tensor2d([[3], [4], [5]])).arraySync(),
-    ).toEqual([[3], [4], [1]]);
+    const input = tf.tensor2d([[3], [4], [5]]);
+    const actual = checkTfMemory(() => coercePositionVector(input)).arraySync();
+    const expected = [[3], [4], [1]];
+    expect(actual).toEqual(expected);
   });
   test('three-element 1D tensor input', () => {
-    expect(coercePositionVector(tf.tensor1d([3, 4, 5])).arraySync()).toEqual([
-      [3],
-      [4],
-      [1],
-    ]);
+    const input = tf.tensor1d([3, 4, 5]);
+    const actual = checkTfMemory(() => coercePositionVector(input)).arraySync();
+    const expected = [[3], [4], [1]];
+    expect(actual).toEqual(expected);
   });
 });
 
@@ -72,41 +75,46 @@ describe('coerceStateTuple function', () => {
 });
 
 describe('invertXformMatrix function', () => {
+  test('identity matrix', () => {
+    const input = tf.eye(3);
+    const actual = checkTfMemory(() => invertXformMatrix(input));
+    const expected = input;
+    expect(areTensorsEqual(actual, expected)).toBe(true);
+  });
   test('rotation matrix', () => {
-    expect(areTensorsEqual(invertXformMatrix(tf.eye(3)), tf.eye(3))).toBe(true);
-    expect(
-      areTensorsEqual(
-        invertXformMatrix(getRotationMatrix(0.7)),
-        getRotationMatrix(-0.7),
-      ),
-    ).toBe(true);
+    const input = getRotationMatrix(0.7);
+    const actual = checkTfMemory(() => invertXformMatrix(input));
+    const expected = getRotationMatrix(-0.7);
+    expect(areTensorsEqual(actual, expected)).toBe(true);
   });
   test('rotation+translation matrix', () => {
-    const m1 = invertXformMatrix(
-      getTranslationMatrix([3, 8]).matMul(getRotationMatrix(0.7)),
+    const input = getTranslationMatrix([3, 8]).matMul(getRotationMatrix(0.7));
+    const actual = checkTfMemory(() => invertXformMatrix(input));
+    const expected = getRotationMatrix(-0.7).matMul(
+      getTranslationMatrix([-3, -8]),
     );
-    const m2 = getRotationMatrix(-0.7).matMul(getTranslationMatrix([-3, -8]));
-    expect(areTensorsEqual(m1, m2)).toBe(true);
+    expect(areTensorsEqual(actual, expected)).toBe(true);
   });
 });
 
 describe('solveLinearSystem function', () => {
-  test('identity matrix with array output', () => {
-    const array = solveLinearSystem(tf.eye(3), tf.tensor2d([[1], [2], [3]]), {
-      asTensor: false,
-    });
-    expect(array).toBeInstanceOf(Array);
-    expect(areTensorsEqual(tf.tensor1d(array), tf.tensor1d([1, 2, 3]))).toBe(
-      true,
+  test('identity matrix with array expected', () => {
+    const aMat = tf.eye(3);
+    const bVec = tf.tensor2d([[1], [2], [3]]);
+    const actual = checkTfMemory(() =>
+      solveLinearSystem(aMat, bVec, {
+        asTensor: false,
+      }),
     );
+    const expected = [1, 2, 3];
+    expect(actual).toEqual(expected);
   });
-  test('identity matrix with tensor output', () => {
-    expect(
-      areTensorsEqual(
-        solveLinearSystem(tf.eye(3), tf.tensor2d([[1], [2], [3]])),
-        tf.tensor2d([[1], [2], [3]]),
-      ),
-    ).toBe(true);
+  test('identity matrix with tensor expected', () => {
+    const aMat = tf.eye(3);
+    const bVec = tf.tensor2d([[1], [2], [3]]);
+    const actual = checkTfMemory(() => solveLinearSystem(aMat, bVec));
+    const expected = tf.tensor2d([[1], [2], [3]]);
+    expect(areTensorsEqual(actual, expected)).toBe(true);
   });
   test('rotation+translation matrix', () => {
     const aMat = getTranslationMatrix([3, 8]).matMul(getRotationMatrix(0.7));
@@ -114,8 +122,10 @@ describe('solveLinearSystem function', () => {
     const aInvMat = getRotationMatrix(-0.7).matMul(
       getTranslationMatrix([-3, -8]),
     );
+    const actual = checkTfMemory(() => solveLinearSystem(aMat, bVec));
+    const expected = aInvMat.matMul(bVec);
     expect(
-      areTensorsEqual(solveLinearSystem(aMat, bVec), aInvMat.matMul(bVec), {
+      areTensorsEqual(actual, expected, {
         tolerance: 1e-5,
       }),
     ).toBe(true);
@@ -127,6 +137,7 @@ describe('solveLinearSystem function', () => {
       [2, 1, 2],
     ]);
     const bVec = tf.tensor2d([[1], [2], [3]]);
-    expect(() => solveLinearSystem(aMat, bVec)).toThrow(SingularMatrixError);
+    const func = () => checkTfMemory(() => solveLinearSystem(aMat, bVec));
+    expect(func).toThrow(SingularMatrixError);
   });
 });

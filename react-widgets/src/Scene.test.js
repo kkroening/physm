@@ -5,11 +5,12 @@ import Frame from './Frame';
 import React from 'react';
 import renderer from 'react-test-renderer';
 import Scene from './Scene';
+import { checkTfMemory } from './testutils';
 import { DEFAULT_GRAVITY } from './Scene';
 
 describe('Scene class', () => {
   test('constructor with default arguments', () => {
-    const scene = new Scene();
+    const scene = checkTfMemory(() => new Scene());
     expect(scene.decals).toEqual([]);
     expect(scene.frames).toEqual([]);
     expect(scene.springs).toEqual([]);
@@ -22,12 +23,18 @@ describe('Scene class', () => {
   });
 
   test('constructor with scene analysis', () => {
-    const frame3 = new Frame({ id: 'frame3' });
-    const frame2 = new Frame({ id: 'frame2' });
-    const frame1 = new Frame({ id: 'frame1', frames: [frame3, frame2] });
-    const frame0 = new Frame({ id: 'frame0', frames: [frame1] });
-    const scene = new Scene({
-      frames: [frame0],
+    let frame0;
+    let frame1;
+    let frame2;
+    let frame3;
+    const scene = checkTfMemory(() => {
+      frame3 = new Frame({ id: 'frame3' });
+      frame2 = new Frame({ id: 'frame2' });
+      frame1 = new Frame({ id: 'frame1', frames: [frame3, frame2] });
+      frame0 = new Frame({ id: 'frame0', frames: [frame1] });
+      return new Scene({
+        frames: [frame0],
+      });
     });
     expect(scene.decals).toEqual([]);
     expect(scene.frames).toEqual([frame0]);
@@ -71,9 +78,10 @@ describe('Scene class', () => {
     });
     const stateMap = new Map();
     const xformMatrix = tf.eye(3);
-    const rendered = renderer.create(
-      <svg>{scene.getDomElement(stateMap, xformMatrix)}</svg>,
+    const domElement = checkTfMemory(() =>
+      scene.getDomElement(stateMap, xformMatrix),
     );
+    const rendered = renderer.create(<svg>{domElement}</svg>);
     expect(rendered.toJSON()).toEqual(
       renderer
         .create(
@@ -109,9 +117,11 @@ describe('Scene class', () => {
     const scene = new Scene({
       frames: [frame0],
     });
-    expect(scene.getInitialStateMap()).toEqual(new Map([
-      [frame0.id, frame0.initialState],
-      [frame1.id, frame1.initialState],
-    ]));
+    expect(scene.getInitialStateMap()).toEqual(
+      new Map([
+        [frame0.id, frame0.initialState],
+        [frame1.id, frame1.initialState],
+      ]),
+    );
   });
 });

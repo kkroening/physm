@@ -45,7 +45,7 @@ export default class TrackFrame extends Frame {
     });
   }
 
-  getPosMatrix(q = required('q')) {
+  getLocalPosMatrix(q = required('q')) {
     const position = this.position.dataSync();
     return getTranslationMatrix([
       position[0] + q * Math.cos(this.angle),
@@ -53,7 +53,7 @@ export default class TrackFrame extends Frame {
     ]);
   }
 
-  getVelMatrix(q = required('q')) {
+  getLocalVelMatrix(q = required('q')) {
     return tf.tensor2d([
       [0, 0, Math.cos(this.angle)],
       [0, 0, Math.sin(this.angle)],

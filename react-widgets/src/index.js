@@ -21,15 +21,15 @@ function initWebGL() {
 }
 
 async function initWasm() {
-  tfWasm.setWasmPath('/tfjs-backend-wasm.wasm');
+  tfWasm.setWasmPaths('/');
   await tf.setBackend('wasm');
 }
 
 async function init() {
   tf.enableProdMode();
-  initCpu();
+  //initCpu();
   //initWebGL();
-  //await initWasm();
+  await initWasm();
 }
 
 function main() {

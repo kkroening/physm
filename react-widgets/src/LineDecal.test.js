@@ -3,7 +3,8 @@ import faker from 'faker';
 import LineDecal from './LineDecal';
 import React from 'react';
 import renderer from 'react-test-renderer';
-import { areTensorsEqual } from './utils';
+import { areTensorsEqual } from './testutils';
+import { checkTfMemory } from './testutils';
 import { coercePositionVector } from './utils';
 import { getScaleMatrix } from './utils';
 import { ZERO_POS } from './utils';
@@ -15,11 +16,22 @@ describe('LineDecal class', () => {
   ]);
 
   test('constructor', () => {
-    const decal = new LineDecal({
-      endPos: SAMPLE_POS,
-    });
+    const decal = checkTfMemory(
+      () =>
+        new LineDecal({
+          endPos: SAMPLE_POS,
+        }),
+    );
     expect(areTensorsEqual(decal.startPos, ZERO_POS)).toBe(true);
     expect(areTensorsEqual(decal.endPos, SAMPLE_POS)).toBe(true);
+  });
+
+  test('.dispose method', () => {
+    checkTfMemory(() => {
+      new LineDecal({
+        endPos: SAMPLE_POS,
+      }).dispose();
+    });
   });
 
   test('.getDomElement method', () => {
@@ -28,9 +40,8 @@ describe('LineDecal class', () => {
     });
     const scale = 1.5;
     const xformMatrix = getScaleMatrix(scale);
-    const rendered = renderer.create(
-      <svg>{decal.getDomElement(xformMatrix)}</svg>,
-    );
+    const domElement = checkTfMemory(() => decal.getDomElement(xformMatrix));
+    const rendered = renderer.create(<svg>{domElement}</svg>);
     expect(rendered.toJSON()).toEqual(
       renderer
         .create(

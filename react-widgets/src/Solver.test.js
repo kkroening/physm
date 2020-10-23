@@ -6,7 +6,8 @@ import Scene from './Scene';
 import Solver from './Solver';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
-import { areTensorsEqual } from './utils';
+import { areTensorsEqual } from './testutils';
+import { checkTfMemory } from './testutils';
 import { getRotationTranslationMatrix } from './utils';
 import { getTranslationMatrix } from './utils';
 import { invertXformMatrix } from './utils';
@@ -57,7 +58,7 @@ describe('Solver', () => {
   const externalForceMap = new Map();
   const solver = new Solver(scene);
 
-  const posMatMap = solver._getPosMatMap(stateMap);
+  const posMatMap = checkTfMemory(() => solver._getPosMatMap(stateMap));
 
   test('._getPosMatMap method', () => {
     expect([...posMatMap.keys()]).toEqual(Object.keys(frames));
@@ -80,24 +81,28 @@ describe('Solver', () => {
       areTensorsEqual(
         posMatMap.get('pendulum2'),
         frames.cart
-          .getPosMatrix(frames.cart.initialState[0])
+          .getLocalPosMatrix(frames.cart.initialState[0])
           .matMul(
-            frames.pendulum1.getPosMatrix(frames.pendulum1.initialState[0]),
+            frames.pendulum1.getLocalPosMatrix(
+              frames.pendulum1.initialState[0],
+            ),
           )
           .matMul(
-            frames.pendulum2.getPosMatrix(frames.pendulum2.initialState[0]),
+            frames.pendulum2.getLocalPosMatrix(
+              frames.pendulum2.initialState[0],
+            ),
           ),
       ),
     ).toBe(true);
     expect(
       areTensorsEqual(
         posMatMap.get('ball'),
-        frames.ball.getPosMatrix(frames.ball.initialState[0]),
+        frames.ball.getLocalPosMatrix(frames.ball.initialState[0]),
       ),
     ).toBe(true);
   });
 
-  const invPosMatMap = solver._getInvPosMatMap(posMatMap);
+  const invPosMatMap = checkTfMemory(() => solver._getInvPosMatMap(posMatMap));
 
   test('._getInvPosMatMap method', () => {
     expect([...invPosMatMap.keys()]).toEqual(Object.keys(frames));
@@ -111,13 +116,15 @@ describe('Solver', () => {
       areTensorsEqual(
         invPosMatMap.get('ball'),
         invertXformMatrix(
-          frames.ball.getPosMatrix(frames.ball.initialState[0]),
+          frames.ball.getLocalPosMatrix(frames.ball.initialState[0]),
         ),
       ),
     ).toBe(true);
   });
 
-  const velMatMap = solver._getVelMatMap(posMatMap, invPosMatMap, stateMap);
+  const velMatMap = checkTfMemory(() =>
+    solver._getVelMatMap(posMatMap, invPosMatMap, stateMap),
+  );
 
   test('._getVelMatMap method', () => {
     expect([...velMatMap.keys()]).toEqual(Object.keys(frames));
@@ -125,7 +132,7 @@ describe('Solver', () => {
       areTensorsEqual(
         velMatMap.get('cart'),
         frames.cart
-          .getVelMatrix(stateMap.get('cart')[0])
+          .getLocalVelMatrix(stateMap.get('cart')[0])
           .matMul(invPosMatMap.get('cart')),
       ),
     ).toBe(true);
@@ -134,7 +141,9 @@ describe('Solver', () => {
         velMatMap.get('pendulum1'),
         posMatMap
           .get('cart')
-          .matMul(frames.pendulum1.getVelMatrix(stateMap.get('pendulum1')[0]))
+          .matMul(
+            frames.pendulum1.getLocalVelMatrix(stateMap.get('pendulum1')[0]),
+          )
           .matMul(invPosMatMap.get('pendulum1')),
       ),
     ).toBe(true);
@@ -143,13 +152,17 @@ describe('Solver', () => {
         velMatMap.get('pendulum2'),
         posMatMap
           .get('pendulum1')
-          .matMul(frames.pendulum2.getVelMatrix(stateMap.get('pendulum2')[0]))
+          .matMul(
+            frames.pendulum2.getLocalVelMatrix(stateMap.get('pendulum2')[0]),
+          )
           .matMul(invPosMatMap.get('pendulum2')),
       ),
     ).toBe(true);
   });
 
-  const accelMatMap = solver._getAccelMatMap(posMatMap, invPosMatMap, stateMap);
+  const accelMatMap = checkTfMemory(() =>
+    solver._getAccelMatMap(posMatMap, invPosMatMap, stateMap),
+  );
 
   test('._getAccelMatMap method', () => {
     expect([...accelMatMap.keys()]).toEqual(Object.keys(frames));
@@ -157,7 +170,7 @@ describe('Solver', () => {
       areTensorsEqual(
         accelMatMap.get('cart'),
         frames.cart
-          .getAccelMatrix(stateMap.get('cart')[0])
+          .getLocalAccelMatrix(stateMap.get('cart')[0])
           .matMul(invPosMatMap.get('cart')),
       ),
     ).toBe(true);
@@ -166,7 +179,9 @@ describe('Solver', () => {
         accelMatMap.get('pendulum1'),
         posMatMap
           .get('cart')
-          .matMul(frames.pendulum1.getAccelMatrix(stateMap.get('pendulum1')[0]))
+          .matMul(
+            frames.pendulum1.getLocalAccelMatrix(stateMap.get('pendulum1')[0]),
+          )
           .matMul(invPosMatMap.get('pendulum1')),
       ),
     ).toBe(true);
@@ -175,25 +190,31 @@ describe('Solver', () => {
         accelMatMap.get('pendulum2'),
         posMatMap
           .get('pendulum1')
-          .matMul(frames.pendulum2.getAccelMatrix(stateMap.get('pendulum2')[0]))
+          .matMul(
+            frames.pendulum2.getLocalAccelMatrix(stateMap.get('pendulum2')[0]),
+          )
           .matMul(invPosMatMap.get('pendulum2')),
       ),
     ).toBe(true);
   });
 
-  const velSumMatMap = solver._getVelSumMatMap(posMatMap, velMatMap, stateMap);
+  const velSumMatMap = checkTfMemory(() =>
+    solver._getVelSumMatMap(posMatMap, velMatMap, stateMap),
+  );
 
   test('._getVelSumMatMap method', () => {
     expect([...velSumMatMap.keys()]).toEqual(Object.keys(frames));
     // TODO: assert on velSumMatMap values.
   });
 
-  const accelSumMatMap = solver._getAccelSumMatMap(
-    posMatMap,
-    velMatMap,
-    accelMatMap,
-    velSumMatMap,
-    stateMap,
+  const accelSumMatMap = checkTfMemory(() =>
+    solver._getAccelSumMatMap(
+      posMatMap,
+      velMatMap,
+      accelMatMap,
+      velSumMatMap,
+      stateMap,
+    ),
   );
 
   test('._getAccelSumMatMap method', () => {
@@ -201,7 +222,7 @@ describe('Solver', () => {
     // TODO: assert on accelSumMatMap values.
   });
 
-  const weightPosMap = solver._getWeightPosMap(posMatMap);
+  const weightPosMap = checkTfMemory(() => solver._getWeightPosMap(posMatMap));
 
   test('._getWeightPosMap method', () => {
     expect([...weightPosMap.keys()]).toEqual(Object.keys(frames));
@@ -270,11 +291,13 @@ describe('Solver', () => {
 
   test('._getCoefficientMatrixEntry method', () => {
     const getCoefficient = (rowIndex, colIndex) =>
-      solver._getCoefficientMatrixEntry(
-        rowIndex,
-        colIndex,
-        velMatMap,
-        weightPosMap,
+      checkTfMemory(() =>
+        solver._getCoefficientMatrixEntry(
+          rowIndex,
+          colIndex,
+          velMatMap,
+          weightPosMap,
+        ),
       );
     const getNorm = (vector) => vector.matMul(vector, true).dataSync()[0];
     expect(getCoefficient(frameIndexes.ball, frameIndexes.cart)).toEqual(0);
@@ -312,9 +335,8 @@ describe('Solver', () => {
         velMatMap,
         weightPosMap,
       );
-    const coefficientMatrix = solver._getCoefficientMatrix(
-      velMatMap,
-      weightPosMap,
+    const coefficientMatrix = checkTfMemory(() =>
+      solver._getCoefficientMatrix(velMatMap, weightPosMap),
     );
     expect(coefficientMatrix.shape).toEqual([numFrames, numFrames]);
     const data = coefficientMatrix.arraySync();
@@ -329,14 +351,16 @@ describe('Solver', () => {
 
   test('._getForceVectorEntry method', () => {
     scene.sortedFrames.forEach((frame) => {
-      const entry = solver._getForceVectorEntry(
-        frame,
-        velMatMap,
-        velSumMatMap,
-        accelSumMatMap,
-        weightPosMap,
-        stateMap,
-        externalForceMap,
+      const entry = checkTfMemory(() =>
+        solver._getForceVectorEntry(
+          frame,
+          velMatMap,
+          velSumMatMap,
+          accelSumMatMap,
+          weightPosMap,
+          stateMap,
+          externalForceMap,
+        ),
       );
       expect(entry).not.toBeNaN();
       expect(entry).not.toBeCloseTo(0);
@@ -355,13 +379,15 @@ describe('Solver', () => {
         stateMap,
         externalForceMap,
       );
-    const forceVector = solver._getForceVector(
-      velMatMap,
-      velSumMatMap,
-      accelSumMatMap,
-      weightPosMap,
-      stateMap,
-      externalForceMap,
+    const forceVector = checkTfMemory(() =>
+      solver._getForceVector(
+        velMatMap,
+        velSumMatMap,
+        accelSumMatMap,
+        weightPosMap,
+        stateMap,
+        externalForceMap,
+      ),
     );
     expect(forceVector.shape).toEqual([numFrames, 1]);
     const data = forceVector.dataSync();
@@ -371,9 +397,8 @@ describe('Solver', () => {
   });
 
   test('._getSystemOfEquations method', () => {
-    const [aMat, bVec] = solver._getSystemOfEquations(
-      stateMap,
-      externalForceMap,
+    const [aMat, bVec] = checkTfMemory(() =>
+      solver._getSystemOfEquations(stateMap, externalForceMap),
     );
     expect(aMat.shape).toEqual([numFrames, numFrames]);
     expect(bVec.shape).toEqual([numFrames, 1]);
@@ -385,9 +410,11 @@ describe('Solver', () => {
       const DELTA_TIME = 1 / 60;
       let curStateMap = stateMap;
       for (let timeIndex = 0; timeIndex < MAX_TIME_INDEX; timeIndex++) {
-        const newStateMap = solver.tick(curStateMap, DELTA_TIME, undefined, {
-          rungeKutta: rungeKutta,
-        });
+        const newStateMap = checkTfMemory(() =>
+          solver.tick(curStateMap, DELTA_TIME, undefined, {
+            rungeKutta: rungeKutta,
+          }),
+        );
         expect(curStateMap).not.toEqual(newStateMap);
         [...newStateMap].forEach(([frameId, [newQ, newQd]]) => {
           const [q, qd] = curStateMap.get(frameId);

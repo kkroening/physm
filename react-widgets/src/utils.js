@@ -29,7 +29,7 @@ export function coercePositionVector(position = required('position')) {
         `Expected \`position\` tensor to have 2 or 3 elements; got ${position}`,
       );
     }
-    position = tf.tensor1d([data[0], data[1], 1]).reshape([3, 1]);
+    position = tf.tensor2d([[data[0]], [data[1]], [1]]);
   } else if (position instanceof Array) {
     if (position.length < 2 || position.length > 3) {
       throw new DimensionError(
@@ -96,11 +96,13 @@ export function getRotationMatrix(angle = required('angle')) {
 }
 
 export function getTranslationMatrix(offset = required('offset')) {
-  offset = coercePositionVector(offset).dataSync();
+  offset = coercePositionVector(offset)
+  const offsetData = offset.dataSync();
+  offset.dispose();
   return tf.tensor2d([
-    [1, 0, offset[0]],
-    [0, 1, offset[1]],
-    [0, 0, offset[2]],
+    [1, 0, offsetData[0]],
+    [0, 1, offsetData[1]],
+    [0, 0, offsetData[2]],
   ]);
 }
 
@@ -108,13 +110,15 @@ export function getRotationTranslationMatrix(
   angle = required('angle'),
   offset = required('offset'),
 ) {
-  offset = coercePositionVector(offset).dataSync();
+  offset = coercePositionVector(offset);
+  const offsetData = offset.dataSync();
+  offset.dispose();
   const c = Math.cos(angle);
   const s = Math.sin(angle);
   return tf.tensor2d([
-    [c, -s, offset[0]],
-    [s, c, offset[1]],
-    [0, 0, offset[2]],
+    [c, -s, offsetData[0]],
+    [s, c, offsetData[1]],
+    [0, 0, offsetData[2]],
   ]);
 }
 
@@ -219,30 +223,24 @@ export function solveLinearSystem(
         `and bVec shape ${JSON.stringify(bVec.shape)}`,
     );
   }
-  const n = bVec.shape[0];
-  const [qMat, rMat] = tf.linalg.qr(aMat);
-  const cVec = qMat.transpose().matMul(bVec).dataSync();
-  const rArray = rMat.arraySync();
-  const xArray = Array(n);
-  for (let i = n - 1; i >= 0; i--) {
-    if (Math.abs(rArray[i][i]) < DEFAULT_TOLERANCE) {
-      throw new SingularMatrixError(`Singular matrix: ${aMat.toString()}`);
+  return tf.tidy(() => {
+    const n = bVec.shape[0];
+    const [qMat, rMat] = tf.linalg.qr(aMat);
+    const cVec = qMat.transpose().matMul(bVec).dataSync();
+    const rArray = rMat.arraySync();
+    const xArray = Array(n);
+    for (let i = n - 1; i >= 0; i--) {
+      if (Math.abs(rArray[i][i]) < DEFAULT_TOLERANCE) {
+        throw new SingularMatrixError(`Singular matrix: ${aMat.toString()}`);
+      }
+      let sum = 0;
+      for (let j = i + 1; j < n; j++) {
+        sum += rArray[i][j] * xArray[j];
+      }
+      xArray[i] = (cVec[i] - sum) / rArray[i][i];
     }
-    let sum = 0;
-    for (let j = i + 1; j < n; j++) {
-      sum += rArray[i][j] * xArray[j];
-    }
-    xArray[i] = (cVec[i] - sum) / rArray[i][i];
-  }
-  return asTensor ? tf.tensor1d(xArray).reshape([n, 1]) : xArray;
-}
-
-export function areTensorsEqual(
-  t1 = required('t1'),
-  t2 = required('t2'),
-  { tolerance = DEFAULT_TOLERANCE } = {},
-) {
-  return !!tf.all(t1.sub(t2).abs().less(tolerance)).dataSync()[0];
+    return asTensor ? tf.tensor1d(xArray).reshape([n, 1]) : xArray;
+  });
 }
 
 export function generateRandomId() {

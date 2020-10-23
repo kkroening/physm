@@ -39,7 +39,7 @@ export default class RotationalFrame extends Frame {
     });
   }
 
-  getPosMatrix(q = required('q')) {
+  getLocalPosMatrix(q = required('q')) {
     const position = this.position.dataSync();
     const c = Math.cos(q);
     const s = Math.sin(q);
@@ -50,7 +50,7 @@ export default class RotationalFrame extends Frame {
     ]);
   }
 
-  getVelMatrix(q = required('q')) {
+  getLocalVelMatrix(q = required('q')) {
     const c = Math.cos(q);
     const s = Math.sin(q);
     return tf.tensor2d([
@@ -60,7 +60,7 @@ export default class RotationalFrame extends Frame {
     ]);
   }
 
-  getAccelMatrix(q = required('q')) {
+  getLocalAccelMatrix(q = required('q')) {
     const c = Math.cos(q);
     const s = Math.sin(q);
     return tf.tensor2d([

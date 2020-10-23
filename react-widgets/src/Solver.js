@@ -17,11 +17,12 @@ export default class Solver {
     for (let frame of this.scene.sortedFrames) {
       const [q] = stateMap.get(frame.id);
       const parentId = this.scene.frameIdParentMap.get(frame.id);
-      let mat = frame.getPosMatrix(q);
-      if (parentId) {
-        mat = posMatMap.get(parentId).matMul(mat);
-      }
-      posMatMap.set(frame.id, mat);
+      const localPosMat = frame.getLocalPosMatrix(q);
+      const globalPosMat = parentId
+        ? posMatMap.get(parentId).matMul(localPosMat)
+        : localPosMat.clone();
+      localPosMat.dispose();
+      posMatMap.set(frame.id, globalPosMat);
     }
     return posMatMap;
   }
@@ -55,11 +56,13 @@ export default class Solver {
       this.scene.sortedFrames.map((frame) => {
         const [q] = stateMap.get(frame.id);
         const parentId = this.scene.frameIdParentMap.get(frame.id);
-        let mat = frame.getVelMatrix(q).matMul(invPosMatMap.get(frame.id));
-        if (parentId) {
-          mat = posMatMap.get(parentId).matMul(mat);
-        }
-        return [frame.id, mat];
+        const localVelMat = frame.getLocalVelMatrix(q);
+        const relVelMat = localVelMat.matMul(invPosMatMap.get(frame.id));
+        const globalVelMat = parentId
+          ? posMatMap.get(parentId).matMul(relVelMat)
+          : relVelMat.clone();
+        tf.dispose([localVelMat, relVelMat]);
+        return [frame.id, globalVelMat];
       }),
     );
   }
@@ -78,11 +81,13 @@ export default class Solver {
       this.scene.sortedFrames.map((frame) => {
         const [q] = stateMap.get(frame.id);
         const parentId = this.scene.frameIdParentMap.get(frame.id);
-        let mat = frame.getAccelMatrix(q).matMul(invPosMatMap.get(frame.id));
-        if (parentId) {
-          mat = posMatMap.get(parentId).matMul(mat);
-        }
-        return [frame.id, mat];
+        const localAccelMat = frame.getLocalAccelMatrix(q);
+        const relAccelMat = localAccelMat.matMul(invPosMatMap.get(frame.id));
+        const globalAccelMat = parentId
+          ? posMatMap.get(parentId).matMul(relAccelMat)
+          : relAccelMat.clone();
+        tf.dispose([localAccelMat, relAccelMat]);
+        return [frame.id, globalAccelMat];
       }),
     );
   }
@@ -96,11 +101,12 @@ export default class Solver {
     for (let frame of this.scene.sortedFrames) {
       const [, qd] = stateMap.get(frame.id);
       const parentId = this.scene.frameIdParentMap.get(frame.id);
-      let mat = velMatMap.get(frame.id).mul(qd);
-      if (parentId) {
-        mat = mat.add(velSumMatMap.get(parentId));
-      }
-      velSumMatMap.set(frame.id, mat);
+      const globalVelMat = velMatMap.get(frame.id).mul(qd);
+      const velSumMat = parentId
+        ? globalVelMat.add(velSumMatMap.get(parentId))
+        : globalVelMat;
+      parentId && tf.dispose(globalVelMat);
+      velSumMatMap.set(frame.id, velSumMat);
     }
     return velSumMatMap;
   }
@@ -116,16 +122,23 @@ export default class Solver {
     for (let frame of this.scene.sortedFrames) {
       const [, qd] = stateMap.get(frame.id);
       const parentId = this.scene.frameIdParentMap.get(frame.id);
-      let mat = accelMatMap.get(frame.id).mul(qd * qd);
-      if (parentId) {
-        const parentAccelSumMat = accelSumMatMap.get(parentId);
-        const parentVelSumMat = velSumMatMap.get(parentId);
-        const velMat = velMatMap.get(frame.id);
-        mat = mat
-          .add(parentAccelSumMat)
-          .add(parentVelSumMat.matMul(velMat).mul(2 * qd));
-      }
-      accelSumMatMap.set(frame.id, mat);
+      const accelSumMat = tf.tidy(() => {
+        const globalAccelMat = accelMatMap.get(frame.id).mul(qd * qd);
+        let accelSumMat;
+        if (parentId) {
+          const parentAccelSumMat = accelSumMatMap.get(parentId);
+          const parentVelSumMat = velSumMatMap.get(parentId);
+          const globalVelMat = velMatMap.get(frame.id).mul(2 * qd);
+          const crossAccelMat = parentVelSumMat.matMul(globalVelMat);
+          accelSumMat = globalAccelMat
+            .add(crossAccelMat)
+            .add(parentAccelSumMat);
+        } else {
+          accelSumMat = globalAccelMat;
+        }
+        return accelSumMat;
+      });
+      accelSumMatMap.set(frame.id, accelSumMat);
     }
     return accelSumMatMap;
   }
@@ -196,11 +209,11 @@ export default class Solver {
       for (let index = 0; index < frame3.weights.length; index++) {
         const weight = frame3.weights[index];
         const pos = weightPosMap.get(frame3.id)[index];
-        result +=
-          weight.mass *
-          tf
-            .matMul(velMat2.matMul(pos), velMat1.matMul(pos), true)
-            .dataSync()[0];
+        const vel1 = velMat1.matMul(pos);
+        const vel2 = velMat2.matMul(pos);
+        const dot = tf.matMul(vel2, vel1, true);
+        result += weight.mass * dot.dataSync()[0];
+        tf.dispose([vel1, vel2, dot]);
       }
     }
     return result;
@@ -251,14 +264,19 @@ export default class Solver {
         const weightBaseVel = baseVelMat.matMul(weightPos);
         const weightChildVelSum = childVelSumMat.matMul(weightPos);
         const weightChildAccelSum = childAccelSumMat.matMul(weightPos);
-        const kineticForce =
-          -weight.mass *
-          weightBaseVel.matMul(weightChildAccelSum, true).dataSync()[0];
+        const kineticMat = weightBaseVel.matMul(weightChildAccelSum, true);
+        const kineticForce = -weight.mass * kineticMat.dataSync()[0];
         const gravityForce =
           -weight.mass * this.scene.gravity * weightBaseVel.dataSync()[1];
-        const dragForce =
-          -weight.drag *
-          weightBaseVel.matMul(weightChildVelSum, true).dataSync()[0];
+        const dragMat = weightBaseVel.matMul(weightChildVelSum, true);
+        const dragForce = -weight.drag * dragMat.dataSync()[0];
+        tf.dispose([
+          weightBaseVel,
+          weightChildVelSum,
+          weightChildAccelSum,
+          kineticMat,
+          dragMat,
+        ]);
         result = kineticForce + dragForce + gravityForce;
       }
       const [, qd] = stateMap.get(baseFrame.id);
@@ -291,7 +309,7 @@ export default class Solver {
         externalForceMap,
       );
     }
-    return tf.tensor1d(array).reshape([numFrames, 1]);
+    return tf.tensor2d(array, [numFrames, 1]);
   }
 
   _getSystemOfEquations(
@@ -320,6 +338,15 @@ export default class Solver {
       stateMap,
       externalForceMap,
     );
+    tf.dispose([
+      ...posMatMap.values(),
+      ...invPosMatMap.values(),
+      ...velMatMap.values(),
+      ...accelMatMap.values(),
+      ...velSumMatMap.values(),
+      ...accelSumMatMap.values(),
+      ...weightPosMap.values(),
+    ]);
     return [aMat, bVec];
   }
 
@@ -328,7 +355,9 @@ export default class Solver {
     externalForceMap = required('externalForceMap'),
   ) {
     const [aMat, bVec] = this._getSystemOfEquations(stateMap, externalForceMap);
-    return solveLinearSystem(aMat, bVec, { asTensor: false });
+    const qddArray = solveLinearSystem(aMat, bVec, { asTensor: false });
+    tf.dispose([aMat, bVec]);
+    return qddArray;
   }
 
   _applyDeltas(

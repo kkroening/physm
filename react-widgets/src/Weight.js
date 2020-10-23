@@ -8,6 +8,10 @@ export default class Weight {
     this.drag = drag;
   }
 
+  dispose() {
+    this.position.dispose();
+  }
+
   xform(xformMatrix) {
     return new Weight({
       mass: this.mass,

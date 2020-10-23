@@ -2,6 +2,8 @@ import { NotImplementedError } from './utils';
 import { required } from './utils';
 
 export default class Decal {
+  dispose() {}
+
   xform(xformMatrix = required('xformMatrix')) {
     throw new NotImplementedError('abstract method');
   }

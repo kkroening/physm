@@ -1,5 +1,6 @@
 import './App.css';
 import 'normalize.css';
+import * as tf from './tfjs';
 import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
 import LineDecal from './LineDecal';
@@ -22,7 +23,7 @@ const ropeSegmentLength = 5;
 const ropeSegmentDrag = 15;
 const ropeSegmentMass = 1;
 const ropeSegmentResistance = 20;
-const ropeSegmentCount = 3;
+const ropeSegmentCount = 2;
 const cartMass = 250;
 const cartForce = 7000;
 const cartResistance = 5;
@@ -30,7 +31,7 @@ const cartResistance = 5;
 const initialScale = 10;
 const rungeKutta = false;
 const MIN_ANIMATION_FPS = 5;
-const TARGET_ANIMATION_FPS = 30;
+const TARGET_ANIMATION_FPS = 60;
 const TARGET_PHYSICS_FPS = 250;
 
 const poi = new RotationalFrame({
@@ -247,9 +248,9 @@ function simulatePhysics(stateMap, externalForceMap, animationDeltaTime) {
 }
 
 function getViewXformMatrix(translation, scale) {
-  return getTranslationMatrix([300, 300])
+  return tf.tidy(() => getTranslationMatrix([300, 300])
     .matMul(getScaleMatrix(scale, -scale))
-    .matMul(getTranslationMatrix(translation));
+    .matMul(getTranslationMatrix(translation)));
 }
 
 function App() {
@@ -258,6 +259,8 @@ function App() {
   const pressedKeys = useKeyboard();
   const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
   const viewXformMatrix = getViewXformMatrix(translation, scale);
+  const sceneDomElement = scene.getDomElement(stateMap, viewXformMatrix);
+  viewXformMatrix.dispose();
 
   useAnimationFrame((deltaTime) => {
     handleViewControls(
@@ -278,6 +281,9 @@ function App() {
       <div className="plot">
         <h2 className="plot__title">CartPoi</h2>
         {
+          <p>Number of tensors: {tf.memory().numTensors}</p>
+        }
+        {
           //<p>Keys: {[...pressedKeys].join(', ')}</p>
         }
         {
@@ -285,7 +291,7 @@ function App() {
         }
         <div className="plot__main">
           <svg className="plot__svg">
-            {scene.getDomElement(stateMap, viewXformMatrix)}
+            {sceneDomElement}
           </svg>
         </div>
       </div>

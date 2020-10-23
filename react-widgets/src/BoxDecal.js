@@ -47,9 +47,16 @@ export default class BoxDecal extends Decal {
     this.solid = !!solid;
     this.lineWidth = lineWidth;
     this.color = color;
-    this._cornerPositions = getRotationTranslationMatrix(-angle, this.position)
-      .matMul(getScaleMatrix(width, height))
-      .matMul(centered ? CENTERED_SQUARE : QUAD1_SQUARE);
+    this._cornerPositions = tf.tidy(() =>
+      getRotationTranslationMatrix(-angle, this.position)
+        .matMul(getScaleMatrix(width, height))
+        .matMul(centered ? CENTERED_SQUARE : QUAD1_SQUARE),
+    );
+  }
+
+  dispose() {
+    this._cornerPositions.dispose();
+    this.position.dispose();
   }
 
   xform(xformMatrix = required('xformMatrix')) {
@@ -72,7 +79,9 @@ export default class BoxDecal extends Decal {
   ) {
     let element;
     const scale = getXformMatrixScaleFactor(xformMatrix);
-    const cornerPositions = xformMatrix.matMul(this._cornerPositions).arraySync();
+    const cornerPositions = tf.tidy(() =>
+      xformMatrix.matMul(this._cornerPositions).arraySync(),
+    );
     if (this.solid) {
       element = (
         <rect

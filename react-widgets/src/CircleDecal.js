@@ -1,3 +1,4 @@
+import * as tf from './tfjs';
 import Decal from './Decal';
 import React from 'react';
 import { coercePositionVector } from './utils';
@@ -13,6 +14,10 @@ export default class CircleDecal extends Decal {
     this.color = color;
   }
 
+  dispose() {
+    this.position.dispose();
+  }
+
   xform(xformMatrix = required('xformMatrix')) {
     const scale = getXformMatrixScaleFactor(xformMatrix);
     return CircleDecal({
@@ -25,7 +30,7 @@ export default class CircleDecal extends Decal {
     xformMatrix = required('xformMatrix'),
     { key = undefined } = {},
   ) {
-    const xformed = xformMatrix.matMul(this.position).dataSync();
+    const xformed = tf.tidy(() => xformMatrix.matMul(this.position).dataSync());
     const scale = getXformMatrixScaleFactor(xformMatrix);
     return (
       <circle

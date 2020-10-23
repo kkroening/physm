@@ -4,11 +4,12 @@ import Frame from './Frame';
 import LineDecal from './LineDecal';
 import React from 'react';
 import renderer from 'react-test-renderer';
-import { areTensorsEqual } from './utils';
+import { areTensorsEqual } from './testutils';
+import { checkTfMemory } from './testutils';
 
 describe('Frame class', () => {
   test('constructor defaults', () => {
-    const frame = new Frame();
+    const frame = checkTfMemory(() => new Frame());
     expect(frame.decals).toEqual([]);
     expect(frame.weights).toEqual([]);
     expect(frame.frames).toEqual([]);
@@ -16,19 +17,27 @@ describe('Frame class', () => {
     expect(frame.initialState).toEqual([0, 0]);
   });
 
-  test('.getPosMatrix method', () => {
+  test('.dispose method', () => {
+    checkTfMemory(() => {
+      new Frame().dispose();
+    });
+  });
+
+  test('.getLocalPosMatrix method', () => {
     const frame = new Frame();
-    const posMatrix = frame.getPosMatrix(0);
+    const posMatrix = checkTfMemory(() => frame.getLocalPosMatrix(0));
     expect(areTensorsEqual(posMatrix, tf.eye(3))).toBe(true);
   });
 
-  test('.getVelMatrix method', () => {
-    const velMatrix = new Frame().getVelMatrix(0);
+  test('.getLocalVelMatrix method', () => {
+    const frame = new Frame();
+    const velMatrix = checkTfMemory(() => frame.getLocalVelMatrix(0));
     expect(areTensorsEqual(velMatrix, tf.zeros([3, 3]))).toBe(true);
   });
 
-  test('.getAccelMatrix method', () => {
-    const accelMatrix = new Frame().getAccelMatrix(0);
+  test('.getLocalAccelMatrix method', () => {
+    const frame = new Frame();
+    const accelMatrix = checkTfMemory(() => frame.getLocalAccelMatrix(0));
     expect(areTensorsEqual(accelMatrix, tf.zeros([3, 3]))).toBe(true);
   });
 
@@ -44,9 +53,10 @@ describe('Frame class', () => {
     });
     const stateMap = new Map();
     const xformMatrix = tf.eye(3);
-    const rendered = renderer.create(
-      <svg>{frame.getDomElement(stateMap, xformMatrix)}</svg>,
+    const domElement = checkTfMemory(() =>
+      frame.getDomElement(stateMap, xformMatrix),
     );
+    const rendered = renderer.create(<svg>{domElement}</svg>);
     expect(rendered.toJSON()).toEqual(
       renderer
         .create(
