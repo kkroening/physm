@@ -18,69 +18,60 @@ import { useRef } from 'react';
 import { useState } from 'react';
 
 const poiMass = 60;
-const poiDrag = 15;
-const ropeSegmentLength = 5;
-const ropeSegmentDrag = 15;
+const poiDrag = 20;
+const ropeSegmentLength = 4;
+const ropeSegmentDrag = 8;
 const ropeSegmentMass = 1;
 const ropeSegmentResistance = 20;
-const ropeSegmentCount = 2;
+const ropeSegmentCount = 4;
 const cartMass = 250;
 const cartForce = 7000;
 const cartResistance = 5;
 
 const initialScale = 10;
-const rungeKutta = false;
+const rungeKutta = true;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
-const TARGET_PHYSICS_FPS = 250;
+const TARGET_PHYSICS_FPS = 120;
 
-const poi = new RotationalFrame({
-  id: 'poi',
-  initialState: [0, 0],
-  decals: [
-    new LineDecal({ endPos: [ropeSegmentLength, 0], lineWidth: 0.2 }),
-    new CircleDecal({
-      position: [ropeSegmentLength, 0],
-      radius: 1,
-    }),
-  ],
-  position: [ropeSegmentLength, 0],
-  weights: [
-    new Weight(poiMass, { position: [ropeSegmentLength, 0], drag: poiDrag }),
-  ],
-  resistance: ropeSegmentResistance,
-});
-
-const isLastRopeSegment = (segmentIndex) =>
-  segmentIndex === ropeSegmentCount - 2;
-
-const segments = Array(ropeSegmentCount - 1)
+const segments = Array(ropeSegmentCount)
   .fill()
   .map((x, index) => index)
   .reduce(
-    (childFrames, index) => [
-      new RotationalFrame({
-        id: `segment${index}`,
-        initialState: isLastRopeSegment(index) ? [Math.PI * -0.3, 0] : [0, 0],
-        decals: [
-          new LineDecal({ endPos: [ropeSegmentLength, 0], lineWidth: 0.2 }),
-          new CircleDecal({
-            position: [ropeSegmentLength, 0],
-            radius: 0.4,
-          }),
-        ],
-        frames: childFrames,
-        position: isLastRopeSegment(index) ? [0, 0] : [ropeSegmentLength, 0],
-        weights: [
-          new Weight(ropeSegmentMass, {
-            position: [ropeSegmentLength, 0],
-            drag: ropeSegmentDrag,
-          }),
-        ],
-        resistance: ropeSegmentResistance,
-      }),
-    ],
-    [poi],
+    (childFrames, index) => {
+      const first = index == 0;
+      const last = index === ropeSegmentCount - 1;
+      const radius = first ? 1 : 0.4;
+      const mass = first ? poiMass : ropeSegmentMass;
+      const drag = first ? poiDrag : ropeSegmentDrag;
+      const weights = [
+        new Weight(mass, {
+          position: [ropeSegmentLength, 0],
+          drag: drag,
+        }),
+      ];
+      return [
+        new RotationalFrame({
+          id: `segment${index}`,
+          initialState: last ? [Math.PI * -0.3, 0] : [0, 0],
+          decals: [
+            new LineDecal({
+              endPos: [ropeSegmentLength, 0],
+              lineWidth: 0.2,
+            }),
+            new CircleDecal({
+              position: [ropeSegmentLength, 0],
+              radius: radius,
+            }),
+          ],
+          frames: childFrames,
+          position: [last ? 0 : ropeSegmentLength, 0],
+          weights: weights,
+          resistance: ropeSegmentResistance,
+        }),
+      ];
+    },
+    [],
   );
 
 const cart = new TrackFrame({
@@ -248,9 +239,11 @@ function simulatePhysics(stateMap, externalForceMap, animationDeltaTime) {
 }
 
 function getViewXformMatrix(translation, scale) {
-  return tf.tidy(() => getTranslationMatrix([300, 300])
-    .matMul(getScaleMatrix(scale, -scale))
-    .matMul(getTranslationMatrix(translation)));
+  return tf.tidy(() =>
+    getTranslationMatrix([300, 300])
+      .matMul(getScaleMatrix(scale, -scale))
+      .matMul(getTranslationMatrix(translation)),
+  );
 }
 
 function App() {
@@ -280,9 +273,7 @@ function App() {
     <div className="app__main">
       <div className="plot">
         <h2 className="plot__title">CartPoi</h2>
-        {
-          <p>Number of tensors: {tf.memory().numTensors}</p>
-        }
+        {<p>Number of tensors: {tf.memory().numTensors}</p>}
         {
           //<p>Keys: {[...pressedKeys].join(', ')}</p>
         }
@@ -290,9 +281,7 @@ function App() {
           //<p>Scale: {scale.toFixed(2)}</p>
         }
         <div className="plot__main">
-          <svg className="plot__svg">
-            {sceneDomElement}
-          </svg>
+          <svg className="plot__svg">{sceneDomElement}</svg>
         </div>
       </div>
     </div>

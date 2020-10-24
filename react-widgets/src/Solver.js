@@ -363,21 +363,21 @@ export default class Solver {
   _applyDeltas(
     stateMap = required('stateMap'),
     deltaTime = required('deltaTime'),
-    qddArray = required('qddArray'),
-    qdArray = undefined,
+    deltaQddArray = required('deltaQddArray'),
+    deltaQdArray = undefined,
     { inPlace = false } = {},
   ) {
     const newStateMap = inPlace ? stateMap : new Map();
-    if (qdArray == null) {
-      qdArray = [...stateMap].map(([frame, [q, qd]]) => qd);
+    if (deltaQdArray == null) {
+      deltaQdArray = [...stateMap].map(([frameId, [q, qd]]) => qd);
     }
     for (let index = 0; index < this.scene.sortedFrames.length; index++) {
       const frame = this.scene.sortedFrames[index];
-      const [q] = stateMap.get(frame.id);
-      const qd = qdArray[index];
-      const qdd = qddArray[index];
-      const newQ = q + qd * deltaTime;
-      const newQd = qd + qdd * deltaTime;
+      const [q, qd] = stateMap.get(frame.id);
+      const deltaQd = deltaQdArray[index];
+      const deltaQdd = deltaQddArray[index];
+      const newQ = q + deltaQd * deltaTime;
+      const newQd = qd + deltaQdd * deltaTime;
       newStateMap.set(frame.id, [newQ, newQd]);
     }
     return newStateMap;
@@ -400,30 +400,33 @@ export default class Solver {
     const solve = (stateMap) => this._solve(stateMap, externalForceMap);
 
     const sm0 = stateMap;
-    const qds0 = [...sm0].map(([frame, [q, qd]]) => qd);
+    const qds0 = [...sm0].map(([frameId, [q, qd]]) => qd);
     const qdds0 = solve(sm0);
 
     const sm1 = this._applyDeltas(sm0, deltaTime / 2, qdds0, qds0);
-    const qds1 = [...sm1].map(([frame, [q, qd]]) => qd);
+    const qds1 = [...sm1].map(([frameId, [q, qd]]) => qd);
     const qdds1 = solve(sm1);
 
     const sm2 = this._applyDeltas(sm0, deltaTime / 2, qdds1, qds1);
-    const qds2 = [...sm2].map(([frame, [q, qd]]) => qd);
+    const qds2 = [...sm2].map(([frameId, [q, qd]]) => qd);
     const qdds2 = solve(sm2);
 
-    const sm3 = this._applyDeltas(sm0, deltaTime / 2, qdds2, qds2);
-    const qds3 = [...sm3].map(([frame, [q, qd]]) => qd);
+    const sm3 = this._applyDeltas(sm0, deltaTime, qdds2, qds2);
+    const qds3 = [...sm3].map(([frameId, [q, qd]]) => qd);
     const qdds3 = solve(sm3);
 
-    const sm4 = this._applyDeltas(sm0, deltaTime, qdds3, qds3);
-    const qds4 = [...sm4].map(([frame, [q, qd]]) => qd);
-    const qdds4 = solve(sm4);
+    const qds = this.scene.sortedFrames.map(
+      (_, i) => (qds0[i] + 2 * qds1[i] + 2 * qds2[i] + qds3[i]) / 6,
+    );
+    const qdds = this.scene.sortedFrames.map(
+      (_, i) => (qdds0[i] + 2 * qdds1[i] + 2 * qdds2[i] + qdds3[i]) / 6,
+    );
 
     let sm = sm0;
-    sm = this._applyDeltas(sm, deltaTime / 6, qdds1, qds1);
-    sm = this._applyDeltas(sm, deltaTime / 3, qdds2, qds2 /*{inPlace: true}*/);
-    sm = this._applyDeltas(sm, deltaTime / 3, qdds3, qds3 /*{inPlace: true}*/);
-    sm = this._applyDeltas(sm, deltaTime / 6, qdds4, qds4 /*{inPlace: true}*/);
+    sm = this._applyDeltas(sm, deltaTime, qdds, qds);
+    // sm = this._applyDeltas(sm, deltaTime / 3, qdds1, qds1 /*{inPlace: true}*/);
+    // sm = this._applyDeltas(sm, deltaTime / 3, qdds2, qds2 /*{inPlace: true}*/);
+    // sm = this._applyDeltas(sm, deltaTime / 6, qdds3, qds3 /*{inPlace: true}*/);
     return sm;
   }
 

@@ -27,9 +27,9 @@ async function initWasm() {
 
 async function init() {
   tf.enableProdMode();
-  //initCpu();
+  initCpu();
   //initWebGL();
-  await initWasm();
+  //await initWasm();
 }
 
 function main() {
