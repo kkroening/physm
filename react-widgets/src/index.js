@@ -11,36 +11,43 @@ immer.enableMapSet();
 
 window.tf = tf; // (for debugging)
 
-function initCpu() {
+function initTfCpuBackend() {
   tf.setBackend('cpu');
 }
 
-function initWebGL() {
+function initTfWebGLBackend() {
   tf.env().set('WEBGL_CPU_FORWARD', false);
   tf.setBackend('webgl');
 }
 
-async function initWasm() {
+async function initTfWasmBackend() {
   tfWasm.setWasmPaths('/');
   await tf.setBackend('wasm');
 }
 
-async function init() {
-  tf.enableProdMode();
-  initCpu();
-  //initWebGL();
-  //await initWasm();
+async function initWasm() {
+  const wasm = await import('physm-rs');
+  window.wasm = wasm; // (for debugging)
+  return wasm;
 }
 
-function main() {
+async function init() {
+  tf.enableProdMode();
+  initTfCpuBackend();
+  //initTfWebGLBackend();
+  //await initTfWasmBackend();
+  return await initWasm();
+}
+
+function main(wasm) {
   ReactDOM.render(
     <React.StrictMode>
-      <App />
+      <App wasm={wasm} />
     </React.StrictMode>,
     document.getElementById('root'),
   );
 }
 
-init().then(() => main());
+init().then((wasm) => main(wasm));
 
 serviceWorker.unregister();

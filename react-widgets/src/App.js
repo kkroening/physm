@@ -37,42 +37,39 @@ const TARGET_PHYSICS_FPS = 120;
 const segments = Array(ropeSegmentCount)
   .fill()
   .map((x, index) => index)
-  .reduce(
-    (childFrames, index) => {
-      const first = index === 0;
-      const last = index === ropeSegmentCount - 1;
-      const radius = first ? 1 : 0.4;
-      const mass = first ? poiMass : ropeSegmentMass;
-      const drag = first ? poiDrag : ropeSegmentDrag;
-      const weights = [
-        new Weight(mass, {
-          position: [ropeSegmentLength, 0],
-          drag: drag,
-        }),
-      ];
-      return [
-        new RotationalFrame({
-          id: `segment${index}`,
-          initialState: last ? [Math.PI * -0.3, 0] : [0, 0],
-          decals: [
-            new LineDecal({
-              endPos: [ropeSegmentLength, 0],
-              lineWidth: 0.2,
-            }),
-            new CircleDecal({
-              position: [ropeSegmentLength, 0],
-              radius: radius,
-            }),
-          ],
-          frames: childFrames,
-          position: [last ? 0 : ropeSegmentLength, 0],
-          weights: weights,
-          resistance: ropeSegmentResistance,
-        }),
-      ];
-    },
-    [],
-  );
+  .reduce((childFrames, index) => {
+    const first = index === 0;
+    const last = index === ropeSegmentCount - 1;
+    const radius = first ? 1 : 0.4;
+    const mass = first ? poiMass : ropeSegmentMass;
+    const drag = first ? poiDrag : ropeSegmentDrag;
+    const weights = [
+      new Weight(mass, {
+        position: [ropeSegmentLength, 0],
+        drag: drag,
+      }),
+    ];
+    return [
+      new RotationalFrame({
+        id: `segment${index}`,
+        initialState: last ? [Math.PI * -0.3, 0] : [0, 0],
+        decals: [
+          new LineDecal({
+            endPos: [ropeSegmentLength, 0],
+            lineWidth: 0.2,
+          }),
+          new CircleDecal({
+            position: [ropeSegmentLength, 0],
+            radius: radius,
+          }),
+        ],
+        frames: childFrames,
+        position: [last ? 0 : ropeSegmentLength, 0],
+        weights: weights,
+        resistance: ropeSegmentResistance,
+      }),
+    ];
+  }, []);
 
 const cart = new TrackFrame({
   id: 'cart',
@@ -192,27 +189,37 @@ function handleViewControls(
   Object.entries({
     Minus: () => setScale(scale * Math.exp(-deltaTime)),
     Equal: () => setScale(scale * Math.exp(deltaTime)),
-    ArrowLeft: () => setTranslation(([x, y]) => [x + deltaTime * 20, y]),
-    ArrowRight: () => setTranslation(([x, y]) => [x - deltaTime * 20, y]),
-    ArrowUp: () => setTranslation(([x, y]) => [x, y - deltaTime * 20]),
-    ArrowDown: () => setTranslation(([x, y]) => [x, y + deltaTime * 20]),
+    KeyA: () => setTranslation(([x, y]) => [x + deltaTime * 20, y]),
+    KeyD: () => setTranslation(([x, y]) => [x - deltaTime * 20, y]),
+    KeyW: () => setTranslation(([x, y]) => [x, y - deltaTime * 20]),
+    KeyS: () => setTranslation(([x, y]) => [x, y + deltaTime * 20]),
   }).forEach(([keyName, func]) => pressedKeys.has(keyName) && func());
 }
 
 function getExternalForceMap(pressedKeys, deltaTime) {
   let cartForceValue = 0;
   Object.entries({
-    KeyA: () => {
+    ArrowLeft: () => {
       cartForceValue -= cartForce;
     },
-    KeyD: () => {
+    ArrowRight: () => {
       cartForceValue += cartForce;
     },
   }).forEach(([keyName, func]) => pressedKeys.has(keyName) && func());
   return new Map([[cart.id, cartForceValue]]);
 }
 
-function simulatePhysics(stateMap, externalForceMap, animationDeltaTime) {
+function simulatePhysics(
+  context,
+  stateMap,
+  externalForceMap,
+  animationDeltaTime,
+) {
+  if (context) {
+    console.log(`[js] Ticking; animationDeltaTime=${animationDeltaTime}`);
+    context.tick(animationDeltaTime);
+    return stateMap; // TODO: remove; temporary.
+  }
   const startTime = new Date().getTime();
   const deadline = startTime + 1000 / MIN_ANIMATION_FPS;
   const tickCount = Math.ceil(TARGET_PHYSICS_FPS * animationDeltaTime);
@@ -246,7 +253,8 @@ function getViewXformMatrix(translation, scale) {
   );
 }
 
-function App() {
+function App({ wasm }) {
+  const [paused, setPaused] = useState(true);
   const [translation, setTranslation] = useState([0, 0]);
   const [scale, setScale] = useState(initialScale);
   const pressedKeys = useKeyboard();
@@ -254,6 +262,15 @@ function App() {
   const viewXformMatrix = getViewXformMatrix(translation, scale);
   const sceneDomElement = scene.getDomElement(stateMap, viewXformMatrix);
   viewXformMatrix.dispose();
+  const context = useRef(null);
+
+  useEffect(() => {
+    console.log('wasm:', wasm);
+    console.log('[js] Creating context');
+    context.current = wasm.create_context();
+    window.context = context.current; // (for debugging)
+    console.log('[js] context:', context.current);
+  }, [wasm]);
 
   useAnimationFrame((deltaTime) => {
     handleViewControls(
@@ -264,10 +281,21 @@ function App() {
       setScale,
       setTranslation,
     );
-    const externalForceMap = getExternalForceMap(pressedKeys, deltaTime);
-    const newStateMap = simulatePhysics(stateMap, externalForceMap, deltaTime);
-    setStateMap(newStateMap);
+    if (!paused) {
+      const externalForceMap = getExternalForceMap(pressedKeys, deltaTime);
+      const newStateMap = simulatePhysics(
+        context.current,
+        stateMap,
+        externalForceMap,
+        deltaTime,
+      );
+      setStateMap(newStateMap);
+    }
   });
+
+  const togglePaused = () => {
+    setPaused(!paused);
+  };
 
   return (
     <div className="app__main">
@@ -283,6 +311,9 @@ function App() {
         <div className="plot__main">
           <svg className="plot__svg">{sceneDomElement}</svg>
         </div>
+        <button onClick={togglePaused}>
+          {paused ? 'Resume melting of CPU' : 'Pause'}
+        </button>
       </div>
     </div>
   );
