@@ -39,7 +39,7 @@ const segments = Array(ropeSegmentCount)
   .map((x, index) => index)
   .reduce(
     (childFrames, index) => {
-      const first = index == 0;
+      const first = index === 0;
       const last = index === ropeSegmentCount - 1;
       const radius = first ? 1 : 0.4;
       const mass = first ? poiMass : ropeSegmentMass;

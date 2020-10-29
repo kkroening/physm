@@ -399,21 +399,21 @@ export default class Solver {
   ) {
     const solve = (stateMap) => this._solve(stateMap, externalForceMap);
 
-    const sm0 = stateMap;
-    const qds0 = [...sm0].map(([frameId, [q, qd]]) => qd);
-    const qdds0 = solve(sm0);
+    const stateMap0 = stateMap;
+    const qds0 = [...stateMap0].map(([frameId, [q, qd]]) => qd);
+    const qdds0 = solve(stateMap0);
 
-    const sm1 = this._applyDeltas(sm0, deltaTime / 2, qdds0, qds0);
-    const qds1 = [...sm1].map(([frameId, [q, qd]]) => qd);
-    const qdds1 = solve(sm1);
+    const stateMap1 = this._applyDeltas(stateMap0, deltaTime / 2, qdds0, qds0);
+    const qds1 = [...stateMap1].map(([frameId, [q, qd]]) => qd);
+    const qdds1 = solve(stateMap1);
 
-    const sm2 = this._applyDeltas(sm0, deltaTime / 2, qdds1, qds1);
-    const qds2 = [...sm2].map(([frameId, [q, qd]]) => qd);
-    const qdds2 = solve(sm2);
+    const stateMap2 = this._applyDeltas(stateMap0, deltaTime / 2, qdds1, qds1);
+    const qds2 = [...stateMap2].map(([frameId, [q, qd]]) => qd);
+    const qdds2 = solve(stateMap2);
 
-    const sm3 = this._applyDeltas(sm0, deltaTime, qdds2, qds2);
-    const qds3 = [...sm3].map(([frameId, [q, qd]]) => qd);
-    const qdds3 = solve(sm3);
+    const stateMap3 = this._applyDeltas(stateMap0, deltaTime, qdds2, qds2);
+    const qds3 = [...stateMap3].map(([frameId, [q, qd]]) => qd);
+    const qdds3 = solve(stateMap3);
 
     const qds = this.scene.sortedFrames.map(
       (_, i) => (qds0[i] + 2 * qds1[i] + 2 * qds2[i] + qds3[i]) / 6,
@@ -422,12 +422,7 @@ export default class Solver {
       (_, i) => (qdds0[i] + 2 * qdds1[i] + 2 * qdds2[i] + qdds3[i]) / 6,
     );
 
-    let sm = sm0;
-    sm = this._applyDeltas(sm, deltaTime, qdds, qds);
-    // sm = this._applyDeltas(sm, deltaTime / 3, qdds1, qds1 /*{inPlace: true}*/);
-    // sm = this._applyDeltas(sm, deltaTime / 3, qdds2, qds2 /*{inPlace: true}*/);
-    // sm = this._applyDeltas(sm, deltaTime / 6, qdds3, qds3 /*{inPlace: true}*/);
-    return sm;
+    return this._applyDeltas(stateMap0, deltaTime, qdds, qds);
   }
 
   tick(
