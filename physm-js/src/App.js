@@ -30,8 +30,8 @@ const cartMass = 250;
 const cartForce = 7000;
 const cartResistance = 5;
 
-const DefaultSolverClass = JsSolver;
-//const DefaultSolverClass = RsSolver;
+//const DefaultSolverClass = JsSolver;
+const DefaultSolverClass = RsSolver;
 const initialScale = 10;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
@@ -279,7 +279,11 @@ function App({ rsWasmModule }) {
   const viewXformMatrix = getViewXformMatrix(translation, scale);
   const sceneDomElement = scene.getDomElement(stateMap, viewXformMatrix);
   viewXformMatrix.dispose();
-  const solver = useRef(createSolver(scene, rsWasmModule));
+  const solver = useRef(null);
+
+  useEffect(() => {
+    solver.current = createSolver(scene, rsWasmModule);
+  }, [rsWasmModule]);
 
   useAnimationFrame((deltaTime) => {
     handleViewControls({

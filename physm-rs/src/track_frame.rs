@@ -1,16 +1,15 @@
 use ndarray::prelude::*;
-use std::f64::consts::PI;
 
-use crate::frame::Frame;
-use crate::weight::Weight;
+use crate::Frame;
+use crate::Weight;
 use crate::Position;
 
 #[derive(Debug)]
 pub struct TrackFrame {
-    position: Position,
-    angle: f64,
-    children: Vec<Box<dyn Frame>>,
-    weights: Vec<Weight>,
+    pub position: Position,
+    pub angle: f64,
+    pub children: Vec<Box<dyn Frame>>,
+    pub weights: Vec<Weight>,
 }
 
 impl TrackFrame {
@@ -63,7 +62,7 @@ impl Frame for TrackFrame {
         ])
     }
 
-    fn get_local_vel_matrix(&self, q: f64) -> Array2<f64> {
+    fn get_local_vel_matrix(&self, _q: f64) -> Array2<f64> {
         arr2(&[
             [0., 0., self.angle.cos()],
             [0., 0., self.angle.sin()],
@@ -74,9 +73,10 @@ impl Frame for TrackFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use approx::assert_abs_diff_eq;
-    use ndarray::prelude::*;
+    use std::f64::consts::PI;
+
+    use super::*;
 
     #[test]
     fn constructor() {

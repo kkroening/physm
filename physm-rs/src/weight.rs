@@ -2,8 +2,8 @@ use crate::Position;
 
 #[derive(Debug)]
 pub struct Weight {
-    mass: f64,
-    position: Position,
+    pub mass: f64,
+    pub position: Position,
 }
 
 impl Weight {

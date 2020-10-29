@@ -1,15 +1,14 @@
 use ndarray::prelude::*;
-use std::f64::consts::PI;
 
-use crate::frame::Frame;
-use crate::weight::Weight;
+use crate::Frame;
+use crate::Weight;
 use crate::Position;
 
 #[derive(Debug)]
 pub struct RotationalFrame {
-    position: Position,
-    children: Vec<Box<dyn Frame>>,
-    weights: Vec<Weight>,
+    pub position: Position,
+    pub children: Vec<Box<dyn Frame>>,
+    pub weights: Vec<Weight>,
 }
 
 impl RotationalFrame {
@@ -73,8 +72,10 @@ impl Frame for RotationalFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use approx::assert_abs_diff_eq;
+    use std::f64::consts::PI;
+
+    use super::*;
 
     #[test]
     fn constructor() {
