@@ -4,6 +4,7 @@ import Frame from './Frame';
 import LineDecal from './LineDecal';
 import React from 'react';
 import renderer from 'react-test-renderer';
+import Weight from './Weight';
 import { areTensorsEqual } from './testutils';
 import { checkTfMemory } from './testutils';
 
@@ -92,5 +93,35 @@ describe('Frame class', () => {
         )
         .toJSON(),
     );
+  });
+
+  test('.toJsonObj method', () => {
+    const frame = new Frame({
+      frames: [new Frame({ position: [1, 2] })],
+      initialState: [3, 4],
+      position: [5, 6],
+      weights: [new Weight(7, { position: [8, 9] })],
+      resistance: 10,
+    });
+    const obj = checkTfMemory(() => frame.toJsonObj());
+    expect(obj).toEqual({
+      frames: [
+        {
+          id: frame.frames[0].id,
+          initialState: [0, 0],
+          position: [1, 2],
+          weights: [],
+          frames: [],
+          type: 'Frame',
+          resistance: 0,
+        },
+      ],
+      initialState: [3, 4],
+      type: 'Frame',
+      position: [5, 6],
+      id: frame.id,
+      weights: [{ mass: 7, position: [8, 9], drag: 0 }],
+      resistance: 10,
+    });
   });
 });

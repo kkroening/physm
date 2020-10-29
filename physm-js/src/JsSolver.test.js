@@ -3,7 +3,7 @@ import faker from 'faker';
 import Frame from './Frame';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
-import Solver from './Solver';
+import JsSolver from './JsSolver';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { areTensorsEqual } from './testutils';
@@ -12,7 +12,7 @@ import { getRotationTranslationMatrix } from './utils';
 import { getTranslationMatrix } from './utils';
 import { invertXformMatrix } from './utils';
 
-describe('Solver', () => {
+describe('JsSolver', () => {
   const scene = new Scene({
     frames: [
       new TrackFrame({
@@ -56,7 +56,7 @@ describe('Solver', () => {
   );
   const stateMap = scene.getInitialStateMap();
   const externalForceMap = new Map();
-  const solver = new Solver(scene);
+  const solver = new JsSolver(scene);
 
   const posMatMap = checkTfMemory(() => solver._getPosMatMap(stateMap));
 

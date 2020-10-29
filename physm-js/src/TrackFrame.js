@@ -60,4 +60,8 @@ export default class TrackFrame extends Frame {
       [0, 0, 0],
     ]);
   }
+
+  toJsonObj(options = {}) {
+    return { angle: this.angle, ...super.toJsonObj(options) };
+  }
 }

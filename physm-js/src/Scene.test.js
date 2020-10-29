@@ -124,4 +124,26 @@ describe('Scene class', () => {
       ]),
     );
   });
+
+  test('.toJsonObj method', () => {
+    const scene = new Scene({ frames: [new Frame({ id: 'd34db33f' })] });
+    const obj = checkTfMemory(() => scene.toJsonObj());
+    expect(obj).toEqual({
+      gravity: scene.gravity,
+      frames: [
+        {
+          id: scene.frames[0].id,
+          initialState: [0, 0],
+          position: [0, 0],
+          weights: [],
+          frames: [],
+          type: 'Frame',
+          resistance: 0,
+        },
+      ],
+    });
+    expect(JSON.stringify(obj)).toEqual(
+      '{"frames":[{"frames":[],"id":"d34db33f","initialState":[0,0],"position":[0,0],"resistance":0,"type":"Frame","weights":[]}],"gravity":10}',
+    );
+  });
 });

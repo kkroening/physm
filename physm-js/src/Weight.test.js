@@ -16,4 +16,14 @@ describe('Weight class', () => {
       new Weight().dispose();
     });
   });
+
+  test('.toJsonObj method', () => {
+    const weight = new Weight(2, { position: [3, 4], drag: 5 });
+    const obj = checkTfMemory(() => weight.toJsonObj());
+    expect(obj).toEqual({
+      mass: 2,
+      position: [3, 4],
+      drag: 5,
+    });
+  });
 });

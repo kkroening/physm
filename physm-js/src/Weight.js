@@ -1,3 +1,4 @@
+import * as tf from './tfjs';
 import { coercePositionVector } from './utils';
 import { ZERO_POS } from './utils';
 
@@ -18,5 +19,13 @@ export default class Weight {
       position: xformMatrix.matMul(this.position),
       drag: this.drag,
     });
+  }
+
+  toJsonObj() {
+    return {
+      mass: this.mass,
+      position: tf.tidy(() => [...this.position.dataSync().slice(0, 2)]),
+      drag: this.drag,
+    }
   }
 }

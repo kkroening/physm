@@ -1,3 +1,4 @@
+import * as tf from './tfjs';
 import TrackFrame from './TrackFrame';
 import { areTensorsEqual } from './testutils';
 import { checkTfMemory } from './testutils';
@@ -34,5 +35,22 @@ describe('TrackFrame class', () => {
   test('.getLocalAccelMatrix method', () => {
     const frame = new TrackFrame();
     checkTfMemory(() => frame.getLocalAccelMatrix(0));
+  });
+
+  test('.toJsonObj method', () => {
+    const frame = new TrackFrame({
+      angle: 12.34,
+    });
+    const obj = checkTfMemory(() => frame.toJsonObj());
+    expect(obj).toEqual({
+      angle: 12.34,
+      frames: [],
+      initialState: [0, 0],
+      type: 'TrackFrame',
+      position: [0, 0],
+      id: frame.id,
+      weights: [],
+      resistance: 0,
+    });
   });
 });

@@ -80,4 +80,15 @@ export default class Scene {
       this.sortedFrames.map((frame) => [frame.id, getInitialState(frame)]),
     );
   }
+
+  toJsonObj({includeDecals = false} = {}) {
+    const obj = {
+      frames: this.frames.map((frame) => frame.toJsonObj({includeDecals: includeDecals})),
+      gravity: this.gravity,
+    }
+    if (includeDecals) {
+      obj.decals = this.decals.map((decal) => decal.toJsonObj())
+    }
+    return obj;
+  }
 }

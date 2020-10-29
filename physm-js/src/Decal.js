@@ -14,4 +14,8 @@ export default class Decal {
   ) {
     throw new NotImplementedError('abstract method');
   }
+
+  toJsonObj() {
+    throw new NotImplementedError('TODO: implement');
+  }
 }

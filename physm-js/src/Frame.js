@@ -67,4 +67,22 @@ export default class Frame {
     xformMatrix.dispose();
     return domElement;
   }
+
+  toJsonObj({ includeDecals = false } = {}) {
+    const obj = {
+      frames: this.frames.map((frame) =>
+        frame.toJsonObj({ includeDecals: includeDecals }),
+      ),
+      id: this.id,
+      initialState: this.initialState,
+      position: tf.tidy(() => [...this.position.dataSync().slice(0, -1)]),
+      resistance: this.resistance,
+      type: this.constructor.name,
+      weights: this.weights.map((weight) => weight.toJsonObj()),
+    };
+    if (includeDecals) {
+      obj.decals = this.decals.map((decal) => decal.toJsonObj());
+    }
+    return obj;
+  }
 }

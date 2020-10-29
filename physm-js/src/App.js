@@ -3,12 +3,12 @@ import 'normalize.css';
 import * as tf from './tfjs';
 import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
+import JsSolver from './JsSolver';
 import LineDecal from './LineDecal';
 import producer from 'immer';
 import React from 'react';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
-import Solver from './Solver';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { getScaleMatrix } from './utils';
@@ -97,7 +97,8 @@ const scene = new Scene({
     }),
   ],
 });
-const solver = new Solver(scene);
+
+const solver = new JsSolver(scene, { rungeKutta: rungeKutta });
 
 function useKeyboard(callback) {
   const [pressedKeys, setPressedKeys] = useState(new Set());
@@ -232,9 +233,7 @@ function simulatePhysics(
       );
       break;
     }
-    stateMap = solver.tick(stateMap, deltaTime, externalForceMap, {
-      rungeKutta: rungeKutta,
-    });
+    stateMap = solver.tick(stateMap, deltaTime, externalForceMap);
   }
   if (!isValidStateMap(stateMap)) {
     console.warn(
