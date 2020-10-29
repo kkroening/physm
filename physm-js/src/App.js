@@ -265,7 +265,7 @@ function App({ wasm }) {
   const context = useRef(null);
 
   useEffect(() => {
-    console.log('wasm:', wasm);
+    //console.log('wasm:', wasm);
     console.log('[js] Creating context');
     context.current = wasm.create_context();
     window.context = context.current; // (for debugging)
