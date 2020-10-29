@@ -8,11 +8,13 @@ import LineDecal from './LineDecal';
 import producer from 'immer';
 import React from 'react';
 import RotationalFrame from './RotationalFrame';
+import RsSolver from './RsSolver';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { getScaleMatrix } from './utils';
 import { getTranslationMatrix } from './utils';
+import { required } from './utils';
 import { useEffect } from 'react';
 import { useRef } from 'react';
 import { useState } from 'react';
@@ -28,8 +30,9 @@ const cartMass = 250;
 const cartForce = 7000;
 const cartResistance = 5;
 
+const DefaultSolverClass = JsSolver;
+//const DefaultSolverClass = RsSolver;
 const initialScale = 10;
-const rungeKutta = true;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
 const TARGET_PHYSICS_FPS = 120;
@@ -98,9 +101,7 @@ const scene = new Scene({
   ],
 });
 
-const solver = new JsSolver(scene, { rungeKutta: rungeKutta });
-
-function useKeyboard(callback) {
+function useKeyboard(callback = null) {
   const [pressedKeys, setPressedKeys] = useState(new Set());
   const callbackRef = useRef();
   callbackRef.current = callback;
@@ -157,7 +158,7 @@ const useAnimationFrame = (callback, { fps = TARGET_ANIMATION_FPS } = {}) => {
   state.current.callback = callback;
 
   React.useEffect(() => {
-    function animate(time) {
+    function animate(time = required('time')) {
       const deltaTime = (time - state.current.prevTime) / 1000;
       const delay = Math.max(1000 / fps - deltaTime, 0);
       state.current.callback(deltaTime);
@@ -175,33 +176,39 @@ const useAnimationFrame = (callback, { fps = TARGET_ANIMATION_FPS } = {}) => {
   }, [fps]);
 };
 
-function isValidStateMap(stateMap) {
+function isValidStateMap(stateMap = required('stateMap')) {
   return [...stateMap].every(([frameId, [q, qd]]) => !isNaN(q) && !isNaN(qd));
 }
 
-function handleViewControls(
-  pressedKeys,
-  deltaTime,
-  scale,
-  translation,
-  setScale,
-  setTranslation,
-) {
+function handleViewControls({
+  deltaTime = required('deltaTime'),
+  pressedKeys = required('pressedKeys'),
+  scale = required('scale'),
+  setScale = required('setScale'),
+  setTranslation = required('setTranslation'),
+  translation = required('translation'),
+} = {}) {
   Object.entries({
     Minus: () => setScale(scale * Math.exp(-deltaTime)),
     Equal: () => setScale(scale * Math.exp(deltaTime)),
-    KeyA: () => setTranslation(([x, y]) => [x + deltaTime * 20, y]),
-    KeyD: () => setTranslation(([x, y]) => [x - deltaTime * 20, y]),
-    KeyW: () => setTranslation(([x, y]) => [x, y - deltaTime * 20]),
-    KeyS: () => setTranslation(([x, y]) => [x, y + deltaTime * 20]),
+    KeyJ: () => setTranslation(([x, y]) => [x + deltaTime * 20, y]),
+    KeyL: () => setTranslation(([x, y]) => [x - deltaTime * 20, y]),
+    KeyI: () => setTranslation(([x, y]) => [x, y - deltaTime * 20]),
+    KeyK: () => setTranslation(([x, y]) => [x, y + deltaTime * 20]),
   }).forEach(([keyName, func]) => pressedKeys.has(keyName) && func());
 }
 
 function getExternalForceMap(pressedKeys, deltaTime) {
   let cartForceValue = 0;
   Object.entries({
+    KeyA: () => {
+      cartForceValue -= cartForce;
+    },
     ArrowLeft: () => {
       cartForceValue -= cartForce;
+    },
+    KeyD: () => {
+      cartForceValue += cartForce;
     },
     ArrowRight: () => {
       cartForceValue += cartForce;
@@ -210,17 +217,16 @@ function getExternalForceMap(pressedKeys, deltaTime) {
   return new Map([[cart.id, cartForceValue]]);
 }
 
-function simulatePhysics(
-  context,
-  stateMap,
-  externalForceMap,
-  animationDeltaTime,
+function simulate(
+  solver = required('solver'),
+  stateMap = required('stateMap'),
+  externalForceMap = required('externalForceMap'),
+  animationDeltaTime = required('animationDeltaTime'),
 ) {
-  if (context) {
-    console.log(`[js] Ticking; animationDeltaTime=${animationDeltaTime}`);
-    context.tick(animationDeltaTime);
-    return stateMap; // TODO: remove; temporary.
-  }
+  /**
+   * TODO: possibly move this logic to the Solver class; it's tightly coupled
+   * to the DOM though, so maybe not.
+   */
   const startTime = new Date().getTime();
   const deadline = startTime + 1000 / MIN_ANIMATION_FPS;
   const tickCount = Math.ceil(TARGET_PHYSICS_FPS * animationDeltaTime);
@@ -252,7 +258,19 @@ function getViewXformMatrix(translation, scale) {
   );
 }
 
-function App({ wasm }) {
+function createSolver(
+  scene = required('scene'),
+  rsWasmModule = required('rsWasmModule'),
+  SolverClass = DefaultSolverClass,
+) {
+  console.log('[js] Creating solver');
+  const solver = new SolverClass(scene, rsWasmModule);
+  window.solver = solver; // (for debugging)
+  console.log('[js] Solver:', solver);
+  return solver;
+}
+
+function App({ rsWasmModule }) {
   const [paused, setPaused] = useState(true);
   const [translation, setTranslation] = useState([0, 0]);
   const [scale, setScale] = useState(initialScale);
@@ -261,29 +279,21 @@ function App({ wasm }) {
   const viewXformMatrix = getViewXformMatrix(translation, scale);
   const sceneDomElement = scene.getDomElement(stateMap, viewXformMatrix);
   viewXformMatrix.dispose();
-  const context = useRef(null);
-
-  useEffect(() => {
-    //console.log('wasm:', wasm);
-    console.log('[js] Creating context');
-    context.current = wasm.create_context();
-    window.context = context.current; // (for debugging)
-    console.log('[js] context:', context.current);
-  }, [wasm]);
+  const solver = useRef(createSolver(scene, rsWasmModule));
 
   useAnimationFrame((deltaTime) => {
-    handleViewControls(
-      pressedKeys,
+    handleViewControls({
       deltaTime,
+      pressedKeys,
       scale,
-      translation,
       setScale,
       setTranslation,
-    );
+      translation,
+    });
     if (!paused) {
       const externalForceMap = getExternalForceMap(pressedKeys, deltaTime);
-      const newStateMap = simulatePhysics(
-        context.current,
+      const newStateMap = simulate(
+        solver.current,
         stateMap,
         externalForceMap,
         deltaTime,

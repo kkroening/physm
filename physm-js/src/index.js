@@ -25,10 +25,10 @@ async function initTfWasmBackend() {
   await tf.setBackend('wasm');
 }
 
-async function initWasm() {
-  const wasm = await import('physm-rs');
-  window.wasm = wasm; // (for debugging)
-  return wasm;
+async function initRsWasmModule() {
+  const rsWasmModule = await import('physm-rs');
+  window.wasm = rsWasmModule; // (for debugging)
+  return rsWasmModule;
 }
 
 async function init() {
@@ -36,18 +36,18 @@ async function init() {
   initTfCpuBackend();
   //initTfWebGLBackend();
   //await initTfWasmBackend();
-  return await initWasm();
+  return await initRsWasmModule();
 }
 
-function main(wasm) {
+function main(rsWasmModule) {
   ReactDOM.render(
     <React.StrictMode>
-      <App wasm={wasm} />
+      <App rsWasmModule={rsWasmModule} />
     </React.StrictMode>,
     document.getElementById('root'),
   );
 }
 
-init().then((wasm) => main(wasm));
+init().then((rsWasmModule) => main(rsWasmModule));
 
 serviceWorker.unregister();
