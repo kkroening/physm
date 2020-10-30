@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::fmt;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -37,6 +36,21 @@ pub struct SolverContext {
 
 #[wasm_bindgen]
 impl SolverContext {
+    fn _new(scene_json: &str) -> Result<SolverContext, Box<dyn Error>> {
+        let v: serde_json::Value = serde_json::from_str(scene_json)?;
+        log(&format!("{:?}", v));
+        let scene = Scene::new(); // TODO: deserialize.
+        let solver = Solver::new(scene);
+        Ok(SolverContext { solver })
+    }
+
+    #[wasm_bindgen(catch, constructor)]
+    pub fn new(scene_json: &str) -> Result<SolverContext, JsValue> {
+        utils::set_panic_hook();
+        console::log_1(&format!("[rs] Creating solver context; scene JSON: {}", scene_json).into());
+        Self::_new(scene_json).map_err(|err| JsValue::from_str(&err.to_string()))
+    }
+
     pub fn tick(&self, delta_time: f64) -> i32 {
         console::log_1(&format!("Ticking from Rust; delta_time={}", delta_time).into());
         console::log_1(&format!("Number of frames: {}", self.solver.scene.frames.len()).into());
@@ -46,21 +60,6 @@ impl SolverContext {
     pub fn dispose(self) {
         console::log_1(&"[rs] Dropping solver context".into());
     }
-}
-
-fn do_create_solver_context(scene_json: &str) -> Result<SolverContext, Box<dyn Error>> {
-    let v: serde_json::Value = serde_json::from_str(scene_json)?;
-    log(&format!("{:?}", v));
-    let scene = Scene::new(); // TODO: deserialize.
-    let solver = Solver::new(scene);
-    Ok(SolverContext { solver })
-}
-
-#[wasm_bindgen(catch)]
-pub fn create_solver_context(scene_json: &str) -> Result<SolverContext, JsValue> {
-    utils::set_panic_hook();
-    console::log_1(&format!("[rs] Creating solver context; scene JSON: {}", scene_json).into());
-    do_create_solver_context(scene_json).map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
 #[cfg(test)]
@@ -88,8 +87,8 @@ mod tests {
         }"#;
 
     #[test]
-    fn test_do_create_solver_context() {
-        let context = do_create_solver_context(TEST_SCENE_JSON).unwrap();
+    fn test_solver_context_new() {
+        let context = SolverContext::_new(TEST_SCENE_JSON).unwrap();
         assert_eq!(context.solver.scene.frames.len(), 0);
         //assert_eq!(1, 0);
     }
