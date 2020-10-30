@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -18,6 +19,15 @@ mod utils;
 mod weight;
 
 pub type Position = [f64; 2];
+
+#[derive(Debug)]
+pub struct SceneError(String);  // tbd
+
+impl fmt::Display for SceneError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[cfg(not(test))]
 fn log(s: &str) {
@@ -47,18 +57,24 @@ impl SolverContext {
     #[wasm_bindgen(catch, constructor)]
     pub fn new(scene_json: &str) -> Result<SolverContext, JsValue> {
         utils::set_panic_hook();
-        console::log_1(&format!("[rs] Creating solver context; scene JSON: {}", scene_json).into());
+        log(&format!(
+            "[rs] Creating solver context; scene JSON: {}",
+            scene_json
+        ));
         Self::_new(scene_json).map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
     pub fn tick(&self, delta_time: f64) -> i32 {
-        console::log_1(&format!("Ticking from Rust; delta_time={}", delta_time).into());
-        console::log_1(&format!("Number of frames: {}", self.solver.scene.frames.len()).into());
+        log(&format!("Ticking from Rust; delta_time={}", delta_time));
+        log(&format!(
+            "Number of frames: {}",
+            self.solver.scene.frames.len()
+        ));
         42
     }
 
     pub fn dispose(self) {
-        console::log_1(&"[rs] Dropping solver context".into());
+        log(&"[rs] Dropping solver context");
     }
 }
 
