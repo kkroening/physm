@@ -19,6 +19,11 @@ impl Weight {
         }
     }
 
+    pub fn set_mass(mut self, mass: f64) -> Self {
+        self.mass = mass;
+        self
+    }
+
     pub fn set_position(mut self, position: [f64; 2]) -> Self {
         self.position = position;
         self
@@ -30,10 +35,19 @@ impl Weight {
     }
 
     pub fn from_json_value(value: serde_json::Value) -> Result<Self, SceneError> {
-        match value {
-            serde_json::Value::Object(obj) => Ok(Self::new(0.).set_position([0., 0.]).set_drag(0.)),
+        let obj = match value {
+            serde_json::Value::Object(obj) => Ok(obj),
             _ => Err(SceneError(format!("Expected JSON object; got {}", value))),
-        }
+        }?;
+        // TODO: make this less janky:
+        Ok(Weight {
+            mass: obj["mass"].as_f64().unwrap_or(1.),
+            position: obj["position"]
+                .as_array()
+                .map(|arr| [arr[0].as_f64().unwrap_or(0.), arr[1].as_f64().unwrap_or(0.)])
+                .unwrap_or([0., 0.]),
+            drag: obj["drag"].as_f64().unwrap_or(0.),
+        })
     }
 }
 
@@ -62,9 +76,9 @@ mod tests {
             }"#;
         let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
         let weight = Weight::from_json_value(json_value).unwrap();
-        //assert_eq!(weight.mass, 34.);
-        //assert_eq!(weight.position, [56., 78.0]);
-        //assert_eq!(weight.drag, 12.);
+        assert_eq!(weight.mass, 34.);
+        assert_eq!(weight.position, [56., 78.9]);
+        assert_eq!(weight.drag, 12.);
     }
 
     #[test]
