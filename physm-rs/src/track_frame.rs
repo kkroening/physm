@@ -1,36 +1,32 @@
 use ndarray::prelude::*;
 
 use crate::Frame;
-use crate::Weight;
 use crate::Position;
+use crate::SceneError;
+use crate::Weight;
 
 #[derive(Debug)]
 pub struct TrackFrame {
-    pub position: Position,
     pub angle: f64,
     pub children: Vec<Box<dyn Frame>>,
+    pub position: Position,
+    pub resistance: f64,
     pub weights: Vec<Weight>,
 }
 
 impl TrackFrame {
     pub fn new() -> TrackFrame {
         TrackFrame {
-            position: [0.0, 0.0],
-            angle: 0.0,
+            angle: 0.,
             children: Vec::new(),
+            position: [0., 0.],
+            resistance: 0.,
             weights: Vec::new(),
         }
     }
 
-    pub fn add_child(mut self, child: Box<dyn Frame>) -> Self
-    {
-        self.children.push(child);
-        self
-    }
-
-    pub fn add_weight(mut self, weight: Weight) -> Self
-    {
-        self.weights.push(weight);
+    pub fn set_angle(mut self, angle: f64) -> Self {
+        self.angle = angle;
         self
     }
 
@@ -39,9 +35,33 @@ impl TrackFrame {
         self
     }
 
-    pub fn set_angle(mut self, angle: f64) -> Self {
-        self.angle = angle;
+    pub fn add_child(mut self, child: Box<dyn Frame>) -> Self {
+        self.children.push(child);
         self
+    }
+
+    pub fn set_resistance(mut self, resistance: f64) -> Self {
+        self.resistance = resistance;
+        self
+    }
+
+    pub fn add_weight(mut self, weight: Weight) -> Self {
+        self.weights.push(weight);
+        self
+    }
+
+    pub fn from_json_value(value: serde_json::Value) -> Result<Self, SceneError> {
+        let obj = match value {
+            serde_json::Value::Object(obj) => Ok(obj),
+            _ => Err(SceneError(format!("Expected JSON object; got {}", value))),
+        }?;
+        Ok(TrackFrame {
+            angle: 0.,
+            children: Vec::new(),
+            position: [0., 0.],
+            resistance: 0.,
+            weights: Vec::new(),
+        })
     }
 }
 
@@ -79,7 +99,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn constructor() {
+    fn test_new() {
         let frame = TrackFrame::new();
         assert_eq!(frame.position, [0., 0.]);
         assert_eq!(frame.angle, 0.);
@@ -116,7 +136,24 @@ mod tests {
     }
 
     #[test]
-    fn get_local_pos_matrix() {
+    fn test_from_json_value() {
+        let json = r#"
+            {
+                "angle": 3.5,
+                "position": [56, 78.9],
+                "frames": [],
+                "weights": []
+            }"#;
+        let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let frame = TrackFrame::from_json_value(json_value).unwrap();
+        //assert_eq!(frame.angle, 3.5);
+        //assert_eq!(frame.position, [56., 78.9]);
+        //assert_eq!(frame.children, Vec::<Box<dyn Frame>>::new());
+        //assert_eq!(frame.weights, Vec::<Weight>::new());
+    }
+
+    #[test]
+    fn test_get_local_pos_matrix() {
         let frame = TrackFrame::new();
         assert_abs_diff_eq!(frame.get_local_pos_matrix(0.), Array2::eye(3));
         let frame = frame.set_position([3., 4.]);
@@ -142,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn get_local_vel_matrix() {
+    fn test_get_local_vel_matrix() {
         let frame = TrackFrame::new().set_position([3., 4.]);
         assert_abs_diff_eq!(
             frame.get_local_vel_matrix(7.),
@@ -166,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn get_local_accel_matrix() {
+    fn test_get_local_accel_matrix() {
         let frame = TrackFrame::new().set_position([3., 4.]).set_angle(PI / 3.);
         assert_abs_diff_eq!(frame.get_local_accel_matrix(PI / 3.), Array::zeros((3, 3)));
     }
