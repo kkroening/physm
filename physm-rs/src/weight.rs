@@ -1,9 +1,10 @@
+use std::convert::TryInto;
 use std::error::Error;
 
 use crate::Position;
 use crate::SceneError;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Weight {
     pub mass: f64,
     pub position: Position,
@@ -40,13 +41,23 @@ impl Weight {
             _ => Err(SceneError(format!("Expected JSON object; got {}", value))),
         }?;
         // TODO: make this less janky:
+        let mass = obj["mass"].as_f64().unwrap_or(1.);
+        let position = {
+            match obj["position"].as_array().map(|arr| arr.as_slice()) {
+                Some([x, y]) => [x, y]
+                    .iter()
+                    .map(|value| value.as_f64())
+                    .collect::<Option<Vec<f64>>>()
+                    .and_then(|vec| vec.as_slice().try_into().ok()),
+                _ => None,
+            }
+            .unwrap_or([0., 0.])
+        };
+        let drag = obj["drag"].as_f64().unwrap_or(0.);
         Ok(Weight {
-            mass: obj["mass"].as_f64().unwrap_or(1.),
-            position: obj["position"]
-                .as_array()
-                .map(|arr| [arr[0].as_f64().unwrap_or(0.), arr[1].as_f64().unwrap_or(0.)])
-                .unwrap_or([0., 0.]),
-            drag: obj["drag"].as_f64().unwrap_or(0.),
+            mass: mass,
+            position: position,
+            drag: drag,
         })
     }
 }

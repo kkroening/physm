@@ -148,8 +148,11 @@ mod tests {
         let frame = TrackFrame::from_json_value(json_value).unwrap();
         //assert_eq!(frame.angle, 3.5);
         //assert_eq!(frame.position, [56., 78.9]);
-        //assert_eq!(frame.children, Vec::<Box<dyn Frame>>::new());
-        //assert_eq!(frame.weights, Vec::<Weight>::new());
+        assert_eq!(
+            format!("{:?}", frame.children),
+            format!("{:?}", Vec::<Box<dyn Frame>>::new())
+        );
+        assert_eq!(frame.weights, Vec::<Weight>::new());
     }
 
     #[test]
