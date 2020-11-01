@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use wasm_bindgen::prelude::*;
@@ -18,14 +19,45 @@ mod track_frame;
 mod utils;
 mod weight;
 
-pub type Position = [f64; 2];
-
 #[derive(Debug)]
-pub struct SceneError(String);  // tbd
+pub struct SceneError(String);
 
 impl fmt::Display for SceneError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Position([f64; 2]);
+
+impl Position {
+    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
+        Ok(Self(
+            match value
+                .as_array()
+                .ok_or_else(|| SceneError(format!("Expected position array; got {}", value)))?
+                .as_slice()
+            {
+                [x, y] => Ok([x, y]),
+                _ => Err(SceneError(format!(
+                    "Expected position array with length 2; got {}",
+                    value
+                ))),
+            }?
+            .iter()
+            .map(|val| val.as_f64())
+            .collect::<Option<Vec<f64>>>()
+            .ok_or_else(|| {
+                SceneError(format!(
+                    "Expected position array to contain f64 values; got {}",
+                    value
+                ))
+            })?
+            .as_slice()
+            .try_into()
+            .unwrap(),
+        ))
     }
 }
 
@@ -89,7 +121,7 @@ mod tests {
               "angle": 0,
               "id": "cart",
               "initialState": [0, 0],
-              "position": [0, 0],
+              "position": [12.0, 34.5],
               "resistance": 5,
               "type": "TrackFrame",
               "weights": [{
@@ -101,6 +133,13 @@ mod tests {
           ],
           "gravity": 10
         }"#;
+
+    #[test]
+    fn test_position_from_json_value() {
+        let value: serde_json::Value = serde_json::from_str(&TEST_SCENE_JSON).unwrap();
+        let position = Position::from_json_value(&value["frames"][0]["position"]).unwrap();
+        assert_eq!(position, Position([12., 34.5]));
+    }
 
     #[test]
     fn test_solver_context_new() {

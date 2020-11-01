@@ -14,7 +14,7 @@ pub struct RotationalFrame {
 impl RotationalFrame {
     pub fn new() -> Self {
         Self {
-            position: [0.0, 0.0],
+            position: Position([0.0, 0.0]),
             children: Vec::new(),
             weights: Vec::new(),
         }
@@ -30,7 +30,7 @@ impl RotationalFrame {
         self
     }
 
-    pub fn set_position(mut self, position: [f64; 2]) -> Self {
+    pub fn set_position(mut self, position: Position) -> Self {
         self.position = position;
         self
     }
@@ -47,8 +47,8 @@ impl Frame for RotationalFrame {
 
     fn get_local_pos_matrix(&self, q: f64) -> Array2<f64> {
         arr2(&[
-            [q.cos(), -q.sin(), self.position[0]],
-            [q.sin(), q.cos(), self.position[1]],
+            [q.cos(), -q.sin(), self.position.0[0]],
+            [q.sin(), q.cos(), self.position.0[1]],
             [0., 0., 1.],
         ])
     }
@@ -80,8 +80,8 @@ mod tests {
     #[test]
     fn constructor() {
         let f = RotationalFrame::new()
-            .add_child(Box::new(RotationalFrame::new().set_position([1.5, 2.6])))
-            .add_child(Box::new(RotationalFrame::new().set_position([5., 28.])))
+            .add_child(Box::new(RotationalFrame::new().set_position(Position([1.5, 2.6]))))
+            .add_child(Box::new(RotationalFrame::new().set_position(Position([5., 28.]))))
             .add_weight(Weight::new(12.));
         println!("{:#?}", f);
         //assert_eq!(0, 1);
@@ -91,7 +91,7 @@ mod tests {
     fn get_local_pos_matrix() {
         let frame = RotationalFrame::new();
         assert_abs_diff_eq!(frame.get_local_pos_matrix(0.), Array2::eye(3));
-        let frame = frame.set_position([3., 4.]);
+        let frame = frame.set_position(Position([3., 4.]));
         assert_abs_diff_eq!(
             frame.get_local_pos_matrix(PI / 3.),
             arr2(&[
@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn get_local_vel_matrix() {
-        let frame = RotationalFrame::new().set_position([3., 4.]);
+        let frame = RotationalFrame::new().set_position(Position([3., 4.]));
         assert_abs_diff_eq!(
             frame.get_local_vel_matrix(PI / 3.),
             arr2(&[
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn get_local_accel_matrix() {
-        let frame = RotationalFrame::new().set_position([3., 4.]);
+        let frame = RotationalFrame::new().set_position(Position([3., 4.]));
         assert_abs_diff_eq!(
             frame.get_local_accel_matrix(PI / 3.),
             arr2(&[
