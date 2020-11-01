@@ -3,8 +3,7 @@ use ndarray::prelude::*;
 use crate::json;
 use crate::Frame;
 use crate::Position;
-use crate::RotationalFrame;
-use crate::SceneError;
+use crate::Error;
 use crate::Weight;
 
 #[derive(Debug)]
@@ -52,7 +51,7 @@ impl TrackFrame {
         self
     }
 
-    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
+    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, Error> {
         let obj = json::value_to_json_obj(value)?;
         Ok(TrackFrame {
             angle: json::map_obj_item(obj, "angle", json::value_to_f64)?,

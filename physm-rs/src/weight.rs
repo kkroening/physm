@@ -1,8 +1,5 @@
-use std::convert::TryInto;
-use std::error::Error;
-
+use crate::Error;
 use crate::Position;
-use crate::SceneError;
 
 #[derive(Debug, PartialEq)]
 pub struct Weight {
@@ -35,10 +32,10 @@ impl Weight {
         self
     }
 
-    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
+    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, Error> {
         let obj = match value {
             serde_json::Value::Object(obj) => Ok(obj),
-            _ => Err(SceneError(format!("Expected JSON object; got {}", value))),
+            _ => Err(Error(format!("Expected JSON object; got {}", value))),
         }?;
         Ok(Weight {
             mass: obj["mass"].as_f64().unwrap_or(1.),

@@ -1,8 +1,8 @@
 use std::convert::TryInto;
-use std::error::Error;
 use std::fmt;
-use std::ops::Deref;
 use wasm_bindgen::prelude::*;
+
+#[cfg(not(test))]
 use web_sys::console;
 
 pub use crate::frame::Frame;
@@ -22,9 +22,9 @@ mod utils;
 mod weight;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct SceneError(String);
+pub struct Error(String);
 
-impl fmt::Display for SceneError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -34,11 +34,11 @@ impl fmt::Display for SceneError {
 pub struct Position([f64; 2]);
 
 impl Position {
-    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
+    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, Error> {
         Ok(Self(
             value
                 .as_array()
-                .ok_or_else(|| SceneError(format!("Expected position array; got {}", value)))?
+                .ok_or_else(|| Error(format!("Expected position array; got {}", value)))?
                 .as_slice()
                 .iter()
                 .map(json::value_to_f64)
@@ -46,7 +46,7 @@ impl Position {
                 .as_slice()
                 .try_into()
                 .map_err(|_| {
-                    SceneError(format!(
+                    Error(format!(
                         "Expected position array with length 2; got {}",
                         value
                     ))
@@ -72,7 +72,7 @@ pub struct SolverContext {
 
 #[wasm_bindgen]
 impl SolverContext {
-    fn _new(scene_json: &str) -> Result<SolverContext, Box<dyn Error>> {
+    fn _new(scene_json: &str) -> Result<SolverContext, Box<dyn std::error::Error>> {
         let v: serde_json::Value = serde_json::from_str(scene_json)?;
         log(&format!("{:?}", v));
         let scene = Scene::new(); // TODO: deserialize.

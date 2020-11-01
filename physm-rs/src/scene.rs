@@ -1,9 +1,6 @@
 use crate::json;
+use crate::Error;
 use crate::Frame;
-use crate::Position;
-use crate::RotationalFrame;
-use crate::SceneError;
-use crate::TrackFrame;
 
 const DEFAULT_GRAVITY: f64 = 10.0;
 
@@ -31,7 +28,7 @@ impl Scene {
         self
     }
 
-    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
+    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, Error> {
         let obj = json::value_to_json_obj(value)?;
         Ok(Scene {
             frames: json::map_obj_item(obj, "frames", json::value_to_boxed_frames)?,
@@ -43,6 +40,7 @@ impl Scene {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RotationalFrame;
     use crate::TrackFrame;
 
     #[test]
@@ -56,26 +54,6 @@ mod tests {
         assert_eq!(scene.gravity, 12.0);
         assert_eq!(scene.frames.len(), 1);
     }
-
-    const TEST_SCENE_JSON: &str = r#"
-        {
-          "frames": [
-            {
-              "angle": 0,
-              "id": "cart",
-              "initialState": [0, 0],
-              "position": [12.0, 34.5],
-              "resistance": 5,
-              "type": "TrackFrame",
-              "weights": [{
-                  "drag": 0,
-                  "mass": 250,
-                  "position": [0, 0]
-              }]
-            }
-          ],
-          "gravity": 10
-        }"#;
 
     #[test]
     fn test_from_json_value() {
