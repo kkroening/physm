@@ -13,6 +13,7 @@ pub use crate::track_frame::TrackFrame;
 pub use crate::weight::Weight;
 
 mod frame;
+mod json;
 mod rotational_frame;
 mod scene;
 mod solver;
@@ -32,63 +33,6 @@ impl fmt::Display for SceneError {
 #[derive(Debug, Default, PartialEq)]
 pub struct Position([f64; 2]);
 
-fn json_value_to_f64(value: &serde_json::Value) -> Result<f64, SceneError> {
-    value
-        .as_f64()
-        .ok_or_else(|| SceneError(format!("Expected f64 value; got {}", value)))
-}
-
-fn json_value_to_json_obj(
-    value: &serde_json::Value,
-) -> Result<&serde_json::Map<String, serde_json::Value>, SceneError> {
-    value
-        .as_object()
-        .ok_or_else(|| SceneError(format!("Expected JSON object; got {}", value)))
-}
-
-fn json_value_to_boxed_frame(value: &serde_json::Value) -> Result<Box<dyn Frame>, SceneError> {
-    Ok(
-        match value
-            .get("type")
-            .ok_or_else(|| {
-                SceneError(format!(
-                    "Expected frame to have `type` property; got {}",
-                    value
-                ))
-            })?
-            .as_str()
-            .ok_or_else(|| {
-                SceneError(format!(
-                    "Expected frame `type` to be a string; got {}",
-                    value.get("type").unwrap()
-                ))
-            })? {
-            "RotationalFrame" => Box::new(RotationalFrame::from_json_value(value)?),
-            "TrackFrame" => Box::new(TrackFrame::from_json_value(value)?),
-            type_name => return Err(SceneError(format!("Invalid frame type: {}", type_name))),
-        },
-    )
-}
-
-fn json_value_to_boxed_frames(
-    value: &serde_json::Value,
-) -> Result<Vec<Box<dyn Frame>>, SceneError> {
-    Ok(value
-        .as_array()
-        .ok_or_else(|| SceneError(format!("Expected `frames` to be an array; got {}", value)))?
-        .iter()
-        .map(json_value_to_boxed_frame)
-        .collect::<Result<_, _>>()?)
-}
-
-fn json_value_to_weights(value: &serde_json::Value) -> Result<Vec<Weight>, SceneError> {
-    Ok(value
-        .as_array()
-        .ok_or_else(|| SceneError(format!("Expected `weights` to be an array; got {}", value)))?
-        .iter()
-        .map(Weight::from_json_value)
-        .collect::<Result<_, _>>()?)
-}
 
 impl Position {
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
@@ -98,7 +42,7 @@ impl Position {
                 .ok_or_else(|| SceneError(format!("Expected position array; got {}", value)))?
                 .as_slice()
                 .iter()
-                .map(json_value_to_f64)
+                .map(json::value_to_f64)
                 .collect::<Result<Vec<f64>, _>>()?
                 .as_slice()
                 .try_into()
