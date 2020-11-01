@@ -43,7 +43,7 @@ impl RotationalFrame {
         self
     }
 
-    pub fn from_json_value(value: serde_json::Value) -> Result<Self, SceneError> {
+    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
         let obj = match value {
             serde_json::Value::Object(obj) => Ok(obj),
             _ => Err(SceneError(format!("Expected JSON object; got {}", value))),

@@ -3,6 +3,7 @@ use ndarray::prelude::*;
 use crate::json_value_to_f64;
 use crate::Frame;
 use crate::Position;
+use crate::RotationalFrame;
 use crate::SceneError;
 use crate::Weight;
 
@@ -51,13 +52,35 @@ impl TrackFrame {
         self
     }
 
-    pub fn from_json_value(value: serde_json::Value) -> Result<Self, SceneError> {
+    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
         let obj = value
             .as_object()
             .ok_or_else(|| SceneError(format!("Expected JSON object; got {}", value)))?;
-        let children = Vec::new();
-        if let Some(val) = obj.get("children") {
-            //match val.as_array
+        let mut children = Vec::new();
+        if let Some(val) = obj.get("frames") {
+            let arr = val.as_array().ok_or_else(|| {
+                SceneError(format!("Expected `frames` to be an array; got {}", val))
+            })?;
+            for child_val in arr {
+                let child_type_val = child_val.get("type").ok_or_else(|| {
+                    SceneError(format!(
+                        "Expected frame to have `type` property; got {}",
+                        val
+                    ))
+                })?;
+                let child_type = child_type_val.as_str().ok_or_else(|| {
+                    SceneError(format!(
+                        "Expected frame `type` to be a string; got {}",
+                        child_type_val
+                    ))
+                })?;
+                let child: Box<dyn Frame> = match child_type {
+                    "RotationalFrame" => Box::new(RotationalFrame::from_json_value(child_val)?),
+                    "TrackFrame" => Box::new(TrackFrame::from_json_value(child_val)?),
+                    _ => return Err(SceneError(format!("Invalid frame type: {}", child_type))),
+                };
+                children.push(child);
+            }
         }
         let weights = Vec::new();
         Ok(TrackFrame {
@@ -158,16 +181,32 @@ mod tests {
             {
                 "angle": 3.5,
                 "position": [56, 78.9],
-                "frames": [],
+                "frames": [
+                    {
+                        "angle": 0.1,
+                        "frames": [],
+                        "position": [0.2, 0.3],
+                        "type": "TrackFrame",
+                        "weights": []
+                    }
+                ],
+                "type": "TrackFrame",
                 "weights": []
             }"#;
         let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let frame = TrackFrame::from_json_value(json_value).unwrap();
-        //assert_eq!(frame.angle, 3.5);
-        //assert_eq!(frame.position, Position([56., 78.9]));
+        let frame = TrackFrame::from_json_value(&json_value).unwrap();
+        assert_eq!(frame.angle, 3.5);
+        assert_eq!(frame.position, Position([56., 78.9]));
         assert_eq!(
             format!("{:?}", frame.children),
-            format!("{:?}", Vec::<Box<dyn Frame>>::new())
+            format!(
+                "{:?}",
+                vec![Box::new(
+                    TrackFrame::new()
+                        .set_angle(0.1)
+                        .set_position(Position([0.2, 0.3]))
+                )]
+            ),
         );
         assert_eq!(frame.weights, Vec::<Weight>::new());
     }
