@@ -1,8 +1,11 @@
 use ndarray::prelude::*;
 
-use crate::json_value_to_boxed_frame;
-use crate::json_value_to_f64;
 use crate::Frame;
+use crate::json_value_to_boxed_frame;
+use crate::json_value_to_boxed_frames;
+use crate::json_value_to_f64;
+use crate::json_value_to_json_obj;
+use crate::json_value_to_weights;
 use crate::Position;
 use crate::RotationalFrame;
 use crate::SceneError;
@@ -54,10 +57,7 @@ impl TrackFrame {
     }
 
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
-        let obj = value
-            .as_object()
-            .ok_or_else(|| SceneError(format!("Expected JSON object; got {}", value)))?;
-        let weights = Vec::new();
+        let obj = json_value_to_json_obj(value)?;
         Ok(TrackFrame {
             angle: obj
                 .get("angle")
@@ -66,18 +66,9 @@ impl TrackFrame {
                 .unwrap_or_default(),
             children: obj
                 .get("frames")
-                .map(|val| {
-                    Ok(val
-                        .as_array()
-                        .ok_or_else(|| {
-                            SceneError(format!("Expected `frames` to be an array; got {}", val))
-                        })?
-                        .iter()
-                        .map(|child_val| json_value_to_boxed_frame(&child_val))
-                        .collect::<Result<_, _>>()?)
-                })
+                .map(json_value_to_boxed_frames)
                 .transpose()?
-                .unwrap_or(Vec::new()),
+                .unwrap_or_default(),
             position: obj
                 .get("position")
                 .map(Position::from_json_value)
@@ -88,7 +79,11 @@ impl TrackFrame {
                 .map(json_value_to_f64)
                 .transpose()?
                 .unwrap_or_default(),
-            weights: weights,
+            weights: obj
+                .get("weights")
+                .map(json_value_to_weights)
+                .transpose()?
+                .unwrap_or_default(),
         })
     }
 }

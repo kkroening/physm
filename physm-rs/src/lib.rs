@@ -38,6 +38,14 @@ fn json_value_to_f64(value: &serde_json::Value) -> Result<f64, SceneError> {
         .ok_or_else(|| SceneError(format!("Expected f64 value; got {}", value)))
 }
 
+fn json_value_to_json_obj(
+    value: &serde_json::Value,
+) -> Result<&serde_json::Map<String, serde_json::Value>, SceneError> {
+    value
+        .as_object()
+        .ok_or_else(|| SceneError(format!("Expected JSON object; got {}", value)))
+}
+
 fn json_value_to_boxed_frame(value: &serde_json::Value) -> Result<Box<dyn Frame>, SceneError> {
     Ok(
         match value
@@ -60,6 +68,26 @@ fn json_value_to_boxed_frame(value: &serde_json::Value) -> Result<Box<dyn Frame>
             type_name => return Err(SceneError(format!("Invalid frame type: {}", type_name))),
         },
     )
+}
+
+fn json_value_to_boxed_frames(
+    value: &serde_json::Value,
+) -> Result<Vec<Box<dyn Frame>>, SceneError> {
+    Ok(value
+        .as_array()
+        .ok_or_else(|| SceneError(format!("Expected `frames` to be an array; got {}", value)))?
+        .iter()
+        .map(json_value_to_boxed_frame)
+        .collect::<Result<_, _>>()?)
+}
+
+fn json_value_to_weights(value: &serde_json::Value) -> Result<Vec<Weight>, SceneError> {
+    Ok(value
+        .as_array()
+        .ok_or_else(|| SceneError(format!("Expected `weights` to be an array; got {}", value)))?
+        .iter()
+        .map(Weight::from_json_value)
+        .collect::<Result<_, _>>()?)
 }
 
 impl Position {
