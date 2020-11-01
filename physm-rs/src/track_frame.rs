@@ -138,19 +138,34 @@ mod tests {
     fn test_from_json_value() {
         let json = r#"
             {
-                "angle": 3.5,
-                "position": [56, 78.9],
-                "frames": [
-                    {
-                        "angle": 0.1,
-                        "frames": [],
-                        "position": [0.2, 0.3],
-                        "type": "TrackFrame",
-                        "weights": []
-                    }
-                ],
-                "type": "TrackFrame",
-                "weights": []
+              "angle": 3.5,
+              "frames": [
+                {
+                  "angle": 0.1,
+                  "frames": [],
+                  "position": [
+                    0.2,
+                    0.3
+                  ],
+                  "type": "TrackFrame",
+                  "weights": []
+                }
+              ],
+              "position": [
+                56,
+                78.9
+              ],
+              "type": "TrackFrame",
+              "weights": [
+                {
+                  "drag": 27,
+                  "mass": 55,
+                  "position": [
+                    3,
+                    -4
+                  ]
+                }
+              ]
             }"#;
         let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
         let frame = TrackFrame::from_json_value(&json_value).unwrap();
@@ -167,7 +182,12 @@ mod tests {
                 )]
             ),
         );
-        assert_eq!(frame.weights, Vec::<Weight>::new());
+        assert_eq!(
+            frame.weights,
+            vec![Weight::new(55.)
+                .set_drag(27.)
+                .set_position(Position([3., -4.]))]
+        );
     }
 
     #[test]

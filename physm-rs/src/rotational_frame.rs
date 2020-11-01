@@ -1,5 +1,6 @@
 use ndarray::prelude::*;
 
+use crate::json;
 use crate::Frame;
 use crate::Position;
 use crate::SceneError;
@@ -44,15 +45,12 @@ impl RotationalFrame {
     }
 
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
-        let obj = match value {
-            serde_json::Value::Object(obj) => Ok(obj),
-            _ => Err(SceneError(format!("Expected JSON object; got {}", value))),
-        }?;
+        let obj = json::value_to_json_obj(value)?;
         Ok(RotationalFrame {
-            children: Vec::new(),
-            position: Position([0., 0.]),
-            resistance: 0.,
-            weights: Vec::new(),
+            children: json::map_obj_item(obj, "frames", json::value_to_boxed_frames)?,
+            position: json::map_obj_item(obj, "position", Position::from_json_value)?,
+            resistance: json::map_obj_item(obj, "resistance", json::value_to_f64)?,
+            weights: json::map_obj_item(obj, "weights", json::value_to_weights)?,
         })
     }
 }
@@ -99,7 +97,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn constructor() {
+    fn test_new() {
         let f = RotationalFrame::new()
             .add_child(Box::new(
                 RotationalFrame::new().set_position(Position([1.5, 2.6])),
@@ -113,7 +111,59 @@ mod tests {
     }
 
     #[test]
-    fn get_local_pos_matrix() {
+    fn test_from_json_value() {
+        let json = r#"
+            {
+              "angle": 3.5,
+              "frames": [
+                {
+                  "frames": [],
+                  "position": [
+                    0.2,
+                    0.3
+                  ],
+                  "type": "RotationalFrame",
+                  "weights": []
+                }
+              ],
+              "position": [
+                56,
+                78.9
+              ],
+              "type": "RotationalFrame",
+              "weights": [
+                {
+                  "drag": 27,
+                  "mass": 55,
+                  "position": [
+                    3,
+                    -4
+                  ]
+                }
+              ]
+            }"#;
+        let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let frame = RotationalFrame::from_json_value(&json_value).unwrap();
+        assert_eq!(frame.position, Position([56., 78.9]));
+        assert_eq!(
+            format!("{:?}", frame.children),
+            format!(
+                "{:?}",
+                vec![Box::new(
+                    RotationalFrame::new().set_position(Position([0.2, 0.3]))
+                )]
+            ),
+        );
+        assert_eq!(
+            frame.weights,
+            vec![Weight::new(55.)
+                .set_drag(27.)
+                .set_position(Position([3., -4.]))]
+        );
+    }
+
+    #[test]
+    fn test_get_local_pos_matrix() {
         let frame = RotationalFrame::new();
         assert_abs_diff_eq!(frame.get_local_pos_matrix(0.), Array2::eye(3));
         let frame = frame.set_position(Position([3., 4.]));
@@ -129,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn get_local_vel_matrix() {
+    fn test_get_local_vel_matrix() {
         let frame = RotationalFrame::new().set_position(Position([3., 4.]));
         assert_abs_diff_eq!(
             frame.get_local_vel_matrix(PI / 3.),
@@ -143,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn get_local_accel_matrix() {
+    fn test_get_local_accel_matrix() {
         let frame = RotationalFrame::new().set_position(Position([3., 4.]));
         assert_abs_diff_eq!(
             frame.get_local_accel_matrix(PI / 3.),

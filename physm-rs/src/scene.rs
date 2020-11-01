@@ -1,4 +1,9 @@
+use crate::json;
 use crate::Frame;
+use crate::Position;
+use crate::RotationalFrame;
+use crate::SceneError;
+use crate::TrackFrame;
 
 const DEFAULT_GRAVITY: f64 = 10.0;
 
@@ -25,6 +30,14 @@ impl Scene {
         self.frames.push(frame);
         self
     }
+
+    pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
+        let obj = json::value_to_json_obj(value)?;
+        Ok(Scene {
+            frames: json::map_obj_item(obj, "frames", json::value_to_boxed_frames)?,
+            gravity: json::map_obj_item(obj, "gravity", json::value_to_f64)?,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -33,7 +46,7 @@ mod tests {
     use crate::TrackFrame;
 
     #[test]
-    fn constructor() {
+    fn test_new() {
         let scene = Scene::new();
         assert_eq!(scene.gravity, DEFAULT_GRAVITY);
         assert_eq!(scene.frames.len(), 0);
@@ -42,5 +55,58 @@ mod tests {
             .add_frame(Box::new(TrackFrame::new()));
         assert_eq!(scene.gravity, 12.0);
         assert_eq!(scene.frames.len(), 1);
+    }
+
+    const TEST_SCENE_JSON: &str = r#"
+        {
+          "frames": [
+            {
+              "angle": 0,
+              "id": "cart",
+              "initialState": [0, 0],
+              "position": [12.0, 34.5],
+              "resistance": 5,
+              "type": "TrackFrame",
+              "weights": [{
+                  "drag": 0,
+                  "mass": 250,
+                  "position": [0, 0]
+              }]
+            }
+          ],
+          "gravity": 10
+        }"#;
+
+    #[test]
+    fn test_from_json_value() {
+        let json = r#"
+            {
+              "frames": [
+                {
+                  "frames": [
+                    {
+                      "frames": [],
+                      "type": "RotationalFrame"
+                    }
+                  ],
+                  "type": "TrackFrame"
+                }
+              ],
+              "gravity": 5.1
+            }"#;
+        let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let actual_scene = Scene::from_json_value(&json_value).unwrap();
+        let expected_scene = Scene::new().set_gravity(5.1).add_frame(Box::new(
+            TrackFrame::new().add_child(Box::new(RotationalFrame::new())),
+        ));
+        assert_eq!(actual_scene.gravity, 5.1);
+        assert_eq!(
+            format!("{:?}", actual_scene.frames),
+            format!("{:?}", expected_scene.frames)
+        );
+        assert_eq!(
+            format!("{:?}", actual_scene),
+            format!("{:?}", expected_scene),
+        );
     }
 }

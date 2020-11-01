@@ -33,7 +33,6 @@ impl fmt::Display for SceneError {
 #[derive(Debug, Default, PartialEq)]
 pub struct Position([f64; 2]);
 
-
 impl Position {
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
         Ok(Self(
@@ -142,7 +141,25 @@ mod tests {
         }
 
         #[test]
-        fn wrong_type() {
+        fn int_values() {
+            let value = serde_json::from_str(&"[12, 34]").unwrap();
+            assert_eq!(
+                Position::from_json_value(&value).unwrap(),
+                Position([12., 34.])
+            );
+        }
+
+        #[test]
+        fn bool_values() {
+            let value = serde_json::from_str(&"[true, false]").unwrap();
+            assert_eq!(
+                Position::from_json_value(&value).unwrap_err().to_string(),
+                "Expected f64 value; got true"
+            );
+        }
+
+        #[test]
+        fn non_array_type() {
             let value = serde_json::from_str(&"{}").unwrap();
             assert_eq!(
                 Position::from_json_value(&value).unwrap_err().to_string(),
