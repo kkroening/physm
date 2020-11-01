@@ -68,6 +68,10 @@ impl Frame for TrackFrame {
         &self.children
     }
 
+    fn get_resistance(&self) -> f64 {
+        self.resistance
+    }
+
     fn get_weights(&self) -> &Vec<Weight> {
         &self.weights
     }

@@ -6,6 +6,8 @@ use crate::Weight;
 pub trait Frame: Debug {
     fn get_children(&self) -> &Vec<Box<dyn Frame>>;
 
+    fn get_resistance(&self) -> f64;
+
     fn get_weights(&self) -> &Vec<Weight>;
 
     fn get_local_pos_matrix(&self, _q: f64) -> Array2<f64> {
