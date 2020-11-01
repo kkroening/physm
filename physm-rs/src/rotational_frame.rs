@@ -1,21 +1,24 @@
 use ndarray::prelude::*;
 
 use crate::Frame;
-use crate::Weight;
 use crate::Position;
+use crate::SceneError;
+use crate::Weight;
 
 #[derive(Debug)]
 pub struct RotationalFrame {
-    pub position: Position,
     pub children: Vec<Box<dyn Frame>>,
+    pub position: Position,
+    pub resistance: f64,
     pub weights: Vec<Weight>,
 }
 
 impl RotationalFrame {
     pub fn new() -> Self {
         Self {
-            position: Position([0.0, 0.0]),
             children: Vec::new(),
+            position: Position([0.0, 0.0]),
+            resistance: 0.,
             weights: Vec::new(),
         }
     }
@@ -25,14 +28,32 @@ impl RotationalFrame {
         self
     }
 
+    pub fn set_position(mut self, position: Position) -> Self {
+        self.position = position;
+        self
+    }
+
+    pub fn set_resistance(mut self, resistance: f64) -> Self {
+        self.resistance = resistance;
+        self
+    }
+
     pub fn add_weight(mut self, weight: Weight) -> Self {
         self.weights.push(weight);
         self
     }
 
-    pub fn set_position(mut self, position: Position) -> Self {
-        self.position = position;
-        self
+    pub fn from_json_value(value: serde_json::Value) -> Result<Self, SceneError> {
+        let obj = match value {
+            serde_json::Value::Object(obj) => Ok(obj),
+            _ => Err(SceneError(format!("Expected JSON object; got {}", value))),
+        }?;
+        Ok(RotationalFrame {
+            children: Vec::new(),
+            position: Position([0., 0.]),
+            resistance: 0.,
+            weights: Vec::new(),
+        })
     }
 }
 
@@ -80,8 +101,12 @@ mod tests {
     #[test]
     fn constructor() {
         let f = RotationalFrame::new()
-            .add_child(Box::new(RotationalFrame::new().set_position(Position([1.5, 2.6]))))
-            .add_child(Box::new(RotationalFrame::new().set_position(Position([5., 28.]))))
+            .add_child(Box::new(
+                RotationalFrame::new().set_position(Position([1.5, 2.6])),
+            ))
+            .add_child(Box::new(
+                RotationalFrame::new().set_position(Position([5., 28.])),
+            ))
             .add_weight(Weight::new(12.));
         println!("{:#?}", f);
         //assert_eq!(0, 1);

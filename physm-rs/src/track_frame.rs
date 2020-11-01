@@ -207,7 +207,9 @@ mod tests {
 
     #[test]
     fn test_get_local_accel_matrix() {
-        let frame = TrackFrame::new().set_position(Position([3., 4.])).set_angle(PI / 3.);
+        let frame = TrackFrame::new()
+            .set_position(Position([3., 4.]))
+            .set_angle(PI / 3.);
         assert_abs_diff_eq!(frame.get_local_accel_matrix(PI / 3.), Array::zeros((3, 3)));
     }
 }

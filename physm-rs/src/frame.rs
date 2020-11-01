@@ -1,6 +1,7 @@
 use ndarray::Array2;
 use std::fmt::Debug;
 
+use crate::SceneError;
 use crate::Weight;
 
 pub trait Frame: Debug {
