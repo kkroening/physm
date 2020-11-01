@@ -1,5 +1,6 @@
 use ndarray::prelude::*;
 
+use crate::json_value_to_boxed_frame;
 use crate::json_value_to_f64;
 use crate::Frame;
 use crate::Position;
@@ -56,32 +57,6 @@ impl TrackFrame {
         let obj = value
             .as_object()
             .ok_or_else(|| SceneError(format!("Expected JSON object; got {}", value)))?;
-        let mut children = Vec::new();
-        if let Some(val) = obj.get("frames") {
-            let arr = val.as_array().ok_or_else(|| {
-                SceneError(format!("Expected `frames` to be an array; got {}", val))
-            })?;
-            for child_val in arr {
-                let child_type_val = child_val.get("type").ok_or_else(|| {
-                    SceneError(format!(
-                        "Expected frame to have `type` property; got {}",
-                        val
-                    ))
-                })?;
-                let child_type = child_type_val.as_str().ok_or_else(|| {
-                    SceneError(format!(
-                        "Expected frame `type` to be a string; got {}",
-                        child_type_val
-                    ))
-                })?;
-                let child: Box<dyn Frame> = match child_type {
-                    "RotationalFrame" => Box::new(RotationalFrame::from_json_value(child_val)?),
-                    "TrackFrame" => Box::new(TrackFrame::from_json_value(child_val)?),
-                    _ => return Err(SceneError(format!("Invalid frame type: {}", child_type))),
-                };
-                children.push(child);
-            }
-        }
         let weights = Vec::new();
         Ok(TrackFrame {
             angle: obj
@@ -89,7 +64,20 @@ impl TrackFrame {
                 .map(json_value_to_f64)
                 .transpose()?
                 .unwrap_or_default(),
-            children: children,
+            children: obj
+                .get("frames")
+                .map(|val| {
+                    Ok(val
+                        .as_array()
+                        .ok_or_else(|| {
+                            SceneError(format!("Expected `frames` to be an array; got {}", val))
+                        })?
+                        .iter()
+                        .map(|child_val| json_value_to_boxed_frame(&child_val))
+                        .collect::<Result<_, _>>()?)
+                })
+                .transpose()?
+                .unwrap_or(Vec::new()),
             position: obj
                 .get("position")
                 .map(Position::from_json_value)

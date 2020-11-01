@@ -38,6 +38,30 @@ fn json_value_to_f64(value: &serde_json::Value) -> Result<f64, SceneError> {
         .ok_or_else(|| SceneError(format!("Expected f64 value; got {}", value)))
 }
 
+fn json_value_to_boxed_frame(value: &serde_json::Value) -> Result<Box<dyn Frame>, SceneError> {
+    Ok(
+        match value
+            .get("type")
+            .ok_or_else(|| {
+                SceneError(format!(
+                    "Expected frame to have `type` property; got {}",
+                    value
+                ))
+            })?
+            .as_str()
+            .ok_or_else(|| {
+                SceneError(format!(
+                    "Expected frame `type` to be a string; got {}",
+                    value.get("type").unwrap()
+                ))
+            })? {
+            "RotationalFrame" => Box::new(RotationalFrame::from_json_value(value)?),
+            "TrackFrame" => Box::new(TrackFrame::from_json_value(value)?),
+            type_name => return Err(SceneError(format!("Invalid frame type: {}", type_name))),
+        },
+    )
+}
+
 impl Position {
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
         Ok(Self(
