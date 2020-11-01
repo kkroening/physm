@@ -1,5 +1,6 @@
 use ndarray::prelude::*;
 
+use crate::json_value_to_f64;
 use crate::Frame;
 use crate::Position;
 use crate::SceneError;
@@ -51,16 +52,32 @@ impl TrackFrame {
     }
 
     pub fn from_json_value(value: serde_json::Value) -> Result<Self, SceneError> {
-        let obj = match value {
-            serde_json::Value::Object(obj) => Ok(obj),
-            _ => Err(SceneError(format!("Expected JSON object; got {}", value))),
-        }?;
+        let obj = value
+            .as_object()
+            .ok_or_else(|| SceneError(format!("Expected JSON object; got {}", value)))?;
+        let children = Vec::new();
+        if let Some(val) = obj.get("children") {
+            //match val.as_array
+        }
+        let weights = Vec::new();
         Ok(TrackFrame {
-            angle: 0.,
-            children: Vec::new(),
-            position: Position([0., 0.]),
-            resistance: 0.,
-            weights: Vec::new(),
+            angle: obj
+                .get("angle")
+                .map(json_value_to_f64)
+                .transpose()?
+                .unwrap_or_default(),
+            children: children,
+            position: obj
+                .get("position")
+                .map(Position::from_json_value)
+                .transpose()?
+                .unwrap_or_default(),
+            resistance: obj
+                .get("resistance")
+                .map(json_value_to_f64)
+                .transpose()?
+                .unwrap_or_default(),
+            weights: weights,
         })
     }
 }

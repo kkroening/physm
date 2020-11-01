@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
+use std::ops::Deref;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -19,7 +20,7 @@ mod track_frame;
 mod utils;
 mod weight;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SceneError(String);
 
 impl fmt::Display for SceneError {
@@ -28,35 +29,33 @@ impl fmt::Display for SceneError {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Position([f64; 2]);
+
+fn json_value_to_f64(value: &serde_json::Value) -> Result<f64, SceneError> {
+    value
+        .as_f64()
+        .ok_or_else(|| SceneError(format!("Expected f64 value; got {}", value)))
+}
 
 impl Position {
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
         Ok(Self(
-            match value
+            value
                 .as_array()
                 .ok_or_else(|| SceneError(format!("Expected position array; got {}", value)))?
                 .as_slice()
-            {
-                [x, y] => Ok([x, y]),
-                _ => Err(SceneError(format!(
-                    "Expected position array with length 2; got {}",
-                    value
-                ))),
-            }?
-            .iter()
-            .map(|val| val.as_f64())
-            .collect::<Option<Vec<f64>>>()
-            .ok_or_else(|| {
-                SceneError(format!(
-                    "Expected position array to contain f64 values; got {}",
-                    value
-                ))
-            })?
-            .as_slice()
-            .try_into()
-            .unwrap(),
+                .iter()
+                .map(json_value_to_f64)
+                .collect::<Result<Vec<f64>, _>>()?
+                .as_slice()
+                .try_into()
+                .map_err(|_| {
+                    SceneError(format!(
+                        "Expected position array with length 2; got {}",
+                        value
+                    ))
+                })?,
         ))
     }
 }
@@ -134,11 +133,44 @@ mod tests {
           "gravity": 10
         }"#;
 
-    #[test]
-    fn test_position_from_json_value() {
-        let value: serde_json::Value = serde_json::from_str(&TEST_SCENE_JSON).unwrap();
-        let position = Position::from_json_value(&value["frames"][0]["position"]).unwrap();
-        assert_eq!(position, Position([12., 34.5]));
+    mod position_from_json_value {
+        use super::*;
+
+        #[test]
+        fn ok() {
+            let value = serde_json::from_str(&"[12.0, 34.5]").unwrap();
+            assert_eq!(
+                Position::from_json_value(&value).unwrap(),
+                Position([12., 34.5])
+            );
+        }
+
+        #[test]
+        fn wrong_type() {
+            let value = serde_json::from_str(&"{}").unwrap();
+            assert_eq!(
+                Position::from_json_value(&value).unwrap_err().to_string(),
+                "Expected position array; got {}"
+            );
+        }
+
+        #[test]
+        fn wrong_length() {
+            let value = serde_json::from_str(&"[1.0, 2.0, 3.0]").unwrap();
+            assert_eq!(
+                Position::from_json_value(&value).unwrap_err().to_string(),
+                "Expected position array with length 2; got [1.0,2.0,3.0]"
+            );
+        }
+
+        #[test]
+        fn null_value() {
+            let value = serde_json::from_str(&"[1.0, null]").unwrap();
+            assert_eq!(
+                Position::from_json_value(&value).unwrap_err().to_string(),
+                "Expected f64 value; got null"
+            );
+        }
     }
 
     #[test]

@@ -40,13 +40,10 @@ impl Weight {
             serde_json::Value::Object(obj) => Ok(obj),
             _ => Err(SceneError(format!("Expected JSON object; got {}", value))),
         }?;
-        let mass = obj["mass"].as_f64().unwrap_or(1.);
-        let position = Position::from_json_value(&obj["position"])?;
-        let drag = obj["drag"].as_f64().unwrap_or(0.);
         Ok(Weight {
-            mass: mass,
-            position: position,
-            drag: drag,
+            mass: obj["mass"].as_f64().unwrap_or(1.),
+            position: Position::from_json_value(&obj["position"])?,
+            drag: obj["drag"].as_f64().unwrap_or(0.),
         })
     }
 }
