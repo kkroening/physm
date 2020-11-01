@@ -55,31 +55,11 @@ impl TrackFrame {
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, SceneError> {
         let obj = json::value_to_json_obj(value)?;
         Ok(TrackFrame {
-            angle: obj
-                .get("angle")
-                .map(json::value_to_f64)
-                .transpose()?
-                .unwrap_or_default(),
-            children: obj
-                .get("frames")
-                .map(json::value_to_boxed_frames)
-                .transpose()?
-                .unwrap_or_default(),
-            position: obj
-                .get("position")
-                .map(Position::from_json_value)
-                .transpose()?
-                .unwrap_or_default(),
-            resistance: obj
-                .get("resistance")
-                .map(json::value_to_f64)
-                .transpose()?
-                .unwrap_or_default(),
-            weights: obj
-                .get("weights")
-                .map(json::value_to_weights)
-                .transpose()?
-                .unwrap_or_default(),
+            angle: json::map_obj_item(obj, "angle", json::value_to_f64)?,
+            children: json::map_obj_item(obj, "frames", json::value_to_boxed_frames)?,
+            position: json::map_obj_item(obj, "position", Position::from_json_value)?,
+            resistance: json::map_obj_item(obj, "resistance", json::value_to_f64)?,
+            weights: json::map_obj_item(obj, "weights", json::value_to_weights)?,
         })
     }
 }
