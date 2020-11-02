@@ -1,4 +1,8 @@
+use ndarray::prelude::*;
+use std::collections::HashMap;
+
 use crate::Frame;
+use crate::Matrix;
 use crate::Scene;
 use crate::TrackFrame;
 
@@ -6,11 +10,12 @@ use crate::TrackFrame;
 pub struct Solver {
     pub scene: Scene,
     pub runge_kutta: bool,
-    //sorted_frames: Vec<&Box<dyn Frame>>,
 }
 
+type FrameRefVec<'a> = Vec<&'a Box<dyn Frame>>;
+
 impl Solver {
-    fn visit<'a>(frame: &'a Box<dyn Frame>, frames: &mut Vec<&'a Box<dyn Frame>>) {
+    fn visit<'a>(frame: &'a Box<dyn Frame>, frames: &mut FrameRefVec<'a>) {
         frame
             .get_children()
             .iter()
@@ -18,25 +23,38 @@ impl Solver {
         frames.push(frame);
     }
 
-    fn sort_frames(frames: &Vec<Box<dyn Frame>>) -> Vec<&Box<dyn Frame>> {
+    fn sort_frames(frames: &Vec<Box<dyn Frame>>) -> FrameRefVec {
         let mut sorted_frames: Vec<&Box<dyn Frame>> = Vec::new();
         frames
             .iter()
             .for_each(|frame| Self::visit(&frame, &mut sorted_frames));
+        sorted_frames.reverse();
         sorted_frames
+    }
+
+    fn get_pos_mats(states: &[f64], frames: &FrameRefVec) -> Vec<Matrix> {
+        frames
+            .iter()
+            .enumerate()
+            .map(|(index, frame)| frame.get_local_pos_matrix(states[index]))
+            .collect()
     }
 
     pub fn new(scene: Scene) -> Self {
         Self {
             scene: scene,
             runge_kutta: false,
-            //sorted_frames: Self::sort_frames(&scene.frames),
         }
     }
 
     pub fn set_runge_kutta(mut self, runge_kutta: bool) -> Self {
         self.runge_kutta = runge_kutta;
         self
+    }
+
+    pub fn tick(&self, states: &[f64], delta_time: f64) -> i32 {
+        let sorted_frames = Self::sort_frames(&self.scene.frames);
+        42
     }
 }
 
@@ -51,14 +69,14 @@ mod tests {
             Solver::sort_frames(&vec![
                 Box::new(
                     TrackFrame::new()
-                        .set_resistance(2.)
-                        .add_child(Box::new(TrackFrame::new().set_resistance(1.)))
+                        .set_resistance(4.)
+                        .add_child(Box::new(TrackFrame::new().set_resistance(5.)))
                 ),
                 Box::new(
                     TrackFrame::new()
-                        .set_resistance(5.)
+                        .set_resistance(1.)
                         .add_child(Box::new(TrackFrame::new().set_resistance(3.)))
-                        .add_child(Box::new(TrackFrame::new().set_resistance(4.)))
+                        .add_child(Box::new(TrackFrame::new().set_resistance(2.)))
                 )
             ])
             .iter()

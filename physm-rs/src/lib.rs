@@ -1,3 +1,4 @@
+use ndarray::Array2;
 use std::convert::TryInto;
 use std::fmt;
 use wasm_bindgen::prelude::*;
@@ -30,6 +31,8 @@ impl fmt::Display for Error {
     }
 }
 
+type Matrix = Array2<f64>;
+
 #[derive(Debug, Default, PartialEq)]
 pub struct Position([f64; 2]);
 
@@ -55,6 +58,11 @@ impl Position {
     }
 }
 
+pub struct State {
+    q: f64,
+    qd: f64,
+}
+
 #[cfg(not(test))]
 fn log(s: &str) {
     console::log_1(&s.clone().into());
@@ -67,7 +75,7 @@ fn log(s: &str) {
 
 #[wasm_bindgen]
 pub struct SolverContext {
-    solver: Solver,
+    solver: Box<Solver>,
 }
 
 #[wasm_bindgen]
@@ -76,7 +84,7 @@ impl SolverContext {
         let v: serde_json::Value = serde_json::from_str(scene_json)?;
         log(&format!("{:?}", v));
         let scene = Scene::new(); // TODO: deserialize.
-        let solver = Solver::new(scene);
+        let solver = Box::new(Solver::new(scene));
         Ok(SolverContext { solver })
     }
 
@@ -90,13 +98,13 @@ impl SolverContext {
         Self::_new(scene_json).map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
-    pub fn tick(&self, delta_time: f64) -> i32 {
+    pub fn tick(&self, states: Box<[f64]>, delta_time: f64) -> i32 {
         log(&format!("Ticking from Rust; delta_time={}", delta_time));
         log(&format!(
             "Number of frames: {}",
             self.solver.scene.frames.len()
         ));
-        42
+        self.solver.tick(&states, delta_time)
     }
 
     pub fn dispose(self) {

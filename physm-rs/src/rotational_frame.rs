@@ -1,8 +1,9 @@
 use ndarray::prelude::*;
 
-use crate::json;
 use crate::Error;
 use crate::Frame;
+use crate::json;
+use crate::Matrix;
 use crate::Position;
 use crate::Weight;
 
@@ -68,7 +69,7 @@ impl Frame for RotationalFrame {
         &self.weights
     }
 
-    fn get_local_pos_matrix(&self, q: f64) -> Array2<f64> {
+    fn get_local_pos_matrix(&self, q: f64) -> Matrix {
         arr2(&[
             [q.cos(), -q.sin(), self.position.0[0]],
             [q.sin(), q.cos(), self.position.0[1]],
@@ -76,7 +77,7 @@ impl Frame for RotationalFrame {
         ])
     }
 
-    fn get_local_vel_matrix(&self, q: f64) -> Array2<f64> {
+    fn get_local_vel_matrix(&self, q: f64) -> Matrix {
         arr2(&[
             [-q.sin(), -q.cos(), 0.],
             [q.cos(), -q.sin(), 0.],
@@ -84,7 +85,7 @@ impl Frame for RotationalFrame {
         ])
     }
 
-    fn get_local_accel_matrix(&self, q: f64) -> Array2<f64> {
+    fn get_local_accel_matrix(&self, q: f64) -> Matrix {
         arr2(&[
             [-q.cos(), q.sin(), 0.],
             [-q.sin(), -q.cos(), 0.],
@@ -169,7 +170,7 @@ mod tests {
     #[test]
     fn test_get_local_pos_matrix() {
         let frame = RotationalFrame::new();
-        assert_abs_diff_eq!(frame.get_local_pos_matrix(0.), Array2::eye(3));
+        assert_abs_diff_eq!(frame.get_local_pos_matrix(0.), Matrix::eye(3));
         let frame = frame.set_position(Position([3., 4.]));
         assert_abs_diff_eq!(
             frame.get_local_pos_matrix(PI / 3.),

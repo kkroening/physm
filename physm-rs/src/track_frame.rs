@@ -1,9 +1,10 @@
 use ndarray::prelude::*;
 
 use crate::json;
-use crate::Frame;
-use crate::Position;
 use crate::Error;
+use crate::Frame;
+use crate::Matrix;
+use crate::Position;
 use crate::Weight;
 
 #[derive(Debug)]
@@ -76,7 +77,7 @@ impl Frame for TrackFrame {
         &self.weights
     }
 
-    fn get_local_pos_matrix(&self, q: f64) -> Array2<f64> {
+    fn get_local_pos_matrix(&self, q: f64) -> Matrix {
         arr2(&[
             [1., 0., self.position.0[0] + q * self.angle.cos()],
             [0., 1., self.position.0[1] + q * self.angle.sin()],
@@ -84,7 +85,7 @@ impl Frame for TrackFrame {
         ])
     }
 
-    fn get_local_vel_matrix(&self, _q: f64) -> Array2<f64> {
+    fn get_local_vel_matrix(&self, _q: f64) -> Matrix {
         arr2(&[
             [0., 0., self.angle.cos()],
             [0., 0., self.angle.sin()],
@@ -196,7 +197,7 @@ mod tests {
     #[test]
     fn test_get_local_pos_matrix() {
         let frame = TrackFrame::new();
-        assert_abs_diff_eq!(frame.get_local_pos_matrix(0.), Array2::eye(3));
+        assert_abs_diff_eq!(frame.get_local_pos_matrix(0.), Matrix::eye(3));
         let frame = frame.set_position(Position([3., 4.]));
         assert_abs_diff_eq!(
             frame.get_local_pos_matrix(7.),
