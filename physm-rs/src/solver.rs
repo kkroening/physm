@@ -86,22 +86,24 @@ impl Solver {
         }
     }
 
-    //fn get_parent(child_index: usize,
-
     fn get_pos_mats(
         states: &[f64],
         frames: &FrameRefVec,
         index_path_map: &FrameIndexPathMap,
     ) -> Vec<Matrix> {
         let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
-        frames
-            .iter()
-            .enumerate()
-            .map(|(index, frame)| {
-                let parent_index = get_parent_index(index);
-                frame.get_local_pos_matrix(states[index])
-            })
-            .collect()
+        let mut pos_mats = Vec::<Matrix>::new();
+        pos_mats.reserve(frames.len());
+        frames.iter().enumerate().for_each(|(index, frame)| {
+            let parent_index = get_parent_index(index);
+            let pos_mat = frame.get_local_pos_matrix(states[index]);
+            let pos_mat = match get_parent_index(index) {
+                Some(parent_index) => pos_mats[parent_index].dot(&pos_mat),
+                None => pos_mat,
+            };
+            pos_mats.push(pos_mat);
+        });
+        pos_mats
     }
 
     pub fn new(scene: Scene) -> Self {
