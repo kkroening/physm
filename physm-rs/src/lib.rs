@@ -7,6 +7,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::console;
 
 pub use crate::frame::Frame;
+pub use crate::frame::FrameId;
 pub use crate::rotational_frame::RotationalFrame;
 pub use crate::scene::Scene;
 pub use crate::solver::Solver;

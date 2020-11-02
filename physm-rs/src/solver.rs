@@ -68,21 +68,18 @@ mod tests {
         assert_eq!(
             Solver::sort_frames(&vec![
                 Box::new(
-                    TrackFrame::new()
-                        .set_resistance(4.)
-                        .add_child(Box::new(TrackFrame::new().set_resistance(5.)))
+                    TrackFrame::new("4".into()).add_child(Box::new(TrackFrame::new("5".into())))
                 ),
                 Box::new(
-                    TrackFrame::new()
-                        .set_resistance(1.)
-                        .add_child(Box::new(TrackFrame::new().set_resistance(3.)))
-                        .add_child(Box::new(TrackFrame::new().set_resistance(2.)))
+                    TrackFrame::new("1".into())
+                        .add_child(Box::new(TrackFrame::new("3".into())))
+                        .add_child(Box::new(TrackFrame::new("2".into())))
                 )
             ])
             .iter()
-            .map(|frame| frame.get_resistance() as i64)
-            .collect::<Vec<i64>>(),
-            vec![1, 2, 3, 4, 5]
+            .map(|frame| frame.get_id().as_str())
+            .collect::<Vec<&str>>(),
+            vec!["1", "2", "3", "4", "5"]
         );
     }
 

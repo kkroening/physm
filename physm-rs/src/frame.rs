@@ -3,8 +3,12 @@ use std::fmt::Debug;
 use crate::Matrix;
 use crate::Weight;
 
+pub type FrameId = String;
+
 pub trait Frame: Debug {
     fn get_children(&self) -> &Vec<Box<dyn Frame>>;
+
+    fn get_id(&self) -> &FrameId;
 
     fn get_resistance(&self) -> f64;
 
