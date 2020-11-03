@@ -138,6 +138,30 @@ impl Solver {
             .collect()
     }
 
+    fn get_accel_mats(
+        frames: &[&FrameBox],
+        index_path_map: &FrameIndexPathMap,
+        pos_mats: &[Mat3],
+        inv_pos_mats: &[Mat3],
+        states: &[State],
+    ) -> Vec<Mat3> {
+        let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
+        frames
+            .iter()
+            .enumerate()
+            .map(|(index, frame)| {
+                let inv_pos_mat = &inv_pos_mats[index];
+                let local_accel_mat = frame.get_local_accel_matrix(states[index].q);
+                let rel_accel_mat = local_accel_mat * inv_pos_mat;
+                let accel_mat = match get_parent_index(index) {
+                    Some(parent_index) => pos_mats[parent_index] * rel_accel_mat,
+                    None => rel_accel_mat,
+                };
+                accel_mat
+            })
+            .collect()
+    }
+
     pub fn new(scene: Scene) -> Self {
         Self {
             scene: scene,
@@ -342,6 +366,45 @@ mod tests {
             max_ulps = 4,
         );
     }
+
+    #[test]
+    fn test_get_accel_mats() {
+        let states = get_sample_states();
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let index_path_map = Solver::get_index_path_map(&frames);
+        let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
+        let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
+        let id_index_map = Solver::get_id_index_map(&frames);
+        let accel_mats =
+            Solver::get_accel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
+        let local_accel_mats: Vec<Mat3> = frames
+            .iter()
+            .zip(states.iter())
+            .map(|(frame, state)| frame.get_local_accel_matrix(state.q))
+            .collect();
+        assert_eq!(accel_mats.len(), frames.len());
+        assert_ulps_eq!(
+            accel_mats[BALL_INDEX],
+            local_accel_mats[BALL_INDEX] * inv_pos_mats[BALL_INDEX],
+        );
+        assert_ulps_eq!(
+            accel_mats[CART_INDEX],
+            local_accel_mats[CART_INDEX] * inv_pos_mats[CART_INDEX],
+        );
+        assert_ulps_eq!(
+            accel_mats[PENDULUM1_INDEX],
+            pos_mats[CART_INDEX] * local_accel_mats[PENDULUM1_INDEX] * inv_pos_mats[PENDULUM1_INDEX],
+        );
+        assert_ulps_eq!(
+            accel_mats[PENDULUM2_INDEX],
+            pos_mats[PENDULUM1_INDEX]
+                * local_accel_mats[PENDULUM2_INDEX]
+                * inv_pos_mats[PENDULUM2_INDEX],
+            max_ulps = 4,
+        );
+    }
+
 
     #[test]
     fn test_new() {
