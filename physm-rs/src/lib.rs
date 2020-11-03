@@ -7,6 +7,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::console;
 
 pub use crate::frame::Frame;
+pub use crate::frame::FrameBox;
 pub use crate::frame::FrameId;
 pub use crate::rotational_frame::RotationalFrame;
 pub use crate::scene::Scene;
@@ -99,12 +100,23 @@ impl SolverContext {
         Self::_new(scene_json).map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
-    pub fn tick(&self, states: Box<[f64]>, delta_time: f64) -> i32 {
+    fn unflatten_states(flattened_states: &[f64]) -> Vec<State> {
+        flattened_states
+            .chunks(2)
+            .map(|state| State {
+                q: state[0],
+                qd: state[1],
+            })
+            .collect()
+    }
+
+    pub fn tick(&self, flattened_states: &[f64], delta_time: f64) -> i32 {
         log(&format!("Ticking from Rust; delta_time={}", delta_time));
         log(&format!(
             "Number of frames: {}",
             self.solver.scene.frames.len()
         ));
+        let states = Self::unflatten_states(flattened_states);
         self.solver.tick(&states, delta_time)
     }
 

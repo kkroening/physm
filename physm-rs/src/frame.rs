@@ -26,3 +26,5 @@ pub trait Frame: Debug {
         Matrix::zeros((3, 3))
     }
 }
+
+pub type FrameBox = Box<dyn Frame>;

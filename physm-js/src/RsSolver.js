@@ -7,7 +7,7 @@ export default class RsSolver extends Solver {
     // TODO: serialize scene as json and create rs scene.
     const sceneJson = JSON.stringify(scene.toJsonObj());
     console.log('[js] Creating solver context');
-    this.context = rsWasmModule.create_solver_context(sceneJson);
+    this.context = new rsWasmModule.SolverContext(sceneJson);
     console.log('[js] Created solver context:', this.context);
   }
 

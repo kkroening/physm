@@ -1,10 +1,14 @@
 use ndarray::prelude::*;
 use std::collections::HashMap;
+use std::f64::consts::PI;
 
 use crate::Frame;
+use crate::FrameBox;
 use crate::FrameId;
 use crate::Matrix;
+use crate::RotationalFrame;
 use crate::Scene;
+use crate::State;
 use crate::TrackFrame;
 
 #[derive(Debug)]
@@ -13,15 +17,14 @@ pub struct Solver {
     pub runge_kutta: bool,
 }
 
-type FrameBox = Box<dyn Frame>;
 type FrameRefVec<'a> = Vec<&'a FrameBox>;
 type FramePath = Vec<usize>;
 type FrameIdIndexMap<'a> = HashMap<&'a FrameId, usize>;
 type FrameIndexPathMap = HashMap<usize, Vec<usize>>;
 
 impl Solver {
-    fn sort_frames(frames: &Vec<Box<dyn Frame>>) -> FrameRefVec {
-        fn visit<'a>(frame: &'a Box<dyn Frame>, sorted_frames: &mut FrameRefVec<'a>) {
+    fn sort_frames(frames: &[FrameBox]) -> Vec<&FrameBox> {
+        fn visit<'a>(frame: &'a FrameBox, sorted_frames: &mut Vec<&'a FrameBox>) {
             frame
                 .get_children()
                 .iter()
@@ -37,8 +40,8 @@ impl Solver {
         sorted_frames
     }
 
-    fn get_id_index_map<'a>(frames: &'a FrameRefVec) -> FrameIdIndexMap<'a> {
-        let mut id_index_map = HashMap::new();
+    fn get_id_index_map<'a>(frames: &'a [&FrameBox]) -> FrameIdIndexMap<'a> {
+        let mut id_index_map = FrameIdIndexMap::new();
         id_index_map.reserve(frames.len());
         frames.iter().enumerate().for_each(|(index, frame)| {
             id_index_map.insert(frame.get_id(), index);
@@ -46,9 +49,9 @@ impl Solver {
         id_index_map
     }
 
-    fn get_index_path_map(frames: &FrameRefVec) -> FrameIndexPathMap {
+    fn get_index_path_map(frames: &[&FrameBox]) -> FrameIndexPathMap {
         fn visit(
-            frame: &Box<dyn Frame>,
+            frame: &FrameBox,
             mut path: FramePath,
             id_index_map: &FrameIdIndexMap,
             index_path_map: &mut FrameIndexPathMap,
@@ -87,8 +90,8 @@ impl Solver {
     }
 
     fn get_pos_mats(
-        states: &[f64],
-        frames: &FrameRefVec,
+        states: &[State],
+        frames: &[&FrameBox],
         index_path_map: &FrameIndexPathMap,
     ) -> Vec<Matrix> {
         let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
@@ -96,7 +99,7 @@ impl Solver {
         pos_mats.reserve(frames.len());
         frames.iter().enumerate().for_each(|(index, frame)| {
             let parent_index = get_parent_index(index);
-            let pos_mat = frame.get_local_pos_matrix(states[index]);
+            let pos_mat = frame.get_local_pos_matrix(states[index].q);
             let pos_mat = match get_parent_index(index) {
                 Some(parent_index) => pos_mats[parent_index].dot(&pos_mat),
                 None => pos_mat,
@@ -118,7 +121,7 @@ impl Solver {
         self
     }
 
-    pub fn tick(&self, states: &[f64], delta_time: f64) -> i32 {
+    pub fn tick(&self, states: &[State], delta_time: f64) -> i32 {
         let frames = Self::sort_frames(&self.scene.frames);
         let index_path_map = Self::get_index_path_map(&frames);
         42
@@ -128,17 +131,59 @@ impl Solver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Position;
     use crate::Scene;
+    use crate::Weight;
+
+    const BALL_ID: &str = "ball";
+    const BALL_INDEX: usize = 0;
+    const CART_ID: &str = "cart";
+    const CART_INDEX: usize = 1;
+    const PENDULUM1_ID: &str = "pendulum1";
+    const PENDULUM1_INDEX: usize = 2;
+    const PENDULUM2_ID: &str = "pendulum2";
+    const PENDULUM2_INDEX: usize = 3;
+    const FRAME_IDS: &[&str] = &[BALL_ID, CART_ID, PENDULUM1_ID, PENDULUM2_ID];
+
+    fn get_initial_state(frame_id: &str) -> State {
+        let (q, qd) = match frame_id {
+            CART_ID => (5., 1.),
+            PENDULUM1_ID => (0.3, -1.2),
+            PENDULUM2_ID => (-0.9, 1.8),
+            BALL_ID => (0., -2.),
+            _ => panic!(),
+        };
+        State { q, qd }
+    }
+
+    fn get_sample_states() -> Vec<State> {
+        FRAME_IDS.iter().map(|id| get_initial_state(id)).collect()
+    }
 
     fn get_sample_frames() -> Vec<Box<dyn Frame>> {
-        vec![
-            Box::new(TrackFrame::new("3".into()).add_child(Box::new(TrackFrame::new("4".into())))),
-            Box::new(
-                TrackFrame::new("0".into())
-                    .add_child(Box::new(TrackFrame::new("2".into())))
-                    .add_child(Box::new(TrackFrame::new("1".into()))),
-            ),
-        ]
+        let pendulum2 = Box::new(
+            RotationalFrame::new(PENDULUM2_ID.into())
+                .set_position(Position([10., 0.]))
+                .add_weight(Weight::new(8.).set_position(Position([12., 0.]))),
+        );
+        let pendulum1 = Box::new(
+            RotationalFrame::new(PENDULUM1_ID.into())
+                .add_weight(Weight::new(5.).set_position(Position([10., 0.])))
+                .add_child(pendulum2),
+        );
+        let cart = Box::new(
+            TrackFrame::new(CART_ID.into())
+                .add_weight(Weight::new(20.))
+                .add_weight(Weight::new(3.).set_position(Position([0., 5.])))
+                .add_child(pendulum1),
+        );
+        let ball = Box::new(
+            TrackFrame::new(BALL_ID.into())
+                .set_angle(PI / 4.)
+                .set_position(Position([30., 0.]))
+                .add_weight(Weight::new(5.)),
+        );
+        vec![cart, ball]
     }
 
     #[test]
@@ -148,7 +193,7 @@ mod tests {
                 .iter()
                 .map(|frame| frame.get_id().as_str())
                 .collect::<Vec<&str>>(),
-            vec!["0", "1", "2", "3", "4"]
+            FRAME_IDS,
         );
     }
 
@@ -161,7 +206,35 @@ mod tests {
         items.sort_by_key(|(k, v)| *k);
         assert_eq!(
             format!("{:?}", items),
-            "[(0, [0]), (1, [0, 1]), (2, [0, 2]), (3, [3]), (4, [3, 4])]",
+            "[(0, [0]), (1, [1]), (2, [1, 2]), (3, [1, 2, 3])]",
+        );
+    }
+
+    #[test]
+    fn test_get_pos_mats() {
+        let states = get_sample_states();
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let index_path_map = Solver::get_index_path_map(&frames);
+        let pos_mats = Solver::get_pos_mats(&states, &frames, &index_path_map);
+        let id_index_map = Solver::get_id_index_map(&frames);
+        let local_pos_mats: Vec<Matrix> = frames
+            .iter()
+            .zip(states.iter())
+            .map(|(frame, state)| frame.get_local_pos_matrix(state.q))
+            .collect();
+        assert_eq!(pos_mats.len(), frames.len());
+        assert_eq!(pos_mats[BALL_INDEX], local_pos_mats[BALL_INDEX],);
+        assert_eq!(pos_mats[CART_INDEX], local_pos_mats[CART_INDEX],);
+        assert_eq!(
+            pos_mats[PENDULUM1_INDEX],
+            local_pos_mats[CART_INDEX].dot(&local_pos_mats[PENDULUM1_INDEX]),
+        );
+        assert_eq!(
+            pos_mats[PENDULUM2_INDEX],
+            local_pos_mats[CART_INDEX]
+                .dot(&local_pos_mats[PENDULUM1_INDEX])
+                .dot(&local_pos_mats[PENDULUM2_INDEX]),
         );
     }
 
