@@ -89,19 +89,18 @@ impl Solver {
     }
 
     fn get_pos_mats(
-        states: &[State],
         frames: &[&FrameBox],
         index_path_map: &FrameIndexPathMap,
+        states: &[State],
     ) -> Vec<Mat3> {
         let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
         let mut pos_mats = Vec::<Mat3>::new();
         pos_mats.reserve(frames.len());
         frames.iter().enumerate().for_each(|(index, frame)| {
-            let parent_index = get_parent_index(index);
-            let pos_mat = frame.get_local_pos_matrix(states[index].q);
+            let local_pos_mat = frame.get_local_pos_matrix(states[index].q);
             let pos_mat = match get_parent_index(index) {
-                Some(parent_index) => pos_mats[parent_index] * pos_mat,
-                None => pos_mat,
+                Some(parent_index) => pos_mats[parent_index] * local_pos_mat,
+                None => local_pos_mat,
             };
             pos_mats.push(pos_mat);
         });
@@ -112,6 +111,30 @@ impl Solver {
         pos_mats
             .iter()
             .map(|mat| mat.try_inverse().unwrap())
+            .collect()
+    }
+
+    fn get_vel_mats(
+        frames: &[&FrameBox],
+        index_path_map: &FrameIndexPathMap,
+        pos_mats: &[Mat3],
+        inv_pos_mats: &[Mat3],
+        states: &[State],
+    ) -> Vec<Mat3> {
+        let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
+        frames
+            .iter()
+            .enumerate()
+            .map(|(index, frame)| {
+                let inv_pos_mat = &inv_pos_mats[index];
+                let local_vel_mat = frame.get_local_vel_matrix(states[index].q);
+                let rel_vel_mat = local_vel_mat * inv_pos_mat;
+                let vel_mat = match get_parent_index(index) {
+                    Some(parent_index) => pos_mats[parent_index] * rel_vel_mat,
+                    None => rel_vel_mat,
+                };
+                vel_mat
+            })
             .collect()
     }
 
@@ -222,8 +245,7 @@ mod tests {
         let frames = get_sample_frames();
         let frames = Solver::sort_frames(&frames);
         let index_path_map = Solver::get_index_path_map(&frames);
-        let pos_mats = Solver::get_pos_mats(&states, &frames, &index_path_map);
-        let id_index_map = Solver::get_id_index_map(&frames);
+        let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
         let local_pos_mats: Vec<Mat3> = frames
             .iter()
             .zip(states.iter())
@@ -250,7 +272,7 @@ mod tests {
         let frames = get_sample_frames();
         let frames = Solver::sort_frames(&frames);
         let index_path_map = Solver::get_index_path_map(&frames);
-        let pos_mats = Solver::get_pos_mats(&states, &frames, &index_path_map);
+        let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
         let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
         let id_index_map = Solver::get_id_index_map(&frames);
         let local_pos_mats: Vec<Mat3> = frames
@@ -259,27 +281,65 @@ mod tests {
             .map(|(frame, state)| frame.get_local_pos_matrix(state.q))
             .collect();
         assert_eq!(inv_pos_mats.len(), frames.len());
-        assert_eq!(
+        assert_ulps_eq!(
             inv_pos_mats[BALL_INDEX],
             local_pos_mats[BALL_INDEX].try_inverse().unwrap()
         );
-        assert_eq!(
+        assert_ulps_eq!(
             inv_pos_mats[CART_INDEX],
             local_pos_mats[CART_INDEX].try_inverse().unwrap()
         );
-        assert_eq!(
+        assert_ulps_eq!(
             inv_pos_mats[PENDULUM1_INDEX],
             (local_pos_mats[CART_INDEX] * local_pos_mats[PENDULUM1_INDEX])
                 .try_inverse()
                 .unwrap(),
         );
-        assert_eq!(
+        assert_ulps_eq!(
             inv_pos_mats[PENDULUM2_INDEX],
             (local_pos_mats[CART_INDEX]
                 * local_pos_mats[PENDULUM1_INDEX]
                 * local_pos_mats[PENDULUM2_INDEX])
                 .try_inverse()
                 .unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_get_vel_mats() {
+        let states = get_sample_states();
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let index_path_map = Solver::get_index_path_map(&frames);
+        let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
+        let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
+        let id_index_map = Solver::get_id_index_map(&frames);
+        let vel_mats =
+            Solver::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
+        let local_vel_mats: Vec<Mat3> = frames
+            .iter()
+            .zip(states.iter())
+            .map(|(frame, state)| frame.get_local_vel_matrix(state.q))
+            .collect();
+        assert_eq!(vel_mats.len(), frames.len());
+        assert_ulps_eq!(
+            vel_mats[BALL_INDEX],
+            local_vel_mats[BALL_INDEX] * inv_pos_mats[BALL_INDEX],
+        );
+        assert_ulps_eq!(
+            vel_mats[CART_INDEX],
+            local_vel_mats[CART_INDEX] * inv_pos_mats[CART_INDEX],
+        );
+        assert_ulps_eq!(
+            vel_mats[PENDULUM1_INDEX],
+            pos_mats[CART_INDEX] * local_vel_mats[PENDULUM1_INDEX] * inv_pos_mats[PENDULUM1_INDEX],
+        );
+        assert_ulps_eq!(
+            vel_mats[PENDULUM2_INDEX],
+            pos_mats[PENDULUM1_INDEX]
+                * local_vel_mats[PENDULUM2_INDEX]
+                * inv_pos_mats[PENDULUM2_INDEX],
+            max_ulps = 4,
         );
     }
 
