@@ -1,10 +1,8 @@
-use ndarray::prelude::*;
-
 use crate::json;
 use crate::Error;
 use crate::Frame;
 use crate::FrameId;
-use crate::Matrix;
+use crate::Mat3;
 use crate::Position;
 use crate::Weight;
 
@@ -85,26 +83,37 @@ impl Frame for TrackFrame {
         &self.weights
     }
 
-    fn get_local_pos_matrix(&self, q: f64) -> Matrix {
-        arr2(&[
-            [1., 0., self.position.0[0] + q * self.angle.cos()],
-            [0., 1., self.position.0[1] + q * self.angle.sin()],
-            [0., 0., 1.],
-        ])
+    fn get_local_pos_matrix(&self, q: f64) -> Mat3 {
+        Mat3::new(
+            1.,
+            0.,
+            self.position.0[0] + q * self.angle.cos(),
+            0.,
+            1.,
+            self.position.0[1] + q * self.angle.sin(),
+            0.,
+            0.,
+            1.,
+        )
     }
 
-    fn get_local_vel_matrix(&self, _q: f64) -> Matrix {
-        arr2(&[
-            [0., 0., self.angle.cos()],
-            [0., 0., self.angle.sin()],
-            [0., 0., 0.],
-        ])
+    fn get_local_vel_matrix(&self, _q: f64) -> Mat3 {
+        Mat3::new(
+            0.,
+            0.,
+            self.angle.cos(),
+            0.,
+            0.,
+            self.angle.sin(),
+            0.,
+            0.,
+            0.,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use approx::assert_abs_diff_eq;
     use std::f64::consts::PI;
 
     use super::*;
@@ -210,25 +219,24 @@ mod tests {
     #[test]
     fn test_get_local_pos_matrix() {
         let frame = TrackFrame::new("a".to_owned());
-        assert_abs_diff_eq!(frame.get_local_pos_matrix(0.), Matrix::eye(3));
         let frame = frame.set_position(Position([3., 4.]));
         assert_abs_diff_eq!(
             frame.get_local_pos_matrix(7.),
-            arr2(&[
-                [1.000, 0.000, 10.00],
-                [0.000, 1.000, 4.000],
-                [0.000, 0.000, 1.000],
-            ]),
+            Mat3::new(
+                1.000, 0.000, 10.00, //
+                0.000, 1.000, 4.000, //
+                0.000, 0.000, 1.000, //
+            ),
             epsilon = 0.001
         );
         let frame = frame.set_angle(PI / 3.);
         assert_abs_diff_eq!(
             frame.get_local_pos_matrix(7.),
-            arr2(&[
-                [1.000, 0.000, 6.500],
-                [0.000, 1.000, 10.06],
-                [0.000, 0.000, 1.000],
-            ]),
+            Mat3::new(
+                1.000, 0.000, 6.500, //
+                0.000, 1.000, 10.06, //
+                0.000, 0.000, 1.000, //
+            ),
             epsilon = 0.01
         );
     }
@@ -238,21 +246,21 @@ mod tests {
         let frame = TrackFrame::new("a".to_owned()).set_position(Position([3., 4.]));
         assert_abs_diff_eq!(
             frame.get_local_vel_matrix(7.),
-            arr2(&[
-                [0.000, 0.000, 1.000],
-                [0.000, 0.000, 0.000],
-                [0.000, 0.000, 0.000],
-            ]),
+            Mat3::new(
+                0.000, 0.000, 1.000, //
+                0.000, 0.000, 0.000, //
+                0.000, 0.000, 0.000, //
+            ),
             epsilon = 0.001
         );
         let frame = frame.set_angle(PI / 3.);
         assert_abs_diff_eq!(
             frame.get_local_vel_matrix(7.),
-            arr2(&[
-                [0.000, 0.000, 0.500],
-                [0.000, 0.000, 0.866],
-                [0.000, 0.000, 0.000],
-            ]),
+            Mat3::new(
+                0.000, 0.000, 0.500, //
+                0.000, 0.000, 0.866, //
+                0.000, 0.000, 0.000, //
+            ),
             epsilon = 0.001
         );
     }
@@ -262,6 +270,6 @@ mod tests {
         let frame = TrackFrame::new("a".to_owned())
             .set_position(Position([3., 4.]))
             .set_angle(PI / 3.);
-        assert_abs_diff_eq!(frame.get_local_accel_matrix(PI / 3.), Array::zeros((3, 3)));
+        assert_abs_diff_eq!(frame.get_local_accel_matrix(PI / 3.), Mat3::zeros());
     }
 }

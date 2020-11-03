@@ -1,11 +1,10 @@
-use ndarray::prelude::*;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
 use crate::Frame;
 use crate::FrameBox;
 use crate::FrameId;
-use crate::Matrix;
+use crate::Mat3;
 use crate::RotationalFrame;
 use crate::Scene;
 use crate::State;
@@ -93,15 +92,15 @@ impl Solver {
         states: &[State],
         frames: &[&FrameBox],
         index_path_map: &FrameIndexPathMap,
-    ) -> Vec<Matrix> {
+    ) -> Vec<Mat3> {
         let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
-        let mut pos_mats = Vec::<Matrix>::new();
+        let mut pos_mats = Vec::<Mat3>::new();
         pos_mats.reserve(frames.len());
         frames.iter().enumerate().for_each(|(index, frame)| {
             let parent_index = get_parent_index(index);
             let pos_mat = frame.get_local_pos_matrix(states[index].q);
             let pos_mat = match get_parent_index(index) {
-                Some(parent_index) => pos_mats[parent_index].dot(&pos_mat),
+                Some(parent_index) => pos_mats[parent_index] * pos_mat,
                 None => pos_mat,
             };
             pos_mats.push(pos_mat);
@@ -218,7 +217,7 @@ mod tests {
         let index_path_map = Solver::get_index_path_map(&frames);
         let pos_mats = Solver::get_pos_mats(&states, &frames, &index_path_map);
         let id_index_map = Solver::get_id_index_map(&frames);
-        let local_pos_mats: Vec<Matrix> = frames
+        let local_pos_mats: Vec<Mat3> = frames
             .iter()
             .zip(states.iter())
             .map(|(frame, state)| frame.get_local_pos_matrix(state.q))
@@ -228,13 +227,13 @@ mod tests {
         assert_eq!(pos_mats[CART_INDEX], local_pos_mats[CART_INDEX],);
         assert_eq!(
             pos_mats[PENDULUM1_INDEX],
-            local_pos_mats[CART_INDEX].dot(&local_pos_mats[PENDULUM1_INDEX]),
+            local_pos_mats[CART_INDEX] * local_pos_mats[PENDULUM1_INDEX],
         );
         assert_eq!(
             pos_mats[PENDULUM2_INDEX],
             local_pos_mats[CART_INDEX]
-                .dot(&local_pos_mats[PENDULUM1_INDEX])
-                .dot(&local_pos_mats[PENDULUM2_INDEX]),
+                * local_pos_mats[PENDULUM1_INDEX]
+                * local_pos_mats[PENDULUM2_INDEX],
         );
     }
 

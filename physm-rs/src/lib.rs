@@ -1,4 +1,8 @@
-use ndarray::Array2;
+#[macro_use]
+extern crate approx;
+
+use nalgebra::Matrix3;
+
 use std::convert::TryInto;
 use std::fmt;
 use wasm_bindgen::prelude::*;
@@ -33,7 +37,7 @@ impl fmt::Display for Error {
     }
 }
 
-type Matrix = Array2<f64>;
+type Mat3 = Matrix3<f64>;
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Position([f64; 2]);
