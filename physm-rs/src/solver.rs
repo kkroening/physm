@@ -108,6 +108,13 @@ impl Solver {
         pos_mats
     }
 
+    fn get_inv_pos_mats(pos_mats: &[Mat3]) -> Vec<Mat3> {
+        pos_mats
+            .iter()
+            .map(|mat| mat.try_inverse().unwrap())
+            .collect()
+    }
+
     pub fn new(scene: Scene) -> Self {
         Self {
             scene: scene,
@@ -223,8 +230,8 @@ mod tests {
             .map(|(frame, state)| frame.get_local_pos_matrix(state.q))
             .collect();
         assert_eq!(pos_mats.len(), frames.len());
-        assert_eq!(pos_mats[BALL_INDEX], local_pos_mats[BALL_INDEX],);
-        assert_eq!(pos_mats[CART_INDEX], local_pos_mats[CART_INDEX],);
+        assert_eq!(pos_mats[BALL_INDEX], local_pos_mats[BALL_INDEX]);
+        assert_eq!(pos_mats[CART_INDEX], local_pos_mats[CART_INDEX]);
         assert_eq!(
             pos_mats[PENDULUM1_INDEX],
             local_pos_mats[CART_INDEX] * local_pos_mats[PENDULUM1_INDEX],
@@ -234,6 +241,45 @@ mod tests {
             local_pos_mats[CART_INDEX]
                 * local_pos_mats[PENDULUM1_INDEX]
                 * local_pos_mats[PENDULUM2_INDEX],
+        );
+    }
+
+    #[test]
+    fn test_get_inv_pos_mats() {
+        let states = get_sample_states();
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let index_path_map = Solver::get_index_path_map(&frames);
+        let pos_mats = Solver::get_pos_mats(&states, &frames, &index_path_map);
+        let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
+        let id_index_map = Solver::get_id_index_map(&frames);
+        let local_pos_mats: Vec<Mat3> = frames
+            .iter()
+            .zip(states.iter())
+            .map(|(frame, state)| frame.get_local_pos_matrix(state.q))
+            .collect();
+        assert_eq!(inv_pos_mats.len(), frames.len());
+        assert_eq!(
+            inv_pos_mats[BALL_INDEX],
+            local_pos_mats[BALL_INDEX].try_inverse().unwrap()
+        );
+        assert_eq!(
+            inv_pos_mats[CART_INDEX],
+            local_pos_mats[CART_INDEX].try_inverse().unwrap()
+        );
+        assert_eq!(
+            inv_pos_mats[PENDULUM1_INDEX],
+            (local_pos_mats[CART_INDEX] * local_pos_mats[PENDULUM1_INDEX])
+                .try_inverse()
+                .unwrap(),
+        );
+        assert_eq!(
+            inv_pos_mats[PENDULUM2_INDEX],
+            (local_pos_mats[CART_INDEX]
+                * local_pos_mats[PENDULUM1_INDEX]
+                * local_pos_mats[PENDULUM2_INDEX])
+                .try_inverse()
+                .unwrap(),
         );
     }
 
