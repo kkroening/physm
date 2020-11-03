@@ -98,8 +98,8 @@ impl Solver {
         frames.iter().enumerate().for_each(|(index, frame)| {
             let local_pos_mat = frame.get_local_pos_matrix(states[index].q);
             let pos_mat = match get_parent_index(index) {
-                Some(parent_index) => pos_mats[parent_index] * local_pos_mat,
                 None => local_pos_mat,
+                Some(parent_index) => pos_mats[parent_index] * local_pos_mat,
             };
             pos_mats.push(pos_mat);
         });
@@ -129,8 +129,8 @@ impl Solver {
                 let local_vel_mat = frame.get_local_vel_matrix(states[index].q);
                 let rel_vel_mat = local_vel_mat * inv_pos_mat;
                 let vel_mat = match get_parent_index(index) {
-                    Some(parent_index) => pos_mats[parent_index] * rel_vel_mat,
                     None => rel_vel_mat,
+                    Some(parent_index) => pos_mats[parent_index] * rel_vel_mat,
                 };
                 vel_mat
             })
@@ -153,8 +153,8 @@ impl Solver {
                 let local_accel_mat = frame.get_local_accel_matrix(states[index].q);
                 let rel_accel_mat = local_accel_mat * inv_pos_mat;
                 let accel_mat = match get_parent_index(index) {
-                    Some(parent_index) => pos_mats[parent_index] * rel_accel_mat,
                     None => rel_accel_mat,
+                    Some(parent_index) => pos_mats[parent_index] * rel_accel_mat,
                 };
                 accel_mat
             })
@@ -174,12 +174,39 @@ impl Solver {
         frames.iter().enumerate().for_each(|(index, frame)| {
             let qd_vel_mat = states[index].qd * vel_mats[index];
             let vel_sum_mat = match get_parent_index(index) {
-                Some(parent_index) => qd_vel_mat + vel_sum_mats[parent_index],
                 None => qd_vel_mat,
+                Some(parent_index) => qd_vel_mat + vel_sum_mats[parent_index],
             };
             vel_sum_mats.push(vel_sum_mat);
         });
         vel_sum_mats
+    }
+
+    fn get_accel_sum_mats(
+        frames: &[&FrameBox],
+        index_path_map: &FrameIndexPathMap,
+        pos_mats: &[Mat3],
+        vel_mats: &[Mat3],
+        accel_mats: &[Mat3],
+        vel_sum_mats: &[Mat3],
+        states: &[State],
+    ) -> Vec<Mat3> {
+        let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
+        let mut accel_sum_mats = Vec::<Mat3>::new();
+        accel_sum_mats.reserve(frames.len());
+        frames.iter().enumerate().for_each(|(index, frame)| {
+            let qd = states[index].qd;
+            let accel_sum_mat = match get_parent_index(index) {
+                None => qd * qd * accel_mats[index],
+                Some(parent_index) => {
+                    accel_sum_mats[parent_index]
+                        + qd * qd * accel_mats[index]
+                        + 2. * qd * vel_sum_mats[parent_index] * vel_mats[index]
+                }
+            };
+            accel_sum_mats.push(accel_sum_mat);
+        });
+        accel_sum_mats
     }
 
     pub fn new(scene: Scene) -> Self {
