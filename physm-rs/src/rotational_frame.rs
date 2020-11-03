@@ -1,6 +1,7 @@
 use crate::json;
 use crate::Error;
 use crate::Frame;
+use crate::FrameBox;
 use crate::FrameId;
 use crate::Mat3;
 use crate::Position;
@@ -8,7 +9,7 @@ use crate::Weight;
 
 #[derive(Debug)]
 pub struct RotationalFrame {
-    pub children: Vec<Box<dyn Frame>>,
+    pub children: Vec<FrameBox>,
     pub id: FrameId,
     pub position: Position,
     pub resistance: f64,
@@ -59,7 +60,7 @@ impl RotationalFrame {
 }
 
 impl Frame for RotationalFrame {
-    fn get_children(&self) -> &Vec<Box<dyn Frame>> {
+    fn get_children(&self) -> &[FrameBox] {
         &self.children
     }
 
@@ -71,7 +72,7 @@ impl Frame for RotationalFrame {
         self.resistance
     }
 
-    fn get_weights(&self) -> &Vec<Weight> {
+    fn get_weights(&self) -> &[Weight] {
         &self.weights
     }
 
