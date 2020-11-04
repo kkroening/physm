@@ -280,9 +280,29 @@ impl Solver {
         frames: &[&FrameBox],
         vel_mats: &[Mat3],
         index_path_map: &FrameIndexPathMap,
+        weight_offsets: &[FrameIndex],
+        weight_pos_vecs: &[Vec3],
     ) -> f64 {
+        debug_assert!(row < frames.len());
+        debug_assert!(col < frames.len());
         debug_assert!(col >= row);
-        0.
+        debug_assert_eq!(frames.len(), vel_mats.len());
+        debug_assert_eq!(frames.len(), weight_offsets.len());
+        debug_assert_eq!(frames.len(), index_path_map.len());
+        debug_assert_eq!(weight_pos_vecs.len(), *weight_offsets.last().unwrap());
+        let vel_mat1 = vel_mats[row];
+        let vel_mat2 = vel_mats[col];
+        Self::get_descendent_frames(col, &index_path_map)
+            .iter()
+            .map(|frame_index| {
+                let weight_offset = weight_offsets[*frame_index];
+                let weight_count = frames[*frame_index].get_weights().len();
+                (0..weight_count)
+                    .map(move |weight_index| weight_pos_vecs[weight_offset + weight_index])
+            })
+            .flatten()
+            .map(|weight_pos| (vel_mat1 * weight_pos).dot(&(vel_mat2 * weight_pos)))
+            .sum()
     }
 
     pub fn new(scene: Scene) -> Self {
@@ -421,7 +441,6 @@ mod tests {
         let index_path_map = Solver::get_index_path_map(&frames);
         let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
         let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
-        let id_index_map = Solver::get_id_index_map(&frames);
         let local_pos_mats: Vec<Mat3> = frames
             .iter()
             .zip(states.iter())
@@ -460,7 +479,6 @@ mod tests {
         let index_path_map = Solver::get_index_path_map(&frames);
         let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
         let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
-        let id_index_map = Solver::get_id_index_map(&frames);
         let vel_mats =
             Solver::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
         let local_vel_mats: Vec<Mat3> = frames
@@ -498,7 +516,6 @@ mod tests {
         let index_path_map = Solver::get_index_path_map(&frames);
         let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
         let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
-        let id_index_map = Solver::get_id_index_map(&frames);
         let accel_mats =
             Solver::get_accel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
         let local_accel_mats: Vec<Mat3> = frames
@@ -538,7 +555,6 @@ mod tests {
         let index_path_map = Solver::get_index_path_map(&frames);
         let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
         let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
-        let id_index_map = Solver::get_id_index_map(&frames);
         let vel_mats =
             Solver::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
         let vel_sum_mats =
@@ -573,7 +589,6 @@ mod tests {
         let index_path_map = Solver::get_index_path_map(&frames);
         let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
         let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
-        let id_index_map = Solver::get_id_index_map(&frames);
         let vel_mats =
             Solver::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
         let accel_mats =
@@ -678,6 +693,55 @@ mod tests {
         assert_eq!(
             Solver::get_descendent_frames(PENDULUM2_INDEX, &index_path_map),
             [PENDULUM2_INDEX]
+        );
+    }
+
+    fn test_get_coefficient_matrix_entry() {
+        let states = get_sample_states();
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let index_path_map = Solver::get_index_path_map(&frames);
+        let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
+        let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
+        let vel_mats =
+            Solver::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
+        let weight_offsets = Solver::get_weight_offsets(&frames);
+        let weight_pos_vecs = Solver::get_weight_pos_vecs(&frames, &pos_mats);
+        let get_weight_pos =
+            |frame_index, weight_index| weight_pos_vecs[weight_offsets[frame_index] + weight_index];
+        let get_coefficient = |row, col| {
+            Solver::get_coefficient_matrix_entry(
+                row,
+                col,
+                &frames,
+                &vel_mats,
+                &index_path_map,
+                &weight_offsets,
+                &weight_pos_vecs,
+            )
+        };
+        assert_eq!(
+            get_coefficient(BALL_INDEX, BALL_INDEX),
+            (vel_mats[BALL_INDEX] * get_weight_pos(BALL_INDEX, 0)).norm()
+        );
+        assert_eq!(get_coefficient(BALL_INDEX, CART_INDEX), 0.);
+        assert_eq!(
+            get_coefficient(CART_INDEX, CART_INDEX),
+            (vel_mats[CART_INDEX] * get_weight_pos(CART_INDEX, 0)).norm()
+                + (vel_mats[CART_INDEX] * get_weight_pos(CART_INDEX, 1)).norm()
+                + (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0)).norm()
+                + (vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm()
+        );
+        assert_eq!(
+            get_coefficient(PENDULUM2_INDEX, PENDULUM2_INDEX),
+            (vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm()
+        );
+        assert_eq!(
+            get_coefficient(PENDULUM1_INDEX, PENDULUM2_INDEX),
+            (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0))
+                .dot(&(vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0)))
+                + (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0))
+                    .dot(&(vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)))
         );
     }
 
