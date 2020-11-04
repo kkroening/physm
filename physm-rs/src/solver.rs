@@ -352,21 +352,21 @@ mod tests {
             .map(|(frame, state)| frame.get_local_pos_matrix(state.q))
             .collect();
         assert_eq!(inv_pos_mats.len(), frames.len());
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             inv_pos_mats[BALL_INDEX],
             local_pos_mats[BALL_INDEX].try_inverse().unwrap()
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             inv_pos_mats[CART_INDEX],
             local_pos_mats[CART_INDEX].try_inverse().unwrap()
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             inv_pos_mats[PENDULUM1_INDEX],
             (local_pos_mats[CART_INDEX] * local_pos_mats[PENDULUM1_INDEX])
                 .try_inverse()
                 .unwrap()
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             inv_pos_mats[PENDULUM2_INDEX],
             (local_pos_mats[CART_INDEX]
                 * local_pos_mats[PENDULUM1_INDEX]
@@ -393,24 +393,24 @@ mod tests {
             .map(|(frame, state)| frame.get_local_vel_matrix(state.q))
             .collect();
         assert_eq!(vel_mats.len(), frames.len());
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             vel_mats[BALL_INDEX],
             local_vel_mats[BALL_INDEX] * inv_pos_mats[BALL_INDEX]
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             vel_mats[CART_INDEX],
             local_vel_mats[CART_INDEX] * inv_pos_mats[CART_INDEX]
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             vel_mats[PENDULUM1_INDEX],
             pos_mats[CART_INDEX] * local_vel_mats[PENDULUM1_INDEX] * inv_pos_mats[PENDULUM1_INDEX]
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             vel_mats[PENDULUM2_INDEX],
             pos_mats[PENDULUM1_INDEX]
                 * local_vel_mats[PENDULUM2_INDEX]
                 * inv_pos_mats[PENDULUM2_INDEX],
-            max_ulps = 4
+            epsilon = 1e-4
         );
     }
 
@@ -431,26 +431,26 @@ mod tests {
             .map(|(frame, state)| frame.get_local_accel_matrix(state.q))
             .collect();
         assert_eq!(accel_mats.len(), frames.len());
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             accel_mats[BALL_INDEX],
             local_accel_mats[BALL_INDEX] * inv_pos_mats[BALL_INDEX]
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             accel_mats[CART_INDEX],
             local_accel_mats[CART_INDEX] * inv_pos_mats[CART_INDEX]
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             accel_mats[PENDULUM1_INDEX],
             pos_mats[CART_INDEX]
                 * local_accel_mats[PENDULUM1_INDEX]
                 * inv_pos_mats[PENDULUM1_INDEX]
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             accel_mats[PENDULUM2_INDEX],
             pos_mats[PENDULUM1_INDEX]
                 * local_accel_mats[PENDULUM2_INDEX]
                 * inv_pos_mats[PENDULUM2_INDEX],
-            max_ulps = 4
+            epsilon = 1e-4
         );
     }
 
@@ -468,24 +468,75 @@ mod tests {
         let vel_sum_mats =
             Solver::get_vel_sum_mats(&frames, &index_path_map, &pos_mats, &vel_mats, &states);
         assert_eq!(vel_sum_mats.len(), frames.len());
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             vel_sum_mats[BALL_INDEX],
             states[BALL_INDEX].qd * vel_mats[BALL_INDEX]
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             vel_sum_mats[CART_INDEX],
             states[CART_INDEX].qd * vel_mats[CART_INDEX]
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             vel_sum_mats[PENDULUM1_INDEX],
             states[CART_INDEX].qd * vel_mats[CART_INDEX]
                 + states[PENDULUM1_INDEX].qd * vel_mats[PENDULUM1_INDEX]
         );
-        assert_ulps_eq!(
+        assert_abs_diff_eq!(
             vel_sum_mats[PENDULUM2_INDEX],
             states[CART_INDEX].qd * vel_mats[CART_INDEX]
                 + states[PENDULUM1_INDEX].qd * vel_mats[PENDULUM1_INDEX]
                 + states[PENDULUM2_INDEX].qd * vel_mats[PENDULUM2_INDEX]
+        );
+    }
+
+    #[test]
+    fn test_get_accel_sum_mats() {
+        let states = get_sample_states();
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let index_path_map = Solver::get_index_path_map(&frames);
+        let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
+        let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
+        let id_index_map = Solver::get_id_index_map(&frames);
+        let vel_mats =
+            Solver::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
+        let accel_mats =
+            Solver::get_accel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
+        let vel_sum_mats =
+            Solver::get_vel_sum_mats(&frames, &index_path_map, &pos_mats, &vel_mats, &states);
+        let accel_sum_mats = Solver::get_accel_sum_mats(
+            &frames,
+            &index_path_map,
+            &pos_mats,
+            &vel_mats,
+            &accel_mats,
+            &vel_sum_mats,
+            &states,
+        );
+        let qds: Vec<f64> = states.iter().map(|state| state.qd).collect();
+        assert_eq!(vel_sum_mats.len(), frames.len());
+        assert_abs_diff_eq!(
+            accel_sum_mats[BALL_INDEX],
+            qds[BALL_INDEX] * qds[BALL_INDEX] * accel_mats[BALL_INDEX]
+        );
+        assert_abs_diff_eq!(
+            accel_sum_mats[CART_INDEX],
+            qds[CART_INDEX] * qds[CART_INDEX] * accel_mats[CART_INDEX]
+        );
+        assert_abs_diff_eq!(
+            accel_sum_mats[PENDULUM1_INDEX],
+            accel_sum_mats[CART_INDEX]
+                + 2. * qds[PENDULUM1_INDEX] * vel_sum_mats[CART_INDEX] * vel_mats[PENDULUM1_INDEX]
+                + qds[PENDULUM1_INDEX] * qds[PENDULUM1_INDEX] * accel_mats[PENDULUM1_INDEX]
+        );
+        assert_abs_diff_eq!(
+            accel_sum_mats[PENDULUM2_INDEX],
+            accel_sum_mats[PENDULUM1_INDEX]
+                + 2. * qds[PENDULUM2_INDEX]
+                    * vel_sum_mats[PENDULUM1_INDEX]
+                    * vel_mats[PENDULUM2_INDEX]
+                + qds[PENDULUM2_INDEX] * qds[PENDULUM2_INDEX] * accel_mats[PENDULUM2_INDEX],
+            epsilon = 1e-4
         );
     }
 
