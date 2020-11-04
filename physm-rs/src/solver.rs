@@ -257,6 +257,29 @@ impl Solver {
             .collect()
     }
 
+    fn get_descendent_frames(
+        parent_index: usize,
+        index_path_map: &FrameIndexPathMap,
+    ) -> Vec<usize> {
+        let frame_count = index_path_map.len();
+        (parent_index..frame_count)
+            .map(|child_index| (child_index, &index_path_map[&child_index]))
+            .filter(|(_, path)| path.iter().any(|index| *index == parent_index))
+            .map(|(child_index, _)| child_index)
+            .collect()
+    }
+
+    fn get_coefficient_matrix_entry(
+        row: usize,
+        col: usize,
+        frames: &[&FrameBox],
+        vel_mats: &[Mat3],
+        index_path_map: &FrameIndexPathMap,
+    ) -> f64 {
+        debug_assert!(col >= row);
+        0.
+    }
+
     pub fn new(scene: Scene) -> Self {
         Self {
             scene: scene,
@@ -628,6 +651,28 @@ mod tests {
                 pos_mats[PENDULUM1_INDEX] * frame_weights[PENDULUM1_INDEX][0].position.to_vec3(),
                 pos_mats[PENDULUM2_INDEX] * frame_weights[PENDULUM2_INDEX][0].position.to_vec3(),
             ]
+        );
+    }
+
+    fn test_get_descendent_frames() {
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let index_path_map = Solver::get_index_path_map(&frames);
+        assert_eq!(
+            Solver::get_descendent_frames(BALL_INDEX, &index_path_map),
+            [BALL_INDEX]
+        );
+        assert_eq!(
+            Solver::get_descendent_frames(CART_INDEX, &index_path_map),
+            [CART_INDEX, PENDULUM1_INDEX, PENDULUM2_INDEX]
+        );
+        assert_eq!(
+            Solver::get_descendent_frames(PENDULUM1_INDEX, &index_path_map),
+            [PENDULUM1_INDEX, PENDULUM2_INDEX]
+        );
+        assert_eq!(
+            Solver::get_descendent_frames(PENDULUM2_INDEX, &index_path_map),
+            [PENDULUM2_INDEX]
         );
     }
 
