@@ -25,6 +25,8 @@ type FramePath = Vec<FrameIndex>;
 type FrameIdIndexMap<'a> = HashMap<&'a FrameId, FrameIndex>;
 type FrameIndexPathMap = HashMap<FrameIndex, Vec<FrameIndex>>;
 
+type CoefficientMatrix = nalgebra::DMatrix<f64>;
+
 impl Solver {
     fn sort_frames(frames: &[FrameBox]) -> Vec<&FrameBox> {
         fn visit<'a>(frame: &'a FrameBox, sorted_frames: &mut Vec<&'a FrameBox>) {
@@ -262,6 +264,10 @@ impl Solver {
             .collect()
     }
 
+    fn path_contains(path: &FramePath, parent_index: FrameIndex) -> bool {
+        path.iter().any(|index| *index == parent_index)
+    }
+
     fn get_descendent_frames(
         parent_index: FrameIndex,
         index_path_map: &FrameIndexPathMap,
@@ -269,7 +275,7 @@ impl Solver {
         let frame_count = index_path_map.len();
         (parent_index..frame_count)
             .map(|child_index| (child_index, &index_path_map[&child_index]))
-            .filter(|(_, path)| path.iter().any(|index| *index == parent_index))
+            .filter(|(_, path)| Solver::path_contains(path, parent_index))
             .map(|(child_index, _)| child_index)
             .collect()
     }
@@ -285,24 +291,51 @@ impl Solver {
     ) -> f64 {
         debug_assert!(row < frames.len());
         debug_assert!(col < frames.len());
-        debug_assert!(col >= row);
         debug_assert_eq!(frames.len(), vel_mats.len());
-        debug_assert_eq!(frames.len(), weight_offsets.len());
+        debug_assert_eq!(frames.len(), weight_offsets.len() - 1);
         debug_assert_eq!(frames.len(), index_path_map.len());
         debug_assert_eq!(weight_pos_vecs.len(), *weight_offsets.last().unwrap());
-        let vel_mat1 = vel_mats[row];
-        let vel_mat2 = vel_mats[col];
-        Self::get_descendent_frames(col, &index_path_map)
-            .iter()
-            .map(|frame_index| {
-                let weight_offset = weight_offsets[*frame_index];
-                let weight_count = frames[*frame_index].get_weights().len();
-                (0..weight_count)
-                    .map(move |weight_index| weight_pos_vecs[weight_offset + weight_index])
-            })
-            .flatten()
-            .map(|weight_pos| (vel_mat1 * weight_pos).dot(&(vel_mat2 * weight_pos)))
-            .sum()
+        if col >= row && Self::path_contains(&index_path_map[&col], row) {
+            let vel_mat1 = vel_mats[row];
+            let vel_mat2 = vel_mats[col];
+            Self::get_descendent_frames(col, &index_path_map)
+                .iter()
+                .map(|frame_index| {
+                    let weight_offset = weight_offsets[*frame_index];
+                    let weight_count = frames[*frame_index].get_weights().len();
+                    (0..weight_count)
+                        .map(move |weight_index| weight_pos_vecs[weight_offset + weight_index])
+                })
+                .flatten()
+                .map(|weight_pos| (vel_mat1 * weight_pos).dot(&(vel_mat2 * weight_pos)))
+                .sum()
+        } else {
+            0.
+        }
+    }
+
+    fn get_coefficient_matrix(
+        frames: &[&FrameBox],
+        vel_mats: &[Mat3],
+        index_path_map: &FrameIndexPathMap,
+        weight_offsets: &[FrameIndex],
+        weight_pos_vecs: &[Vec3],
+    ) -> CoefficientMatrix {
+        let get_coefficient = |row, col| {
+            Solver::get_coefficient_matrix_entry(
+                row,
+                col,
+                &frames,
+                &vel_mats,
+                &index_path_map,
+                &weight_offsets,
+                &weight_pos_vecs,
+            )
+        };
+        let size = frames.len();
+        let mut coefficient_matrix = CoefficientMatrix::from_fn(size, size, get_coefficient);
+        coefficient_matrix.fill_lower_triangle_with_upper_triangle();
+        coefficient_matrix
     }
 
     pub fn new(scene: Scene) -> Self {
@@ -343,7 +376,7 @@ mod tests {
 
     fn get_initial_state(frame_id: &str) -> State {
         let (q, qd) = match frame_id {
-            CART_ID => (5., 1.),
+            CART_ID => (5., 1.5),
             PENDULUM1_ID => (0.3, -1.2),
             PENDULUM2_ID => (-0.9, 1.8),
             BALL_ID => (0., -2.),
@@ -504,7 +537,7 @@ mod tests {
             pos_mats[PENDULUM1_INDEX]
                 * local_vel_mats[PENDULUM2_INDEX]
                 * inv_pos_mats[PENDULUM2_INDEX],
-            epsilon = 1e-4
+            epsilon = 1e-8
         );
     }
 
@@ -543,7 +576,7 @@ mod tests {
             pos_mats[PENDULUM1_INDEX]
                 * local_accel_mats[PENDULUM2_INDEX]
                 * inv_pos_mats[PENDULUM2_INDEX],
-            epsilon = 1e-4
+            epsilon = 1e-8
         );
     }
 
@@ -627,7 +660,7 @@ mod tests {
                     * vel_sum_mats[PENDULUM1_INDEX]
                     * vel_mats[PENDULUM2_INDEX]
                 + qds[PENDULUM2_INDEX] * qds[PENDULUM2_INDEX] * accel_mats[PENDULUM2_INDEX],
-            epsilon = 1e-4
+            epsilon = 1e-8
         );
     }
 
@@ -674,6 +707,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn test_get_descendent_frames() {
         let frames = get_sample_frames();
         let frames = Solver::sort_frames(&frames);
@@ -696,6 +730,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn test_get_coefficient_matrix_entry() {
         let states = get_sample_states();
         let frames = get_sample_frames();
@@ -720,28 +755,77 @@ mod tests {
                 &weight_pos_vecs,
             )
         };
-        assert_eq!(
+
+        assert_abs_diff_eq!(get_coefficient(BALL_INDEX, CART_INDEX), 0.);
+        assert_abs_diff_eq!(get_coefficient(PENDULUM2_INDEX, PENDULUM1_INDEX), 0.);
+        assert_abs_diff_eq!(
             get_coefficient(BALL_INDEX, BALL_INDEX),
-            (vel_mats[BALL_INDEX] * get_weight_pos(BALL_INDEX, 0)).norm()
+            (vel_mats[BALL_INDEX] * get_weight_pos(BALL_INDEX, 0)).norm_squared()
         );
-        assert_eq!(get_coefficient(BALL_INDEX, CART_INDEX), 0.);
-        assert_eq!(
+        assert_abs_diff_eq!(
             get_coefficient(CART_INDEX, CART_INDEX),
-            (vel_mats[CART_INDEX] * get_weight_pos(CART_INDEX, 0)).norm()
-                + (vel_mats[CART_INDEX] * get_weight_pos(CART_INDEX, 1)).norm()
-                + (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0)).norm()
-                + (vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm()
+            (vel_mats[CART_INDEX] * get_weight_pos(CART_INDEX, 0)).norm_squared()
+                + (vel_mats[CART_INDEX] * get_weight_pos(CART_INDEX, 1)).norm_squared()
+                + (vel_mats[CART_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0)).norm_squared()
+                + (vel_mats[CART_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm_squared()
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
+            get_coefficient(PENDULUM1_INDEX, PENDULUM1_INDEX),
+            (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0)).norm_squared()
+                + (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm_squared()
+        );
+        assert_abs_diff_eq!(
             get_coefficient(PENDULUM2_INDEX, PENDULUM2_INDEX),
-            (vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm()
+            (vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm_squared()
         );
-        assert_eq!(
+        assert_abs_diff_eq!(
             get_coefficient(PENDULUM1_INDEX, PENDULUM2_INDEX),
             (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0))
                 .dot(&(vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0)))
                 + (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0))
-                    .dot(&(vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)))
+                    .dot(&(vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0))),
+            epsilon = 1e-8
+        );
+    }
+
+    #[test]
+    fn test_get_coefficient_matrix() {
+        let states = get_sample_states();
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let index_path_map = Solver::get_index_path_map(&frames);
+        let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
+        let inv_pos_mats = Solver::get_inv_pos_mats(&pos_mats);
+        let vel_mats =
+            Solver::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
+        let weight_offsets = Solver::get_weight_offsets(&frames);
+        let weight_pos_vecs = Solver::get_weight_pos_vecs(&frames, &pos_mats);
+        let coefficient_matrix = Solver::get_coefficient_matrix(
+            &frames,
+            &vel_mats,
+            &index_path_map,
+            &weight_offsets,
+            &weight_pos_vecs,
+        );
+        let get_coefficient = |row, col| {
+            Solver::get_coefficient_matrix_entry(
+                row,
+                col,
+                &frames,
+                &vel_mats,
+                &index_path_map,
+                &weight_offsets,
+                &weight_pos_vecs,
+            )
+        };
+        assert_eq!(coefficient_matrix.shape(), (frames.len(), frames.len()));
+        assert_eq!(
+            coefficient_matrix[(CART_INDEX, PENDULUM1_INDEX)],
+            get_coefficient(CART_INDEX, PENDULUM1_INDEX)
+        );
+        assert_eq!(
+            coefficient_matrix[(PENDULUM1_INDEX, CART_INDEX)],
+            get_coefficient(CART_INDEX, PENDULUM1_INDEX)
         );
     }
 
