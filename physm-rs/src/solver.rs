@@ -19,9 +19,11 @@ pub struct Solver {
 }
 
 type FrameRefVec<'a> = Vec<&'a FrameBox>;
-type FramePath = Vec<usize>;
-type FrameIdIndexMap<'a> = HashMap<&'a FrameId, usize>;
-type FrameIndexPathMap = HashMap<usize, Vec<usize>>;
+type FrameIndex = usize;
+
+type FramePath = Vec<FrameIndex>;
+type FrameIdIndexMap<'a> = HashMap<&'a FrameId, FrameIndex>;
+type FrameIndexPathMap = HashMap<FrameIndex, Vec<FrameIndex>>;
 
 impl Solver {
     fn sort_frames(frames: &[FrameBox]) -> Vec<&FrameBox> {
@@ -81,7 +83,10 @@ impl Solver {
         index_path_map
     }
 
-    fn get_parent_index(child_index: usize, index_path_map: &FrameIndexPathMap) -> Option<usize> {
+    fn get_parent_index(
+        child_index: FrameIndex,
+        index_path_map: &FrameIndexPathMap,
+    ) -> Option<FrameIndex> {
         let path = &index_path_map[&child_index];
         match path.len() > 1 {
             true => Some(path[path.len() - 2]),
@@ -231,7 +236,7 @@ impl Solver {
         accel_sum_mats
     }
 
-    fn get_weight_offsets(frames: &[&FrameBox]) -> Vec<usize> {
+    fn get_weight_offsets(frames: &[&FrameBox]) -> Vec<FrameIndex> {
         iter::once(0)
             .chain(frames.iter().map(|frame| frame.get_weights().len()))
             .scan(0, |acc, x| {
@@ -258,9 +263,9 @@ impl Solver {
     }
 
     fn get_descendent_frames(
-        parent_index: usize,
+        parent_index: FrameIndex,
         index_path_map: &FrameIndexPathMap,
-    ) -> Vec<usize> {
+    ) -> Vec<FrameIndex> {
         let frame_count = index_path_map.len();
         (parent_index..frame_count)
             .map(|child_index| (child_index, &index_path_map[&child_index]))
@@ -270,8 +275,8 @@ impl Solver {
     }
 
     fn get_coefficient_matrix_entry(
-        row: usize,
-        col: usize,
+        row: FrameIndex,
+        col: FrameIndex,
         frames: &[&FrameBox],
         vel_mats: &[Mat3],
         index_path_map: &FrameIndexPathMap,
@@ -307,13 +312,13 @@ mod tests {
     use crate::Weight;
 
     const BALL_ID: &str = "ball";
-    const BALL_INDEX: usize = 0;
+    const BALL_INDEX: FrameIndex = 0;
     const CART_ID: &str = "cart";
-    const CART_INDEX: usize = 1;
+    const CART_INDEX: FrameIndex = 1;
     const PENDULUM1_ID: &str = "pendulum1";
-    const PENDULUM1_INDEX: usize = 2;
+    const PENDULUM1_INDEX: FrameIndex = 2;
     const PENDULUM2_ID: &str = "pendulum2";
-    const PENDULUM2_INDEX: usize = 3;
+    const PENDULUM2_INDEX: FrameIndex = 3;
     const FRAME_IDS: &[&str] = &[BALL_ID, CART_ID, PENDULUM1_ID, PENDULUM2_ID];
 
     fn get_initial_state(frame_id: &str) -> State {
