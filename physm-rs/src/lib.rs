@@ -1,8 +1,6 @@
 #[macro_use]
 extern crate approx;
 
-use nalgebra::Matrix3;
-
 use std::convert::TryInto;
 use std::fmt;
 use wasm_bindgen::prelude::*;
@@ -37,7 +35,8 @@ impl fmt::Display for Error {
     }
 }
 
-type Mat3 = Matrix3<f64>;
+type Mat3 = nalgebra::Matrix3<f64>;
+type Vec3 = nalgebra::Vector3<f64>;
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Position([f64; 2]);
@@ -61,6 +60,10 @@ impl Position {
                     ))
                 })?,
         ))
+    }
+
+    pub fn to_vec3(&self) -> Vec3 {
+        Vec3::new(self.0[0], self.0[1], 1.)
     }
 }
 

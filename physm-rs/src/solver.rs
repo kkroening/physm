@@ -10,6 +10,7 @@ use crate::RotationalFrame;
 use crate::Scene;
 use crate::State;
 use crate::TrackFrame;
+use crate::Vec3;
 
 #[derive(Debug)]
 pub struct Solver {
@@ -93,6 +94,8 @@ impl Solver {
         index_path_map: &FrameIndexPathMap,
         states: &[State],
     ) -> Vec<Mat3> {
+        debug_assert_eq!(frames.len(), index_path_map.len());
+        debug_assert_eq!(frames.len(), states.len());
         let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
         let mut pos_mats = Vec::<Mat3>::new();
         pos_mats.reserve(frames.len());
@@ -121,6 +124,10 @@ impl Solver {
         inv_pos_mats: &[Mat3],
         states: &[State],
     ) -> Vec<Mat3> {
+        debug_assert_eq!(frames.len(), index_path_map.len());
+        debug_assert_eq!(frames.len(), pos_mats.len());
+        debug_assert_eq!(frames.len(), inv_pos_mats.len());
+        debug_assert_eq!(frames.len(), states.len());
         let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
         frames
             .iter()
@@ -145,6 +152,10 @@ impl Solver {
         inv_pos_mats: &[Mat3],
         states: &[State],
     ) -> Vec<Mat3> {
+        debug_assert_eq!(frames.len(), index_path_map.len());
+        debug_assert_eq!(frames.len(), pos_mats.len());
+        debug_assert_eq!(frames.len(), inv_pos_mats.len());
+        debug_assert_eq!(frames.len(), states.len());
         let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
         frames
             .iter()
@@ -169,6 +180,10 @@ impl Solver {
         vel_mats: &[Mat3],
         states: &[State],
     ) -> Vec<Mat3> {
+        debug_assert_eq!(frames.len(), index_path_map.len());
+        debug_assert_eq!(frames.len(), pos_mats.len());
+        debug_assert_eq!(frames.len(), vel_mats.len());
+        debug_assert_eq!(frames.len(), states.len());
         let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
         let mut vel_sum_mats = Vec::<Mat3>::new();
         vel_sum_mats.reserve(frames.len());
@@ -192,6 +207,12 @@ impl Solver {
         vel_sum_mats: &[Mat3],
         states: &[State],
     ) -> Vec<Mat3> {
+        debug_assert_eq!(frames.len(), index_path_map.len());
+        debug_assert_eq!(frames.len(), pos_mats.len());
+        debug_assert_eq!(frames.len(), vel_mats.len());
+        debug_assert_eq!(frames.len(), accel_mats.len());
+        debug_assert_eq!(frames.len(), vel_sum_mats.len());
+        debug_assert_eq!(frames.len(), states.len());
         let get_parent_index = |index| Self::get_parent_index(index, index_path_map);
         let mut accel_sum_mats = Vec::<Mat3>::new();
         accel_sum_mats.reserve(frames.len());
@@ -210,13 +231,29 @@ impl Solver {
         accel_sum_mats
     }
 
-    fn get_weight_indexes(frames: &[&FrameBox]) -> Vec<usize> {
+    fn get_weight_offsets(frames: &[&FrameBox]) -> Vec<usize> {
         iter::once(0)
             .chain(frames.iter().map(|frame| frame.get_weights().len()))
             .scan(0, |acc, x| {
                 *acc += x;
                 Some(*acc)
             })
+            .collect()
+    }
+
+    fn get_weight_pos_vecs(frames: &[&FrameBox], pos_mats: &[Mat3]) -> Vec<Vec3> {
+        debug_assert_eq!(frames.len(), pos_mats.len());
+        frames
+            .iter()
+            .zip(pos_mats.iter())
+            .map(|(frame, pos_mat)| {
+                frame
+                    .get_weights()
+                    .iter()
+                    .map(|weight| pos_mat * weight.position.to_vec3())
+                    .collect::<Vec<Vec3>>()
+            })
+            .flatten()
             .collect()
     }
 
@@ -552,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_weight_indexes() {
+    fn test_get_weight_offsets() {
         let frames = get_sample_frames();
         let frames = Solver::sort_frames(&frames);
         let counts: Vec<usize> = frames
@@ -560,7 +597,7 @@ mod tests {
             .map(|frame| frame.get_weights().len())
             .collect();
         assert_eq!(
-            Solver::get_weight_indexes(&frames),
+            Solver::get_weight_offsets(&frames),
             [
                 0,
                 counts[BALL_INDEX],
@@ -572,6 +609,26 @@ mod tests {
                     + counts[PENDULUM2_INDEX]
             ]
         )
+    }
+
+    #[test]
+    fn test_get_weight_pos_vecs() {
+        let states = get_sample_states();
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let index_path_map = Solver::get_index_path_map(&frames);
+        let pos_mats = Solver::get_pos_mats(&frames, &index_path_map, &states);
+        let frame_weights: Vec<_> = frames.iter().map(|frame| frame.get_weights()).collect();
+        assert_eq!(
+            Solver::get_weight_pos_vecs(&frames, &pos_mats),
+            [
+                pos_mats[BALL_INDEX] * frame_weights[BALL_INDEX][0].position.to_vec3(),
+                pos_mats[CART_INDEX] * frame_weights[CART_INDEX][0].position.to_vec3(),
+                pos_mats[CART_INDEX] * frame_weights[CART_INDEX][1].position.to_vec3(),
+                pos_mats[PENDULUM1_INDEX] * frame_weights[PENDULUM1_INDEX][0].position.to_vec3(),
+                pos_mats[PENDULUM2_INDEX] * frame_weights[PENDULUM2_INDEX][0].position.to_vec3(),
+            ]
+        );
     }
 
     #[test]
