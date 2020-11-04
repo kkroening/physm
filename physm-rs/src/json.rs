@@ -1,9 +1,5 @@
-use core::borrow::Borrow;
-use core::hash::Hash;
-use std::fmt::Display;
-
 use crate::Error;
-use crate::Frame;
+use crate::FrameBox;
 use crate::RotationalFrame;
 use crate::TrackFrame;
 use crate::Weight;
@@ -54,7 +50,7 @@ where
     Ok(obj.get(key).map(func).transpose()?.unwrap_or_default())
 }
 
-pub fn value_to_boxed_frame(value: &Value) -> Result<Box<dyn Frame>, Error> {
+pub fn value_to_frame(value: &Value) -> Result<FrameBox, Error> {
     // TODO: do more of the common frame parsing here (weights, etc.) instead
     // of repeating it in each Frame implementation.
     let type_name = map_value_item(value, &"type", value_to_str)?;
@@ -65,12 +61,12 @@ pub fn value_to_boxed_frame(value: &Value) -> Result<Box<dyn Frame>, Error> {
     })
 }
 
-pub fn value_to_boxed_frames(value: &Value) -> Result<Vec<Box<dyn Frame>>, Error> {
+pub fn value_to_frames(value: &Value) -> Result<Vec<FrameBox>, Error> {
     Ok(value
         .as_array()
         .ok_or_else(|| Error(format!("Expected `frames` to be an array; got {}", value)))?
         .iter()
-        .map(value_to_boxed_frame)
+        .map(value_to_frame)
         .collect::<Result<_, _>>()?)
 }
 

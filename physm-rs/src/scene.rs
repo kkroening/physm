@@ -1,13 +1,13 @@
 use crate::json;
 use crate::Error;
-use crate::Frame;
+use crate::FrameBox;
 
 const DEFAULT_GRAVITY: f64 = 10.0;
 
 #[derive(Debug)]
 pub struct Scene {
     pub gravity: f64,
-    pub frames: Vec<Box<dyn Frame>>,
+    pub frames: Vec<FrameBox>,
 }
 
 impl Scene {
@@ -23,7 +23,7 @@ impl Scene {
         self
     }
 
-    pub fn add_frame(mut self, frame: Box<dyn Frame>) -> Self {
+    pub fn add_frame(mut self, frame: FrameBox) -> Self {
         self.frames.push(frame);
         self
     }
@@ -31,7 +31,7 @@ impl Scene {
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, Error> {
         let obj = json::value_to_json_obj(value)?;
         Ok(Scene {
-            frames: json::map_obj_item_or_default(obj, "frames", json::value_to_boxed_frames)?,
+            frames: json::map_obj_item_or_default(obj, "frames", json::value_to_frames)?,
             gravity: json::map_obj_item_or_default(obj, "gravity", json::value_to_f64)?,
         })
     }

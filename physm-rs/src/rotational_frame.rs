@@ -27,7 +27,7 @@ impl RotationalFrame {
         }
     }
 
-    pub fn add_child(mut self, child: Box<dyn Frame>) -> Self {
+    pub fn add_child(mut self, child: FrameBox) -> Self {
         self.children.push(child);
         self
     }
@@ -50,7 +50,7 @@ impl RotationalFrame {
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, Error> {
         let obj = json::value_to_json_obj(value)?;
         Ok(RotationalFrame {
-            children: json::map_obj_item_or_default(obj, "frames", json::value_to_boxed_frames)?,
+            children: json::map_obj_item_or_default(obj, "frames", json::value_to_frames)?,
             id: json::map_value_item(value, &"id", json::value_to_str)?.into(),
             position: json::map_obj_item_or_default(obj, "position", Position::from_json_value)?,
             resistance: json::map_obj_item_or_default(obj, "resistance", json::value_to_f64)?,

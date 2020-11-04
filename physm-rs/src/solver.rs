@@ -1,15 +1,11 @@
 use std::collections::HashMap;
-use std::f64::consts::PI;
 use std::iter;
 
-use crate::Frame;
 use crate::FrameBox;
 use crate::FrameId;
 use crate::Mat3;
-use crate::RotationalFrame;
 use crate::Scene;
 use crate::State;
-use crate::TrackFrame;
 use crate::Vec3;
 
 #[derive(Debug)]
@@ -18,9 +14,7 @@ pub struct Solver {
     pub runge_kutta: bool,
 }
 
-type FrameRefVec<'a> = Vec<&'a FrameBox>;
 type FrameIndex = usize;
-
 type FramePath = Vec<FrameIndex>;
 type FrameIdIndexMap<'a> = HashMap<&'a FrameId, FrameIndex>;
 type FrameIndexPathMap = HashMap<FrameIndex, Vec<FrameIndex>>;
@@ -193,14 +187,14 @@ fn get_vel_sum_mats(
     let get_parent_index = |index| get_parent_index(index, index_path_map);
     let mut vel_sum_mats = Vec::<Mat3>::new();
     vel_sum_mats.reserve(frames.len());
-    frames.iter().enumerate().for_each(|(index, frame)| {
+    for index in 0..frames.len() {
         let qd_vel_mat = states[index].qd * vel_mats[index];
         let vel_sum_mat = match get_parent_index(index) {
             None => qd_vel_mat,
             Some(parent_index) => qd_vel_mat + vel_sum_mats[parent_index],
         };
         vel_sum_mats.push(vel_sum_mat);
-    });
+    }
     vel_sum_mats
 }
 
@@ -222,7 +216,7 @@ fn get_accel_sum_mats(
     let get_parent_index = |index| get_parent_index(index, index_path_map);
     let mut accel_sum_mats = Vec::<Mat3>::new();
     accel_sum_mats.reserve(frames.len());
-    frames.iter().enumerate().for_each(|(index, frame)| {
+    for index in 0..frames.len() {
         let qd = states[index].qd;
         let accel_sum_mat = match get_parent_index(index) {
             None => qd * qd * accel_mats[index],
@@ -233,7 +227,7 @@ fn get_accel_sum_mats(
             }
         };
         accel_sum_mats.push(accel_sum_mat);
-    });
+    }
     accel_sum_mats
 }
 
@@ -350,17 +344,21 @@ impl Solver {
         self
     }
 
-    pub fn tick(&self, states: &[State], delta_time: f64) -> i32 {
+    pub fn tick(&self, _states: &[State], _delta_time: f64) -> i32 {
         let frames = sort_frames(&self.scene.frames);
-        let index_path_map = get_index_path_map(&frames);
+        let _index_path_map = get_index_path_map(&frames);
         42
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::f64::consts::PI;
+
     use crate::Position;
+    use crate::RotationalFrame;
     use crate::Scene;
+    use crate::TrackFrame;
     use crate::Weight;
 
     use super::*;
@@ -433,7 +431,7 @@ mod tests {
         let frames = super::sort_frames(&frames);
         let index_path_map = super::get_index_path_map(&frames);
         let mut items = index_path_map.iter().collect::<Vec<_>>();
-        items.sort_by_key(|(k, v)| *k);
+        items.sort_by_key(|(k, _)| *k);
         assert_eq!(
             format!("{:?}", items),
             "[(0, [0]), (1, [1]), (2, [1, 2]), (3, [1, 2, 3])]"
