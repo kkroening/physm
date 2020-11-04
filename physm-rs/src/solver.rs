@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::f64::consts::PI;
+use std::iter;
 
 use crate::Frame;
 use crate::FrameBox;
@@ -207,6 +208,16 @@ impl Solver {
             accel_sum_mats.push(accel_sum_mat);
         });
         accel_sum_mats
+    }
+
+    fn get_weight_indexes(frames: &[&FrameBox]) -> Vec<usize> {
+        iter::once(0)
+            .chain(frames.iter().map(|frame| frame.get_weights().len()))
+            .scan(0, |acc, x| {
+                *acc += x;
+                Some(*acc)
+            })
+            .collect()
     }
 
     pub fn new(scene: Scene) -> Self {
@@ -538,6 +549,29 @@ mod tests {
                 + qds[PENDULUM2_INDEX] * qds[PENDULUM2_INDEX] * accel_mats[PENDULUM2_INDEX],
             epsilon = 1e-4
         );
+    }
+
+    #[test]
+    fn test_get_weight_indexes() {
+        let frames = get_sample_frames();
+        let frames = Solver::sort_frames(&frames);
+        let counts: Vec<usize> = frames
+            .iter()
+            .map(|frame| frame.get_weights().len())
+            .collect();
+        assert_eq!(
+            Solver::get_weight_indexes(&frames),
+            [
+                0,
+                counts[BALL_INDEX],
+                counts[BALL_INDEX] + counts[CART_INDEX],
+                counts[BALL_INDEX] + counts[CART_INDEX] + counts[PENDULUM1_INDEX],
+                counts[BALL_INDEX]
+                    + counts[CART_INDEX]
+                    + counts[PENDULUM1_INDEX]
+                    + counts[PENDULUM2_INDEX]
+            ]
+        )
     }
 
     #[test]
