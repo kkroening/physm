@@ -341,7 +341,7 @@ fn get_force_vector_entry(
     accel_sum_mats: &[Mat3],
     weight_offsets: &[FrameIndex],
     weight_pos_vecs: &[Vec3],
-    gravity_vec: &Vec3,
+    gravity: &Vec3,
     states: &[State],
     external_forces: &[f64],
 ) -> f64 {
@@ -370,7 +370,7 @@ fn get_force_vector_entry(
         let pos = weight_pos_vecs[weight_index];
         let kinetic_force_vec = -weight.mass * accel_sum_mats[frame_index] * pos;
         let drag_force_vec = -weight.drag * vel_sum_mats[frame_index] * pos;
-        let gravity_force_vec = weight.mass * gravity_vec;
+        let gravity_force_vec = weight.mass * gravity;
         (vel_mats[row_index] * pos).dot(&(kinetic_force_vec + drag_force_vec + gravity_force_vec))
     });
     let resistance_force = -states[row_index].qd * frames[row_index].get_resistance();
@@ -385,7 +385,7 @@ fn get_force_vector(
     accel_sum_mats: &[Mat3],
     weight_offsets: &[FrameIndex],
     weight_pos_vecs: &[Vec3],
-    gravity_vec: &Vec3,
+    gravity: &Vec3,
     states: &[State],
     external_forces: &[f64],
 ) -> ForceVector {
@@ -400,7 +400,7 @@ fn get_force_vector(
             accel_sum_mats,
             weight_offsets,
             weight_pos_vecs,
-            gravity_vec,
+            gravity,
             states,
             external_forces,
         )
@@ -410,7 +410,7 @@ fn get_force_vector(
 
 fn get_system_of_equations(
     frames: &[&FrameBox],
-    gravity_vec: &Vec3,
+    gravity: &Vec3,
     states: &[State],
     external_forces: &[f64],
 ) -> (CoefficientMatrix, ForceVector) {
@@ -446,11 +446,36 @@ fn get_system_of_equations(
         &accel_sum_mats,
         &weight_offsets,
         &weight_pos_vecs,
-        gravity_vec,
+        gravity,
         states,
         external_forces,
     );
     (coefficient_matrix, force_vector)
+}
+
+fn solve(
+    frames: &[&FrameBox],
+    gravity: &Vec3,
+    states: &[State],
+    external_forces: &[f64],
+) -> Vec<f64> {
+    let (coefficient_matrix, force_vector) =
+        get_system_of_equations(frames, gravity, states, external_forces);
+    coefficient_matrix
+        .qr()
+        .solve(&force_vector)
+        .unwrap()
+        .as_slice()
+        .to_vec()
+}
+
+fn tick_simple_mut(
+    frames: &[&FrameBox],
+    gravity: &Vec3,
+    states: &mut [State],
+    external_forces: &[f64],
+) {
+    let qdd_vec = solve(frames, gravity, states, external_forces);
 }
 
 impl Solver {
@@ -466,11 +491,10 @@ impl Solver {
         self
     }
 
-    pub fn tick_mut(&self, mut states: &[State], external_forces: &[f64], delta_time: f64) -> () {
+    pub fn tick_mut(&self, states: &mut [State], external_forces: &[f64], delta_time: f64) -> () {
         let frames = sort_frames(&self.scene.frames);
         let _index_path_map = get_index_path_map(&frames);
-        let (coeff_matrix, force_vector) =
-            get_system_of_equations(&frames, &self.scene.gravity, &states, &external_forces);
+        tick_simple_mut(&frames, &self.scene.gravity, states, external_forces);
     }
 }
 
@@ -957,10 +981,7 @@ mod tests {
         let frames = super::sort_frames(&frames);
         let index_path_map = super::get_index_path_map(&frames);
         let weight_offsets = super::get_weight_offsets(&frames);
-        let get_entry = |row_index,
-                         states: &[State],
-                         gravity_vec: &Vec3,
-                         external_forces: &[f64]| {
+        let get_entry = |row_index, states: &[State], gravity: &Vec3, external_forces: &[f64]| {
             let pos_mats = super::get_pos_mats(&frames, &index_path_map, &states);
             let inv_pos_mats = super::get_inv_pos_mats(&pos_mats);
             let vel_mats =
@@ -988,7 +1009,7 @@ mod tests {
                 &accel_sum_mats,
                 &weight_offsets,
                 &weight_pos_vecs,
-                &gravity_vec,
+                &gravity,
                 &states,
                 &external_forces,
             )

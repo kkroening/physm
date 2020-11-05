@@ -138,7 +138,7 @@ impl SolverContext {
         // ));
         let mut states = unflatten_states(flattened_states);
         let ext_forces: Vec<f64> = iter::repeat(0.).take(frame_count).collect();
-        self.solver.tick_mut(&states, &ext_forces, delta_time);
+        self.solver.tick_mut(&mut states, &ext_forces, delta_time);
         states.iter_mut().for_each(|mut state| state.q += 0.01);
         reflatten_states(flattened_states, &states);
     }
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn test_solver_context_new() {
         let context = SolverContext::_new(TEST_SCENE_JSON).unwrap();
-        assert_eq!(context.solver.scene.frames.len(), 0);
+        assert_eq!(context.solver.scene.frames.len(), 1);
         //assert_eq!(1, 0);
     }
 }
