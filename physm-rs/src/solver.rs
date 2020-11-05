@@ -408,6 +408,51 @@ fn get_force_vector(
     ForceVector::from_fn(frames.len(), get_entry)
 }
 
+fn get_system_of_equations(
+    frames: &[&FrameBox],
+    gravity_vec: &Vec3,
+    states: &[State],
+    external_forces: &[f64],
+) -> (CoefficientMatrix, ForceVector) {
+    let index_path_map = get_index_path_map(frames);
+    let pos_mats = get_pos_mats(frames, &index_path_map, states);
+    let inv_pos_mats = get_inv_pos_mats(&pos_mats);
+    let vel_mats = get_vel_mats(frames, &index_path_map, &pos_mats, &inv_pos_mats, states);
+    let vel_sum_mats = get_vel_sum_mats(frames, &index_path_map, &pos_mats, &vel_mats, states);
+    let accel_mats = get_accel_mats(frames, &index_path_map, &pos_mats, &inv_pos_mats, states);
+    let accel_sum_mats = get_accel_sum_mats(
+        frames,
+        &index_path_map,
+        &pos_mats,
+        &vel_mats,
+        &accel_mats,
+        &vel_sum_mats,
+        states,
+    );
+    let weight_offsets = get_weight_offsets(frames);
+    let weight_pos_vecs = get_weight_pos_vecs(frames, &pos_mats);
+    let coefficient_matrix = get_coefficient_matrix(
+        frames,
+        &index_path_map,
+        &vel_mats,
+        &weight_offsets,
+        &weight_pos_vecs,
+    );
+    let force_vector = get_force_vector(
+        frames,
+        &index_path_map,
+        &vel_mats,
+        &vel_sum_mats,
+        &accel_sum_mats,
+        &weight_offsets,
+        &weight_pos_vecs,
+        gravity_vec,
+        states,
+        external_forces,
+    );
+    (coefficient_matrix, force_vector)
+}
+
 impl Solver {
     pub fn new(scene: Scene) -> Self {
         Self {
@@ -991,6 +1036,20 @@ mod tests {
             let entry = get_entry(frame_index, &states, &gravity, &ext_forces);
             assert!(entry.abs() > 0.1);
         }
+    }
+
+    #[test]
+    fn test_get_system_of_equations() {
+        let states = get_sample_states();
+        let frames = get_sample_frames();
+        let frames = super::sort_frames(&frames);
+        let gravity = Vec3::new(0., -10., 0.);
+        let ext_forces: Vec<f64> = iter::repeat(2.).take(frames.len()).collect();
+        let (coeff_matrix, force_vector) =
+            super::get_system_of_equations(&frames, &gravity, &states, &ext_forces);
+        let frame_count = frames.len();
+        assert_eq!(coeff_matrix.shape(), (frame_count, frame_count));
+        assert_eq!(force_vector.shape(), (frame_count, 1));
     }
 
     #[test]
