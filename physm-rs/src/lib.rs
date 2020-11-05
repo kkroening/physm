@@ -139,7 +139,7 @@ impl SolverContext {
         let mut states = unflatten_states(flattened_states);
         let ext_forces: Vec<f64> = iter::repeat(0.).take(frame_count).collect();
         self.solver.tick_mut(&mut states, &ext_forces, delta_time);
-        states.iter_mut().for_each(|mut state| state.q += 0.01);
+        //states.iter_mut().for_each(|mut state| state.q += 0.01);
         reflatten_states(flattened_states, &states);
     }
 

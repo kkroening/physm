@@ -355,7 +355,6 @@ fn get_force_vector_entry(
     debug_assert_eq!(weight_pos_vecs.len(), *weight_offsets.last().unwrap());
     debug_assert_eq!(states.len(), frames.len());
     debug_assert_eq!(external_forces.len(), frames.len());
-    let base_vel_mat = vel_mats[row_index];
     let descendent_frames = get_descendent_frames(row_index, &index_path_map);
     let descendent_weights = descendent_frames
         .iter()
@@ -469,13 +468,22 @@ fn solve(
         .to_vec()
 }
 
+fn apply_deltas(states: &mut [State], qdd_vec: &[f64], delta_time: f64) {
+    states.iter_mut().enumerate().for_each(|(index, state)| {
+        state.q += state.qd * delta_time;
+        state.qd += qdd_vec[index] * delta_time;
+    });
+}
+
 fn tick_simple_mut(
     frames: &[&FrameBox],
     gravity: &Vec3,
     states: &mut [State],
     external_forces: &[f64],
+    delta_time: f64,
 ) {
     let qdd_vec = solve(frames, gravity, states, external_forces);
+    apply_deltas(states, &qdd_vec, delta_time);
 }
 
 impl Solver {
@@ -494,7 +502,13 @@ impl Solver {
     pub fn tick_mut(&self, states: &mut [State], external_forces: &[f64], delta_time: f64) -> () {
         let frames = sort_frames(&self.scene.frames);
         let _index_path_map = get_index_path_map(&frames);
-        tick_simple_mut(&frames, &self.scene.gravity, states, external_forces);
+        tick_simple_mut(
+            &frames,
+            &self.scene.gravity,
+            states,
+            external_forces,
+            delta_time,
+        );
     }
 }
 
