@@ -94,8 +94,8 @@ fn get_pos_mats(
     index_path_map: &FrameIndexPathMap,
     states: &[State],
 ) -> Vec<Mat3> {
-    debug_assert_eq!(frames.len(), index_path_map.len());
-    debug_assert_eq!(frames.len(), states.len());
+    debug_assert_eq!(index_path_map.len(), frames.len());
+    debug_assert_eq!(states.len(), frames.len());
     let get_parent_index = |index| get_parent_index(index, index_path_map);
     let mut pos_mats = Vec::<Mat3>::new();
     pos_mats.reserve(frames.len());
@@ -124,10 +124,10 @@ fn get_vel_mats(
     inv_pos_mats: &[Mat3],
     states: &[State],
 ) -> Vec<Mat3> {
-    debug_assert_eq!(frames.len(), index_path_map.len());
-    debug_assert_eq!(frames.len(), pos_mats.len());
-    debug_assert_eq!(frames.len(), inv_pos_mats.len());
-    debug_assert_eq!(frames.len(), states.len());
+    debug_assert_eq!(index_path_map.len(), frames.len());
+    debug_assert_eq!(pos_mats.len(), frames.len());
+    debug_assert_eq!(inv_pos_mats.len(), frames.len());
+    debug_assert_eq!(states.len(), frames.len());
     let get_parent_index = |index| get_parent_index(index, index_path_map);
     frames
         .iter()
@@ -152,10 +152,10 @@ fn get_accel_mats(
     inv_pos_mats: &[Mat3],
     states: &[State],
 ) -> Vec<Mat3> {
-    debug_assert_eq!(frames.len(), index_path_map.len());
-    debug_assert_eq!(frames.len(), pos_mats.len());
-    debug_assert_eq!(frames.len(), inv_pos_mats.len());
-    debug_assert_eq!(frames.len(), states.len());
+    debug_assert_eq!(index_path_map.len(), frames.len());
+    debug_assert_eq!(pos_mats.len(), frames.len());
+    debug_assert_eq!(inv_pos_mats.len(), frames.len());
+    debug_assert_eq!(states.len(), frames.len());
     let get_parent_index = |index| get_parent_index(index, index_path_map);
     frames
         .iter()
@@ -180,10 +180,10 @@ fn get_vel_sum_mats(
     vel_mats: &[Mat3],
     states: &[State],
 ) -> Vec<Mat3> {
-    debug_assert_eq!(frames.len(), index_path_map.len());
-    debug_assert_eq!(frames.len(), pos_mats.len());
-    debug_assert_eq!(frames.len(), vel_mats.len());
-    debug_assert_eq!(frames.len(), states.len());
+    debug_assert_eq!(index_path_map.len(), frames.len());
+    debug_assert_eq!(pos_mats.len(), frames.len());
+    debug_assert_eq!(vel_mats.len(), frames.len());
+    debug_assert_eq!(states.len(), frames.len());
     let get_parent_index = |index| get_parent_index(index, index_path_map);
     let mut vel_sum_mats = Vec::<Mat3>::new();
     vel_sum_mats.reserve(frames.len());
@@ -207,12 +207,12 @@ fn get_accel_sum_mats(
     vel_sum_mats: &[Mat3],
     states: &[State],
 ) -> Vec<Mat3> {
-    debug_assert_eq!(frames.len(), index_path_map.len());
-    debug_assert_eq!(frames.len(), pos_mats.len());
-    debug_assert_eq!(frames.len(), vel_mats.len());
-    debug_assert_eq!(frames.len(), accel_mats.len());
-    debug_assert_eq!(frames.len(), vel_sum_mats.len());
-    debug_assert_eq!(frames.len(), states.len());
+    debug_assert_eq!(index_path_map.len(), frames.len());
+    debug_assert_eq!(pos_mats.len(), frames.len());
+    debug_assert_eq!(vel_mats.len(), frames.len());
+    debug_assert_eq!(accel_mats.len(), frames.len());
+    debug_assert_eq!(vel_sum_mats.len(), frames.len());
+    debug_assert_eq!(states.len(), frames.len());
     let get_parent_index = |index| get_parent_index(index, index_path_map);
     let mut accel_sum_mats = Vec::<Mat3>::new();
     accel_sum_mats.reserve(frames.len());
@@ -242,7 +242,7 @@ fn get_weight_offsets(frames: &[&FrameBox]) -> Vec<FrameIndex> {
 }
 
 fn get_weight_pos_vecs(frames: &[&FrameBox], pos_mats: &[Mat3]) -> Vec<Vec3> {
-    debug_assert_eq!(frames.len(), pos_mats.len());
+    debug_assert_eq!(pos_mats.len(), frames.len());
     frames
         .iter()
         .zip(pos_mats.iter())
@@ -274,28 +274,28 @@ fn get_descendent_frames(
 }
 
 fn get_coefficient_matrix_entry(
-    row: FrameIndex,
-    col: FrameIndex,
+    row_index: FrameIndex,
+    col_index: FrameIndex,
     frames: &[&FrameBox],
-    vel_mats: &[Mat3],
     index_path_map: &FrameIndexPathMap,
+    vel_mats: &[Mat3],
     weight_offsets: &[FrameIndex],
     weight_pos_vecs: &[Vec3],
 ) -> f64 {
-    debug_assert!(row < frames.len());
-    debug_assert!(col < frames.len());
-    debug_assert_eq!(frames.len(), vel_mats.len());
-    debug_assert_eq!(frames.len(), weight_offsets.len() - 1);
-    debug_assert_eq!(frames.len(), index_path_map.len());
+    debug_assert!(row_index < frames.len());
+    debug_assert!(col_index < frames.len());
+    debug_assert_eq!(index_path_map.len(), frames.len());
+    debug_assert_eq!(vel_mats.len(), frames.len());
+    debug_assert_eq!(weight_offsets.len() - 1, frames.len());
     debug_assert_eq!(weight_pos_vecs.len(), *weight_offsets.last().unwrap());
-    if col >= row && path_contains(&index_path_map[&col], row) {
-        let vel_mat1 = vel_mats[row];
-        let vel_mat2 = vel_mats[col];
-        get_descendent_frames(col, &index_path_map)
+    if col_index >= row_index && path_contains(&index_path_map[&col_index], row_index) {
+        let vel_mat1 = vel_mats[row_index];
+        let vel_mat2 = vel_mats[col_index];
+        get_descendent_frames(col_index, &index_path_map)
             .iter()
-            .map(|frame_index| {
-                let weight_offset = weight_offsets[*frame_index];
-                let weight_count = frames[*frame_index].get_weights().len();
+            .map(|&frame_index| {
+                let weight_offset = weight_offsets[frame_index];
+                let weight_count = frames[frame_index].get_weights().len();
                 (0..weight_count)
                     .map(move |weight_index| weight_pos_vecs[weight_offset + weight_index])
             })
@@ -309,18 +309,18 @@ fn get_coefficient_matrix_entry(
 
 fn get_coefficient_matrix(
     frames: &[&FrameBox],
-    vel_mats: &[Mat3],
     index_path_map: &FrameIndexPathMap,
+    vel_mats: &[Mat3],
     weight_offsets: &[FrameIndex],
     weight_pos_vecs: &[Vec3],
 ) -> CoefficientMatrix {
-    let get_coefficient = |row, col| {
+    let get_coefficient = |row_index, col_index| {
         get_coefficient_matrix_entry(
-            row,
-            col,
+            row_index,
+            col_index,
             &frames,
-            &vel_mats,
             &index_path_map,
+            &vel_mats,
             &weight_offsets,
             &weight_pos_vecs,
         )
@@ -329,6 +329,51 @@ fn get_coefficient_matrix(
     let mut coefficient_matrix = CoefficientMatrix::from_fn(size, size, get_coefficient);
     coefficient_matrix.fill_lower_triangle_with_upper_triangle();
     coefficient_matrix
+}
+
+fn get_force_vector_entry(
+    row_index: usize,
+    frames: &[&FrameBox],
+    index_path_map: &FrameIndexPathMap,
+    vel_mats: &[Mat3],
+    vel_sum_mats: &[Mat3],
+    accel_sum_mats: &[Mat3],
+    weight_offsets: &[FrameIndex],
+    weight_pos_vecs: &[Vec3],
+    gravity_vec: &Vec3,
+    states: &[State],
+    external_forces: &[f64],
+) -> f64 {
+    debug_assert!(row_index < frames.len());
+    debug_assert_eq!(vel_mats.len(), frames.len());
+    debug_assert_eq!(index_path_map.len(), frames.len());
+    debug_assert_eq!(vel_mats.len(), frames.len());
+    debug_assert_eq!(vel_sum_mats.len(), frames.len());
+    debug_assert_eq!(accel_sum_mats.len(), frames.len());
+    debug_assert_eq!(weight_offsets.len() - 1, frames.len());
+    debug_assert_eq!(weight_pos_vecs.len(), *weight_offsets.last().unwrap());
+    debug_assert_eq!(states.len(), frames.len());
+    debug_assert_eq!(external_forces.len(), frames.len());
+    let base_vel_mat = vel_mats[row_index];
+    let descendent_frames = get_descendent_frames(row_index, &index_path_map);
+    let descendent_weights = descendent_frames
+        .iter()
+        .map(|&frame_index| {
+            let weight_offset = weight_offsets[frame_index];
+            frames[frame_index].get_weights().iter().enumerate().map(
+                move |(weight_index, weight)| (frame_index, weight_offset + weight_index, weight),
+            )
+        })
+        .flatten();
+    let weight_forces = descendent_weights.map(|(frame_index, weight_index, weight)| {
+        let pos = weight_pos_vecs[weight_index];
+        let kinetic_force_vec = -weight.mass * accel_sum_mats[frame_index] * pos;
+        let drag_force_vec = -weight.drag * vel_sum_mats[frame_index] * pos;
+        let gravity_force_vec = weight.mass * gravity_vec;
+        (vel_mats[row_index] * pos).dot(&(kinetic_force_vec + drag_force_vec + gravity_force_vec))
+    });
+    let resistance_force = -states[row_index].qd * frames[row_index].get_resistance();
+    resistance_force + weight_forces.sum::<f64>() + external_forces[row_index]
 }
 
 impl Solver {
@@ -743,13 +788,13 @@ mod tests {
         let weight_pos_vecs = super::get_weight_pos_vecs(&frames, &pos_mats);
         let get_weight_pos =
             |frame_index, weight_index| weight_pos_vecs[weight_offsets[frame_index] + weight_index];
-        let get_coefficient = |row, col| {
+        let get_coefficient = |row_index, col_index| {
             super::get_coefficient_matrix_entry(
-                row,
-                col,
+                row_index,
+                col_index,
                 &frames,
-                &vel_mats,
                 &index_path_map,
+                &vel_mats,
                 &weight_offsets,
                 &weight_pos_vecs,
             )
@@ -801,18 +846,18 @@ mod tests {
         let weight_pos_vecs = super::get_weight_pos_vecs(&frames, &pos_mats);
         let coefficient_matrix = super::get_coefficient_matrix(
             &frames,
-            &vel_mats,
             &index_path_map,
+            &vel_mats,
             &weight_offsets,
             &weight_pos_vecs,
         );
-        let get_coefficient = |row, col| {
+        let get_coefficient = |row_index, col_index| {
             super::get_coefficient_matrix_entry(
-                row,
-                col,
+                row_index,
+                col_index,
                 &frames,
-                &vel_mats,
                 &index_path_map,
+                &vel_mats,
                 &weight_offsets,
                 &weight_pos_vecs,
             )
@@ -826,6 +871,94 @@ mod tests {
             coefficient_matrix[(PENDULUM1_INDEX, CART_INDEX)],
             get_coefficient(CART_INDEX, PENDULUM1_INDEX)
         );
+    }
+
+    #[test]
+    fn test_get_force_vector_entry() {
+        let frames = get_sample_frames();
+        let frames = super::sort_frames(&frames);
+        let index_path_map = super::get_index_path_map(&frames);
+        let weight_offsets = super::get_weight_offsets(&frames);
+        let get_entry = |row_index,
+                         states: &[State],
+                         gravity_vec: &Vec3,
+                         external_forces: &[f64]| {
+            let pos_mats = super::get_pos_mats(&frames, &index_path_map, &states);
+            let inv_pos_mats = super::get_inv_pos_mats(&pos_mats);
+            let vel_mats =
+                super::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
+            let vel_sum_mats =
+                super::get_vel_sum_mats(&frames, &index_path_map, &pos_mats, &vel_mats, &states);
+            let accel_mats =
+                super::get_accel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
+            let accel_sum_mats = super::get_accel_sum_mats(
+                &frames,
+                &index_path_map,
+                &pos_mats,
+                &vel_mats,
+                &accel_mats,
+                &vel_sum_mats,
+                &states,
+            );
+            let weight_pos_vecs = super::get_weight_pos_vecs(&frames, &pos_mats);
+            super::get_force_vector_entry(
+                row_index,
+                &frames,
+                &index_path_map,
+                &vel_mats,
+                &vel_sum_mats,
+                &accel_sum_mats,
+                &weight_offsets,
+                &weight_pos_vecs,
+                &gravity_vec,
+                &states,
+                &external_forces,
+            )
+        };
+
+        let states = get_sample_states();
+        let gravity = Vec3::new(0., -10., 0.);
+        let ext_forces: Vec<f64> = iter::repeat(2.).take(frames.len()).collect();
+        let zero_states: Vec<State> = states
+            .iter()
+            .map(|state| State { q: state.q, qd: 0. })
+            .collect();
+        let zero_gravity = Vec3::new(0., 0., 0.);
+        let zero_ext_forces: Vec<f64> = iter::repeat(0.).take(frames.len()).collect();
+        for frame_index in 0..frames.len() {
+            let entry = get_entry(frame_index, &zero_states, &zero_gravity, &zero_ext_forces);
+            // Absence of momentum, gravity, and external forces implies no net force:
+            assert_eq!(entry, 0.);
+        }
+        for frame_index in 0..frames.len() {
+            let entry = get_entry(frame_index, &states, &zero_gravity, &zero_ext_forces);
+            if frame_index == BALL_INDEX {
+                // The ball is moving downwards without resistance and thus experiences no net
+                // force in absence of gravity/ext-forces:
+                assert_eq!(entry, 0.);
+            } else {
+                // But everything else has a net force, including the cart, since the pendulums
+                // tug on the cart and the pendulums experience centripetal force:
+                assert!(entry.abs() > 0.1);
+            }
+        }
+        for frame_index in 0..frames.len() {
+            let entry = get_entry(frame_index, &zero_states, &gravity, &zero_ext_forces);
+            if frame_index == CART_INDEX {
+                // Gravity doesn't affect the cart since it moves horizontally:
+                assert_eq!(entry, 0.);
+            } else {
+                assert!(entry.abs() > 0.1);
+            }
+        }
+        for frame_index in 0..frames.len() {
+            let entry = get_entry(frame_index, &zero_states, &zero_gravity, &ext_forces);
+            assert!(entry.abs() > 0.1);
+        }
+        for frame_index in 0..frames.len() {
+            let entry = get_entry(frame_index, &states, &gravity, &ext_forces);
+            assert!(entry.abs() > 0.1);
+        }
     }
 
     #[test]
