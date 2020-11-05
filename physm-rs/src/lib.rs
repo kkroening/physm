@@ -3,6 +3,7 @@ extern crate approx;
 
 use std::convert::TryInto;
 use std::fmt;
+use std::iter;
 use wasm_bindgen::prelude::*;
 
 #[cfg(not(test))]
@@ -34,6 +35,8 @@ impl fmt::Display for Error {
         write!(f, "{}", self.0)
     }
 }
+
+impl std::error::Error for Error {}
 
 type Mat3 = nalgebra::Matrix3<f64>;
 type Vec3 = nalgebra::Vector3<f64>;
@@ -87,13 +90,30 @@ pub struct SolverContext {
     solver: Box<Solver>,
 }
 
+fn unflatten_states(flattened_states: &[f64]) -> Vec<State> {
+    flattened_states
+        .chunks(2)
+        .map(|state| State {
+            q: state[0],
+            qd: state[1],
+        })
+        .collect()
+}
+
+fn reflatten_states(flattened_states: &mut [f64], new_states: &[State]) {
+    for (index, state) in new_states.iter().enumerate() {
+        flattened_states[index * 2] = state.q;
+        flattened_states[index * 2 + 1] = state.qd;
+    }
+}
+
 #[wasm_bindgen]
 impl SolverContext {
     fn _new(scene_json: &str) -> Result<SolverContext, Box<dyn std::error::Error>> {
-        let v: serde_json::Value = serde_json::from_str(scene_json)?;
-        log(&format!("{:?}", v));
-        let scene = Scene::new(); // TODO: deserialize.
+        let json_value: serde_json::Value = serde_json::from_str(scene_json)?;
+        let scene = Scene::from_json_value(&json_value)?;
         let solver = Box::new(Solver::new(scene));
+        log(&format!("[rs] Solver: {:?}", solver));
         Ok(SolverContext { solver })
     }
 
@@ -107,24 +127,19 @@ impl SolverContext {
         Self::_new(scene_json).map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
-    fn unflatten_states(flattened_states: &[f64]) -> Vec<State> {
-        flattened_states
-            .chunks(2)
-            .map(|state| State {
-                q: state[0],
-                qd: state[1],
-            })
-            .collect()
-    }
-
-    pub fn tick(&self, flattened_states: &[f64], delta_time: f64) -> i32 {
-        log(&format!("Ticking from Rust; delta_time={}", delta_time));
-        log(&format!(
-            "Number of frames: {}",
-            self.solver.scene.frames.len()
-        ));
-        let states = Self::unflatten_states(flattened_states);
-        self.solver.tick(&states, delta_time)
+    pub fn tick(&self, flattened_states: &mut [f64], delta_time: f64) -> () {
+        let frame_count = self.solver.scene.frames.len();
+        // log(&format!("Ticking from Rust; delta_time={}", delta_time));
+        // log(&format!("Solver: {:?}", self.solver));
+        // log(&format!("Number of frames: {}", frame_count));
+        // log(&format!(
+        //     "Number of state elements: {}",
+        //     flattened_states.len()
+        // ));
+        let mut states = unflatten_states(flattened_states);
+        let ext_forces: Vec<f64> = iter::repeat(0.).take(flattened_states.len() / 2).collect();
+        self.solver.tick_mut(&states, &ext_forces, delta_time);
+        reflatten_states(flattened_states, &states);
     }
 
     pub fn dispose(self) {

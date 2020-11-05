@@ -466,10 +466,11 @@ impl Solver {
         self
     }
 
-    pub fn tick(&self, _states: &[State], _delta_time: f64) -> i32 {
+    pub fn tick_mut(&self, mut states: &[State], external_forces: &[f64], delta_time: f64) -> () {
         let frames = sort_frames(&self.scene.frames);
         let _index_path_map = get_index_path_map(&frames);
-        42
+        let (coeff_matrix, force_vector) =
+            get_system_of_equations(&frames, &self.scene.gravity, &states, &external_forces);
     }
 }
 

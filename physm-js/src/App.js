@@ -30,12 +30,11 @@ const cartMass = 250;
 const cartForce = 7000;
 const cartResistance = 5;
 
-//const DefaultSolverClass = JsSolver;
-const DefaultSolverClass = RsSolver;
 const initialScale = 10;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
-const TARGET_PHYSICS_FPS = 120;
+const TARGET_PHYSICS_FPS = 400;
+const TIME_SCALE = 0.8;
 
 const segments = Array(ropeSegmentCount)
   .fill()
@@ -159,7 +158,7 @@ const useAnimationFrame = (callback, { fps = TARGET_ANIMATION_FPS } = {}) => {
 
   React.useEffect(() => {
     function animate(time = required('time')) {
-      const deltaTime = (time - state.current.prevTime) / 1000;
+      const deltaTime = ((time - state.current.prevTime) / 1000) * TIME_SCALE;
       const delay = Math.max(1000 / fps - deltaTime, 0);
       state.current.callback(deltaTime);
       state.current.prevTime = time;
@@ -261,10 +260,10 @@ function getViewXformMatrix(translation, scale) {
 function createSolver(
   scene = required('scene'),
   rsWasmModule = required('rsWasmModule'),
-  SolverClass = DefaultSolverClass,
 ) {
   console.log('[js] Creating solver');
-  const solver = new SolverClass(scene, rsWasmModule);
+  //const solver = new JsSolver(scene, { rungeKutta: false });
+  const solver = new RsSolver(scene, rsWasmModule );
   window.solver = solver; // (for debugging)
   console.log('[js] Solver:', solver);
   return solver;
@@ -324,9 +323,7 @@ function App({ rsWasmModule }) {
         <div className="plot__main">
           <svg className="plot__svg">{sceneDomElement}</svg>
         </div>
-        <button onClick={togglePaused}>
-          {paused ? 'Resume melting of CPU' : 'Pause'}
-        </button>
+        <button onClick={togglePaused}>{paused ? 'Unpause' : 'Pause'}</button>
       </div>
     </div>
   );

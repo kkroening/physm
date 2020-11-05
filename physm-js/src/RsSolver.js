@@ -2,7 +2,10 @@ import Solver from './Solver';
 import { required } from './utils';
 
 export default class RsSolver extends Solver {
-  constructor(scene = required('scene'), rsWasmModule = required('rsWasmModule')) {
+  constructor(
+    scene = required('scene'),
+    rsWasmModule = required('rsWasmModule'),
+  ) {
     super(scene);
     // TODO: serialize scene as json and create rs scene.
     const sceneJson = JSON.stringify(scene.toJsonObj());
@@ -24,7 +27,14 @@ export default class RsSolver extends Solver {
     externalForceMap = null,
   ) {
     console.log(`[js] RsSolver.tick: deltaTime=${deltaTime}`);
-    this.context.tick(deltaTime);
+    let flattenedStates = new Float64Array(
+      this.scene.sortedFrames.flatMap(
+        (frame) => stateMap.get(frame.id) || [0, 0],
+      ),
+    );
+    console.log('[js] flattenedStates before:', flattenedStates);
+    this.context.tick(flattenedStates, deltaTime);
+    console.log('[js] flattenedStates after:', flattenedStates);
     return stateMap;
   }
 }

@@ -1,24 +1,25 @@
 use crate::json;
 use crate::Error;
 use crate::FrameBox;
+use crate::Vec3;
 
-const DEFAULT_GRAVITY: f64 = 10.0;
+const DEFAULT_GRAVITY: &[f64] = &[0., -10.0, 0.];
 
 #[derive(Debug)]
 pub struct Scene {
-    pub gravity: f64,
+    pub gravity: Vec3,
     pub frames: Vec<FrameBox>,
 }
 
 impl Scene {
     pub fn new() -> Self {
         Self {
-            gravity: DEFAULT_GRAVITY,
+            gravity: Vec3::from_column_slice(DEFAULT_GRAVITY),
             frames: Vec::new(),
         }
     }
 
-    pub fn set_gravity(mut self, gravity: f64) -> Self {
+    pub fn set_gravity(mut self, gravity: Vec3) -> Self {
         self.gravity = gravity;
         self
     }
@@ -32,7 +33,11 @@ impl Scene {
         let obj = json::value_to_json_obj(value)?;
         Ok(Scene {
             frames: json::map_obj_item_or_default(obj, "frames", json::value_to_frames)?,
-            gravity: json::map_obj_item_or_default(obj, "gravity", json::value_to_f64)?,
+            gravity: Vec3::new(
+                0.,
+                -1. * json::map_obj_item_or_default(obj, "gravity", json::value_to_f64)?,
+                0.,
+            ),
         })
     }
 }
@@ -46,12 +51,12 @@ mod tests {
     #[test]
     fn test_new() {
         let scene = Scene::new();
-        assert_eq!(scene.gravity, DEFAULT_GRAVITY);
+        assert_eq!(scene.gravity, Vec3::from_column_slice(DEFAULT_GRAVITY));
         assert_eq!(scene.frames.len(), 0);
         let scene = scene
-            .set_gravity(12.0)
+            .set_gravity(Vec3::new(0., -12., 0.))
             .add_frame(Box::new(TrackFrame::new("a".into())));
-        assert_eq!(scene.gravity, 12.0);
+        assert_eq!(scene.gravity, Vec3::new(0., -12., 0.));
         assert_eq!(scene.frames.len(), 1);
     }
 
@@ -76,10 +81,11 @@ mod tests {
             }"#;
         let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
         let actual_scene = Scene::from_json_value(&json_value).unwrap();
-        let expected_scene = Scene::new().set_gravity(5.1).add_frame(Box::new(
-            TrackFrame::new("a".into()).add_child(Box::new(RotationalFrame::new("b".into()))),
-        ));
-        assert_eq!(actual_scene.gravity, 5.1);
+        let expected_scene = Scene::new()
+            .set_gravity(Vec3::new(0., -5.1, 0.))
+            .add_frame(Box::new(
+                TrackFrame::new("a".into()).add_child(Box::new(RotationalFrame::new("b".into()))),
+            ));
         assert_eq!(
             format!("{:?}", actual_scene.frames),
             format!("{:?}", expected_scene.frames)
