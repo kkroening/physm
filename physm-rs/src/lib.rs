@@ -128,7 +128,7 @@ impl SolverContext {
     }
 
     pub fn tick(&self, flattened_states: &mut [f64], delta_time: f64) -> () {
-        let frame_count = self.solver.scene.frames.len();
+        let frame_count = flattened_states.len() / 2;
         // log(&format!("Ticking from Rust; delta_time={}", delta_time));
         // log(&format!("Solver: {:?}", self.solver));
         // log(&format!("Number of frames: {}", frame_count));
@@ -137,8 +137,9 @@ impl SolverContext {
         //     flattened_states.len()
         // ));
         let mut states = unflatten_states(flattened_states);
-        let ext_forces: Vec<f64> = iter::repeat(0.).take(flattened_states.len() / 2).collect();
+        let ext_forces: Vec<f64> = iter::repeat(0.).take(frame_count).collect();
         self.solver.tick_mut(&states, &ext_forces, delta_time);
+        states.iter_mut().for_each(|mut state| state.q += 0.01);
         reflatten_states(flattened_states, &states);
     }
 
