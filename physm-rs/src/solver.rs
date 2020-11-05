@@ -20,6 +20,7 @@ type FrameIdIndexMap<'a> = HashMap<&'a FrameId, FrameIndex>;
 type FrameIndexPathMap = HashMap<FrameIndex, Vec<FrameIndex>>;
 
 type CoefficientMatrix = nalgebra::DMatrix<f64>;
+type ForceVector = nalgebra::DVector<f64>;
 
 fn sort_frames(frames: &[FrameBox]) -> Vec<&FrameBox> {
     fn visit<'a>(frame: &'a FrameBox, sorted_frames: &mut Vec<&'a FrameBox>) {
@@ -374,6 +375,37 @@ fn get_force_vector_entry(
     });
     let resistance_force = -states[row_index].qd * frames[row_index].get_resistance();
     resistance_force + weight_forces.sum::<f64>() + external_forces[row_index]
+}
+
+fn get_force_vector(
+    frames: &[&FrameBox],
+    index_path_map: &FrameIndexPathMap,
+    vel_mats: &[Mat3],
+    vel_sum_mats: &[Mat3],
+    accel_sum_mats: &[Mat3],
+    weight_offsets: &[FrameIndex],
+    weight_pos_vecs: &[Vec3],
+    gravity_vec: &Vec3,
+    states: &[State],
+    external_forces: &[f64],
+) -> ForceVector {
+    let get_entry = |row, col| {
+        debug_assert_eq!(col, 0);
+        get_force_vector_entry(
+            row,
+            frames,
+            index_path_map,
+            vel_mats,
+            vel_sum_mats,
+            accel_sum_mats,
+            weight_offsets,
+            weight_pos_vecs,
+            gravity_vec,
+            states,
+            external_forces,
+        )
+    };
+    ForceVector::from_fn(frames.len(), get_entry)
 }
 
 impl Solver {
