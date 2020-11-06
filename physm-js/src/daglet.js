@@ -3,14 +3,13 @@ export const defaultGetNodeKey = (x) => x;
 
 export function toposort(
   nodes,
-  { getNodeParents = undefined, getNodeKey = undefined } = {},
+  { getNodeParents = undefined, getNodeKey = undefined } = {}
 ) {
   getNodeParents = getNodeParents || defaultGetNodeParents;
   getNodeKey = getNodeKey || defaultGetNodeKey;
   const markedNodes = new Set();
   const sortedNodes = [];
   const sortedKeys = [];
-  const unvisitedNodes = [...nodes];
 
   function visit(node, child) {
     const nodeKey = getNodeKey(node);
@@ -29,16 +28,13 @@ export function toposort(
     }
   }
 
-  while (unvisitedNodes.length) {
-    const node = unvisitedNodes.pop();
-    visit(node, null);
-  }
+  [...nodes].forEach((node) => visit(node, null));
   return sortedNodes;
 }
 
 export function getChildMap(
   nodes,
-  { getNodeParents = undefined, getNodeKey = undefined } = {},
+  { getNodeParents = undefined, getNodeKey = undefined } = {}
 ) {
   getNodeParents = getNodeParents || defaultGetNodeParents;
   getNodeKey = getNodeKey || defaultGetNodeKey;
@@ -67,7 +63,7 @@ export function transform(
     getNodeKey = undefined,
     visitNode = undefined,
     visitEdge = undefined,
-  } = {},
+  } = {}
 ) {
   getNodeParents = getNodeParents || defaultGetNodeParents;
   getNodeKey = getNodeKey || defaultGetNodeKey;
@@ -100,7 +96,7 @@ export function transformNodes(
     getNodeParents = undefined,
     getNodeKey = undefined,
     visitNode = undefined,
-  } = {},
+  } = {}
 ) {
   const [nodeMap] = transform(nodes, {
     getNodeParents: getNodeParents,
@@ -116,7 +112,7 @@ export function transformEdges(
     getNodeParents = undefined,
     getNodeKey = undefined,
     visitEdge = undefined,
-  } = {},
+  } = {}
 ) {
   const [, edgeMap] = transform(nodes, {
     getNodeParents: getNodeParents,

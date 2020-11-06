@@ -12,7 +12,8 @@ describe('toposort function', () => {
     const node3 = { name: 'node3', parents: [node2] };
     const node4 = { name: 'node4', parents: [node1, node3] };
     const node5 = { name: 'node5', parents: [node1, node4] };
-    const sortedNodes = toposort([node5]);
+    const node6 = { name: 'node6', parents: [] };
+    const sortedNodes = toposort([node5, node6]);
     const sortedNodeNames = sortedNodes.map((x) => x.name);
     expect(sortedNodeNames).toStrictEqual([
       node1.name,
@@ -20,6 +21,7 @@ describe('toposort function', () => {
       node3.name,
       node4.name,
       node5.name,
+      node6.name,
     ]);
   });
 
