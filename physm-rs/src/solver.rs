@@ -925,7 +925,10 @@ mod tests {
             super::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
         let weight_offsets = super::get_weight_offsets(&frames);
         let weight_pos_vecs = super::get_weight_pos_vecs(&frames, &pos_mats);
-        let get_weight_pos =
+        let get_mass = |frame_index: usize, weight_index: usize| {
+            frames[frame_index].get_weights()[weight_index].mass
+        };
+        let get_pos =
             |frame_index, weight_index| weight_pos_vecs[weight_offsets[frame_index] + weight_index];
         let get_coefficient = |row_index, col_index| {
             super::get_coefficient_matrix_entry(
@@ -943,30 +946,39 @@ mod tests {
         assert_abs_diff_eq!(get_coefficient(PENDULUM2_INDEX, PENDULUM1_INDEX), 0.);
         assert_abs_diff_eq!(
             get_coefficient(BALL_INDEX, BALL_INDEX),
-            (vel_mats[BALL_INDEX] * get_weight_pos(BALL_INDEX, 0)).norm_squared()
+            get_mass(BALL_INDEX, 0)
+                * (vel_mats[BALL_INDEX] * get_pos(BALL_INDEX, 0)).norm_squared()
         );
         assert_abs_diff_eq!(
             get_coefficient(CART_INDEX, CART_INDEX),
-            (vel_mats[CART_INDEX] * get_weight_pos(CART_INDEX, 0)).norm_squared()
-                + (vel_mats[CART_INDEX] * get_weight_pos(CART_INDEX, 1)).norm_squared()
-                + (vel_mats[CART_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0)).norm_squared()
-                + (vel_mats[CART_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm_squared()
+            get_mass(CART_INDEX, 0)
+                * (vel_mats[CART_INDEX] * get_pos(CART_INDEX, 0)).norm_squared()
+                + get_mass(CART_INDEX, 1)
+                    * (vel_mats[CART_INDEX] * get_pos(CART_INDEX, 1)).norm_squared()
+                + get_mass(PENDULUM1_INDEX, 0)
+                    * (vel_mats[CART_INDEX] * get_pos(PENDULUM1_INDEX, 0)).norm_squared()
+                + get_mass(PENDULUM2_INDEX, 0)
+                    * (vel_mats[CART_INDEX] * get_pos(PENDULUM2_INDEX, 0)).norm_squared()
         );
         assert_abs_diff_eq!(
             get_coefficient(PENDULUM1_INDEX, PENDULUM1_INDEX),
-            (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0)).norm_squared()
-                + (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm_squared()
+            get_mass(PENDULUM1_INDEX, 0)
+                * (vel_mats[PENDULUM1_INDEX] * get_pos(PENDULUM1_INDEX, 0)).norm_squared()
+                + get_mass(PENDULUM2_INDEX, 0)
+                    * (vel_mats[PENDULUM1_INDEX] * get_pos(PENDULUM2_INDEX, 0)).norm_squared()
         );
         assert_abs_diff_eq!(
             get_coefficient(PENDULUM2_INDEX, PENDULUM2_INDEX),
-            (vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0)).norm_squared()
+            get_mass(PENDULUM2_INDEX, 0)
+                * (vel_mats[PENDULUM2_INDEX] * get_pos(PENDULUM2_INDEX, 0)).norm_squared()
         );
         assert_abs_diff_eq!(
             get_coefficient(PENDULUM1_INDEX, PENDULUM2_INDEX),
-            (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0))
-                .dot(&(vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM1_INDEX, 0)))
-                + (vel_mats[PENDULUM1_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0))
-                    .dot(&(vel_mats[PENDULUM2_INDEX] * get_weight_pos(PENDULUM2_INDEX, 0))),
+            get_mass(PENDULUM2_INDEX, 0)
+                * ((vel_mats[PENDULUM1_INDEX] * get_pos(PENDULUM1_INDEX, 0))
+                    .dot(&(vel_mats[PENDULUM2_INDEX] * get_pos(PENDULUM1_INDEX, 0)))
+                    + (vel_mats[PENDULUM1_INDEX] * get_pos(PENDULUM2_INDEX, 0))
+                        .dot(&(vel_mats[PENDULUM2_INDEX] * get_pos(PENDULUM2_INDEX, 0)))),
             epsilon = 1e-8
         );
     }
@@ -1148,8 +1160,8 @@ mod tests {
                 );
                 assert!(delta_q.abs() > 0.02);
                 assert!(delta_q.abs() < 0.5);
-                assert!(delta_qd.abs() > 0.1);
-                assert!(delta_qd.abs() < 1.);
+                assert!(delta_qd.abs() > 0.01);
+                assert!(delta_qd.abs() < 2.);
             },
         );
     }

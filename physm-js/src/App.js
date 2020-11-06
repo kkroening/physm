@@ -21,11 +21,11 @@ import { useState } from 'react';
 
 const poiMass = 60;
 const poiDrag = 20;
-const ropeSegmentLength = 4;
+const ropeSegmentLength = 3;
 const ropeSegmentDrag = 8;
 const ropeSegmentMass = 1;
 const ropeSegmentResistance = 20;
-const ropeSegmentCount = 4;
+const ropeSegmentCount = 8;
 const cartMass = 250;
 const cartForce = 7000;
 const cartResistance = 5;
@@ -33,7 +33,7 @@ const cartResistance = 5;
 const initialScale = 10;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
-const TARGET_PHYSICS_FPS = 300;
+const TARGET_PHYSICS_FPS = 500;
 const TIME_SCALE = 1;
 
 const segments = Array(ropeSegmentCount)

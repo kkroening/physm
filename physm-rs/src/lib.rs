@@ -128,19 +128,10 @@ impl SolverContext {
         Self::_new(scene_json).map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
-    pub fn tick(&self, flattened_states: &mut [f64], delta_time: f64) -> () {
+    pub fn tick(&self, flattened_states: &mut [f64], delta_time: f64, ext_forces: &[f64]) -> () {
         let frame_count = flattened_states.len() / 2;
-        // log(&format!("Ticking from Rust; delta_time={}", delta_time));
-        // log(&format!("Solver: {:?}", self.solver));
-        // log(&format!("Number of frames: {}", frame_count));
-        // log(&format!(
-        //     "Number of state elements: {}",
-        //     flattened_states.len()
-        // ));
         let mut states = unflatten_states(flattened_states);
-        let ext_forces: Vec<f64> = iter::repeat(0.).take(frame_count).collect();
         self.solver.tick_mut(&mut states, &ext_forces, delta_time);
-        //states.iter_mut().for_each(|mut state| state.q += 0.01);
         reflatten_states(flattened_states, &states);
     }
 

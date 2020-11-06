@@ -12,6 +12,7 @@ export default class RsSolver extends Solver {
     console.log('[js] Creating solver context');
     this.context = new rsWasmModule.SolverContext(sceneJson);
     this.stateBuffer = new Float64Array(this.scene.sortedFrames.length * 2);
+    this.extForceBuffer = new Float64Array(this.scene.sortedFrames.length);
     console.log('[js] Created solver context:', this.context);
   }
 
@@ -22,33 +23,27 @@ export default class RsSolver extends Solver {
     this.context = null;
   }
 
-  _flattenStateMap(stateMap = required('stateMap')) {
+  tick(
+    stateMap = required('stateMap'),
+    deltaTime = required('deltaTime'),
+    externalForceMap = null,
+  ) {
     this.stateBuffer.set(
       this.scene.sortedFrames.flatMap(
         (frame) => stateMap.get(frame.id) || [0, 0],
       ),
     );
-  }
-
-  _unflattenStateMap() {
+    this.extForceBuffer.set(
+      this.scene.sortedFrames.map((frame) =>
+        externalForceMap ? externalForceMap.get(frame.id) || 0 : 0,
+      ),
+    );
+    this.context.tick(this.stateBuffer, deltaTime, this.extForceBuffer);
     return new Map(
       this.scene.sortedFrames.map((frame, index) => [
         frame.id,
         [this.stateBuffer[index * 2], this.stateBuffer[index * 2 + 1]],
       ]),
     );
-  }
-
-  tick(
-    stateMap = required('stateMap'),
-    deltaTime = required('deltaTime'),
-    externalForceMap = null,
-  ) {
-    //console.log(`[js] RsSolver.tick: deltaTime=${deltaTime}`);
-    this._flattenStateMap(stateMap);
-    //console.log('[js] stateBuffer before:', this.stateBuffer);
-    this.context.tick(this.stateBuffer, deltaTime);
-    //console.log('[js] stateBuffer after:', this.stateBuffer);
-    return stateMap = this._unflattenStateMap();
   }
 }
