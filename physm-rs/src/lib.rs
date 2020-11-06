@@ -3,7 +3,6 @@ extern crate approx;
 
 use std::convert::TryInto;
 use std::fmt;
-use std::iter;
 use wasm_bindgen::prelude::*;
 
 #[cfg(not(test))]
@@ -87,6 +86,7 @@ pub fn log(s: &str) {
 }
 
 #[wasm_bindgen]
+#[derive(Debug)]
 pub struct SolverContext {
     solver: Box<Solver>,
 }
@@ -129,10 +129,14 @@ impl SolverContext {
     }
 
     pub fn tick(&self, flattened_states: &mut [f64], delta_time: f64, ext_forces: &[f64]) -> () {
-        let frame_count = flattened_states.len() / 2;
         let mut states = unflatten_states(flattened_states);
         self.solver.tick_mut(&mut states, &ext_forces, delta_time);
         reflatten_states(flattened_states, &states);
+    }
+
+    #[wasm_bindgen(js_name = setRungeKutta)]
+    pub fn set_runge_kutta(&mut self, runge_kutta: bool) {
+        self.solver.runge_kutta = runge_kutta;
     }
 
     pub fn dispose(self) {

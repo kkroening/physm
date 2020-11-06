@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::iter;
 
-use crate::log;
 use crate::FrameBox;
 use crate::FrameId;
 use crate::Mat3;
@@ -505,7 +504,7 @@ impl Solver {
     pub fn new(scene: Scene) -> Self {
         Self {
             scene: scene,
-            runge_kutta: false,
+            runge_kutta: true,
         }
     }
 

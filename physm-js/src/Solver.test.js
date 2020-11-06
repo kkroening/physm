@@ -6,7 +6,7 @@ import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { checkTfMemory } from './testutils';
 
-describe('Solver subclasses', () => {
+describe('Solver subclass cross-validation', () => {
   const scene = new Scene({
     frames: [
       new TrackFrame({
@@ -56,13 +56,19 @@ describe('Solver subclasses', () => {
       name: 'JsSolver with rungeKutta=false',
       createSolver: () => new JsSolver(scene, { rungeKutta: false }),
     },
-    // {
-    //   name: 'JsSolver with rungeKutta=true',
-    //   createSolver: () => new JsSolver(scene, { rungeKutta: true }),
-    // },
+    {
+      name: 'JsSolver with rungeKutta=true',
+      createSolver: () => new JsSolver(scene, { rungeKutta: true }),
+    },
     {
       name: 'RsSolver with rungeKutta=false',
-      createSolver: async () => new RsSolver(scene, await loadRsWasmModule()),
+      createSolver: async () =>
+        new RsSolver(scene, await loadRsWasmModule(), { runge_kutta: false }),
+    },
+    {
+      name: 'RsSolver with rungeKutta=true',
+      createSolver: async () =>
+        new RsSolver(scene, await loadRsWasmModule(), { runge_kutta: true }),
     },
   ];
 
@@ -70,8 +76,6 @@ describe('Solver subclasses', () => {
 
   solverInfos.forEach((solverInfo, solverIndex) => {
     test(solverInfo.name, async () => {
-      console.log(scene.frames.map((frame) => frame.id));
-      console.log(scene.sortedFrames.map((frame) => frame.id));
       const solver = await solverInfo.createSolver();
       const MAX_TIME_INDEX = 1;
       const DELTA_TIME = 1 / 60;

@@ -5,12 +5,14 @@ export default class RsSolver extends Solver {
   constructor(
     scene = required('scene'),
     rsWasmModule = required('rsWasmModule'),
+    { rungeKutta = true } = {},
   ) {
     super(scene);
     // TODO: serialize scene as json and create rs scene.
     const sceneJson = JSON.stringify(scene.toJsonObj());
     console.log('[js] Creating solver context');
     this.context = new rsWasmModule.SolverContext(sceneJson);
+    this.context.setRungeKutta(rungeKutta);
     this.stateBuffer = new Float64Array(this.scene.sortedFrames.length * 2);
     this.extForceBuffer = new Float64Array(this.scene.sortedFrames.length);
     console.log('[js] Created solver context:', this.context);

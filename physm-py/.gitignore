@@ -1,3 +1,6 @@
-/anims
+/anims/
+/out/
 anim*.mp4
 node_modules/
+out.mp4
+out.png
