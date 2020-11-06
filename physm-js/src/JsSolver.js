@@ -1,16 +1,16 @@
-import * as tf from "./tfjs";
-import Solver from "./Solver";
-import { invertXformMatrix } from "./utils";
-import { required } from "./utils";
-import { solveLinearSystem } from "./utils";
+import * as tf from './tfjs';
+import Solver from './Solver';
+import { invertXformMatrix } from './utils';
+import { required } from './utils';
+import { solveLinearSystem } from './utils';
 
 export default class JsSolver extends Solver {
-  constructor(scene = required("scene"), { rungeKutta = true } = {}) {
+  constructor(scene = required('scene'), { rungeKutta = true } = {}) {
     super(scene);
     this.rungeKutta = rungeKutta;
   }
 
-  _getPosMatMap(stateMap = required("stateMap")) {
+  _getPosMatMap(stateMap = required('stateMap')) {
     /**
      * Determine all the local->global position transformation matrices,
      * indexed by frame.
@@ -29,7 +29,7 @@ export default class JsSolver extends Solver {
     return posMatMap;
   }
 
-  _getInvPosMatMap(posMatMap = required("posMatMap")) {
+  _getInvPosMatMap(posMatMap = required('posMatMap')) {
     /**
      * Determine all the global->local ("inverse") position transformation
      * matrices, indexed by frame.
@@ -38,14 +38,14 @@ export default class JsSolver extends Solver {
       [...posMatMap].map(([frameId, posMat]) => [
         frameId,
         invertXformMatrix(posMat),
-      ])
+      ]),
     );
   }
 
   _getVelMatMap(
-    posMatMap = required("posMatMap"),
-    invPosMatMap = required("invPosMatMap"),
-    stateMap = required("stateMap")
+    posMatMap = required('posMatMap'),
+    invPosMatMap = required('invPosMatMap'),
+    stateMap = required('stateMap'),
   ) {
     /**
      * Determine all the global position -> global velocity transformation
@@ -65,14 +65,14 @@ export default class JsSolver extends Solver {
           : relVelMat.clone();
         tf.dispose([localVelMat, relVelMat]);
         return [frame.id, globalVelMat];
-      })
+      }),
     );
   }
 
   _getAccelMatMap(
-    posMatMap = required("posMatMap"),
-    invPosMatMap = required("invPosMatMap"),
-    stateMap = required("stateMap")
+    posMatMap = required('posMatMap'),
+    invPosMatMap = required('invPosMatMap'),
+    stateMap = required('stateMap'),
   ) {
     /**
      * Global position -> global acceleration, indexed by frame, where each
@@ -90,14 +90,14 @@ export default class JsSolver extends Solver {
           : relAccelMat.clone();
         tf.dispose([localAccelMat, relAccelMat]);
         return [frame.id, globalAccelMat];
-      })
+      }),
     );
   }
 
   _getVelSumMatMap(
-    posMatMap = required("posMatMap"),
-    velMatMap = required("velMatMap"),
-    stateMap = required("stateMap")
+    posMatMap = required('posMatMap'),
+    velMatMap = required('velMatMap'),
+    stateMap = required('stateMap'),
   ) {
     const velSumMatMap = new Map();
     for (let frame of this.scene.sortedFrames) {
@@ -114,11 +114,11 @@ export default class JsSolver extends Solver {
   }
 
   _getAccelSumMatMap(
-    posMatMap = required("posMatMap"),
-    velMatMap = required("velMatMap"),
-    accelMatMap = required("accelMatMap"),
-    velSumMatMap = required("velSumMatMap"),
-    stateMap = required("stateMap")
+    posMatMap = required('posMatMap'),
+    velMatMap = required('velMatMap'),
+    accelMatMap = required('accelMatMap'),
+    velSumMatMap = required('velSumMatMap'),
+    stateMap = required('stateMap'),
   ) {
     const accelSumMatMap = new Map();
     for (let frame of this.scene.sortedFrames) {
@@ -145,7 +145,7 @@ export default class JsSolver extends Solver {
     return accelSumMatMap;
   }
 
-  _getWeightPosMap(posMatMap = required("posMatMap")) {
+  _getWeightPosMap(posMatMap = required('posMatMap')) {
     /**
      * Transform all the weight positions of all the frames into global
      * positions, indexed by frame and mass reference.
@@ -154,15 +154,15 @@ export default class JsSolver extends Solver {
       this.scene.sortedFrames.map((frame) => [
         frame.id,
         frame.weights.map((weight) =>
-          posMatMap.get(frame.id).matMul(weight.position)
+          posMatMap.get(frame.id).matMul(weight.position),
         ),
-      ])
+      ]),
     );
   }
 
   _isFrameDescendent(
-    descendentFrame = required("descendentFrame"),
-    ancestorFrame = required("ancestorFrame")
+    descendentFrame = required('descendentFrame'),
+    ancestorFrame = required('ancestorFrame'),
   ) {
     return (
       this.scene.frameIdPathMap
@@ -172,8 +172,8 @@ export default class JsSolver extends Solver {
   }
 
   _getDescendentFrame(
-    frame1 = required("frame1"),
-    frame2 = required("frame2")
+    frame1 = required('frame1'),
+    frame2 = required('frame2'),
   ) {
     let descendent;
     if (this._isFrameDescendent(frame1, frame2)) {
@@ -186,17 +186,17 @@ export default class JsSolver extends Solver {
     return descendent;
   }
 
-  _getDescendentFrames(ancestorFrame = required("ancestorFrame")) {
+  _getDescendentFrames(ancestorFrame = required('ancestorFrame')) {
     return this.scene.sortedFrames.filter((frame) =>
-      this._isFrameDescendent(frame, ancestorFrame)
+      this._isFrameDescendent(frame, ancestorFrame),
     );
   }
 
   _getCoefficientMatrixEntry(
-    rowIndex = required("rowIndex"),
-    colIndex = required("colIndex"),
-    velMatMap = required("velMatMap"),
-    weightPosMap = required("weightPosMap")
+    rowIndex = required('rowIndex'),
+    colIndex = required('colIndex'),
+    velMatMap = required('velMatMap'),
+    weightPosMap = required('weightPosMap'),
   ) {
     const frame1 = this.scene.sortedFrames[rowIndex];
     const frame2 = this.scene.sortedFrames[colIndex];
@@ -222,8 +222,8 @@ export default class JsSolver extends Solver {
   }
 
   _getCoefficientMatrix(
-    velMatMap = required("velMatMap"),
-    weightPosMap = required("weightPosMap")
+    velMatMap = required('velMatMap'),
+    weightPosMap = required('weightPosMap'),
   ) {
     const numFrames = this.scene.sortedFrames.length;
     const array = Array(numFrames);
@@ -234,7 +234,7 @@ export default class JsSolver extends Solver {
           rowIndex,
           colIndex,
           velMatMap,
-          weightPosMap
+          weightPosMap,
         );
       }
       array[rowIndex] = columns;
@@ -243,13 +243,13 @@ export default class JsSolver extends Solver {
   }
 
   _getForceVectorEntry(
-    baseFrame = required("baseFrame"),
-    velMatMap = required("velMatMap"),
-    velSumMatMap = required("velSumMatMap"),
-    accelSumMatMap = required("accelSumMatMap"),
-    weightPosMap = required("weightPosMap"),
-    stateMap = required("stateMap"),
-    externalForceMap = required("externalForceMap")
+    baseFrame = required('baseFrame'),
+    velMatMap = required('velMatMap'),
+    velSumMatMap = required('velSumMatMap'),
+    accelSumMatMap = required('accelSumMatMap'),
+    weightPosMap = required('weightPosMap'),
+    stateMap = required('stateMap'),
+    externalForceMap = required('externalForceMap'),
   ) {
     let result = 0;
     const baseVelMat = velMatMap.get(baseFrame.id);
@@ -291,12 +291,12 @@ export default class JsSolver extends Solver {
   }
 
   _getForceVector(
-    velMatMap = required("velMatMap"),
-    velSumMatMap = required("velSumMatMap"),
-    accelSumMatMap = required("accelSumMatMap"),
-    weightPosMap = required("weightPosMap"),
-    stateMap = required("stateMap"),
-    externalForceMap = required("externalForceMap")
+    velMatMap = required('velMatMap'),
+    velSumMatMap = required('velSumMatMap'),
+    accelSumMatMap = required('accelSumMatMap'),
+    weightPosMap = required('weightPosMap'),
+    stateMap = required('stateMap'),
+    externalForceMap = required('externalForceMap'),
   ) {
     const numFrames = this.scene.sortedFrames.length;
     const array = Array(numFrames);
@@ -308,15 +308,15 @@ export default class JsSolver extends Solver {
         accelSumMatMap,
         weightPosMap,
         stateMap,
-        externalForceMap
+        externalForceMap,
       );
     }
     return tf.tensor2d(array, [numFrames, 1]);
   }
 
   _getSystemOfEquations(
-    stateMap = required("stateMap"),
-    externalForceMap = required("externalForceMap")
+    stateMap = required('stateMap'),
+    externalForceMap = required('externalForceMap'),
   ) {
     const posMatMap = this._getPosMatMap(stateMap);
     const invPosMatMap = this._getInvPosMatMap(posMatMap);
@@ -328,9 +328,19 @@ export default class JsSolver extends Solver {
       velMatMap,
       accelMatMap,
       velSumMatMap,
-      stateMap
+      stateMap,
     );
     const weightPosMap = this._getWeightPosMap(posMatMap);
+    // console.log(
+    //   '[js] accelSumMatMap:',
+    //   [...accelSumMatMap].map(([frameId, m]) => [...m.dataSync()]),
+    // );
+    // console.log(
+    //   '[js] weightPosMap:',
+    //   [...weightPosMap].flatMap(([frameId, ms]) =>
+    //     ms.map((m) => [...m.dataSync()]),
+    //   ),
+    // );
     const aMat = this._getCoefficientMatrix(velMatMap, weightPosMap);
     const bVec = this._getForceVector(
       velMatMap,
@@ -338,7 +348,7 @@ export default class JsSolver extends Solver {
       accelSumMatMap,
       weightPosMap,
       stateMap,
-      externalForceMap
+      externalForceMap,
     );
     tf.dispose([
       ...posMatMap.values(),
@@ -353,21 +363,22 @@ export default class JsSolver extends Solver {
   }
 
   _solve(
-    stateMap = required("stateMap"),
-    externalForceMap = required("externalForceMap")
+    stateMap = required('stateMap'),
+    externalForceMap = required('externalForceMap'),
   ) {
     const [aMat, bVec] = this._getSystemOfEquations(stateMap, externalForceMap);
     const qddArray = solveLinearSystem(aMat, bVec, { asTensor: false });
+    //console.log('A:', aMat.dataSync(), 'B:', bVec.dataSync());
     tf.dispose([aMat, bVec]);
     return qddArray;
   }
 
   _applyDeltas(
-    stateMap = required("stateMap"),
-    deltaTime = required("deltaTime"),
-    deltaQddArray = required("deltaQddArray"),
+    stateMap = required('stateMap'),
+    deltaTime = required('deltaTime'),
+    deltaQddArray = required('deltaQddArray'),
     deltaQdArray = undefined,
-    { inPlace = false } = {}
+    { inPlace = false } = {},
   ) {
     const newStateMap = inPlace ? stateMap : new Map();
     if (deltaQdArray == null) {
@@ -386,18 +397,18 @@ export default class JsSolver extends Solver {
   }
 
   _tickSimple(
-    stateMap = required("stateMap"),
-    deltaTime = required("deltaTime"),
-    externalForceMap = required("externalForceMap")
+    stateMap = required('stateMap'),
+    deltaTime = required('deltaTime'),
+    externalForceMap = required('externalForceMap'),
   ) {
     const qddArray = this._solve(stateMap, externalForceMap);
     return this._applyDeltas(stateMap, deltaTime, qddArray);
   }
 
   _tickRungeKutta(
-    stateMap = required("stateMap"),
-    deltaTime = required("deltaTime"),
-    externalForceMap = required("externalForceMap")
+    stateMap = required('stateMap'),
+    deltaTime = required('deltaTime'),
+    externalForceMap = required('externalForceMap'),
   ) {
     const solve = (stateMap) => this._solve(stateMap, externalForceMap);
 
@@ -418,19 +429,19 @@ export default class JsSolver extends Solver {
     const qdds3 = solve(stateMap3);
 
     const qds = this.scene.sortedFrames.map(
-      (_, i) => (qds0[i] + 2 * qds1[i] + 2 * qds2[i] + qds3[i]) / 6
+      (_, i) => (qds0[i] + 2 * qds1[i] + 2 * qds2[i] + qds3[i]) / 6,
     );
     const qdds = this.scene.sortedFrames.map(
-      (_, i) => (qdds0[i] + 2 * qdds1[i] + 2 * qdds2[i] + qdds3[i]) / 6
+      (_, i) => (qdds0[i] + 2 * qdds1[i] + 2 * qdds2[i] + qdds3[i]) / 6,
     );
 
     return this._applyDeltas(stateMap0, deltaTime, qdds, qds);
   }
 
   tick(
-    stateMap = required("stateMap"),
-    deltaTime = required("deltaTime"),
-    externalForceMap = null
+    stateMap = required('stateMap'),
+    deltaTime = required('deltaTime'),
+    externalForceMap = null,
   ) {
     const doTick = this.rungeKutta ? this._tickRungeKutta : this._tickSimple;
     return doTick.bind(this)(stateMap, deltaTime, externalForceMap);

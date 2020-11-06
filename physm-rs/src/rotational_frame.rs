@@ -77,6 +77,7 @@ impl Frame for RotationalFrame {
     }
 
     fn get_local_pos_matrix(&self, q: f64) -> Mat3 {
+        // TODO: use nalgebra's isometry.
         Mat3::new(
             q.cos(),
             -q.sin(),

@@ -296,13 +296,13 @@ fn get_coefficient_matrix_entry(
         get_descendent_frames(col_index, &index_path_map)
             .iter()
             .map(|&frame_index| {
-                let weight_offset = weight_offsets[frame_index];
-                let weight_count = frames[frame_index].get_weights().len();
-                (0..weight_count)
-                    .map(move |weight_index| weight_pos_vecs[weight_offset + weight_index])
+                let weights = frames[frame_index].get_weights();
+                let offset = weight_offsets[frame_index];
+                (0..weights.len())
+                    .map(move |index| (weights[index].mass, weight_pos_vecs[offset + index]))
             })
             .flatten()
-            .map(|weight_pos| (vel_mat1 * weight_pos).dot(&(vel_mat2 * weight_pos)))
+            .map(|(mass, weight_pos)| mass * (vel_mat1 * weight_pos).dot(&(vel_mat2 * weight_pos)))
             .sum()
     } else {
         0.
@@ -431,6 +431,13 @@ fn get_system_of_equations(
     );
     let weight_offsets = get_weight_offsets(frames);
     let weight_pos_vecs = get_weight_pos_vecs(frames, &pos_mats);
+    // log(&format!(
+    //     "[rs] weight_pos_vecs: {:?}",
+    //     weight_pos_vecs
+    //         .iter()
+    //         .map(|m| m.transpose().as_slice().to_owned())
+    //         .collect::<Vec<_>>()
+    // ));
     let coefficient_matrix = get_coefficient_matrix(
         frames,
         index_path_map,
@@ -462,11 +469,11 @@ fn solve(
 ) -> Vec<f64> {
     let (coefficient_matrix, force_vector) =
         get_system_of_equations(frames, index_path_map, gravity, states, external_forces);
-    log(&format!(
-        "A: {:?}; b: {:?}",
-        coefficient_matrix.as_slice(),
-        force_vector.as_slice()
-    ));
+    // log(&format!(
+    //     "A: {:?}; b: {:?}",
+    //     coefficient_matrix.as_slice(),
+    //     force_vector.as_slice()
+    // ));
     coefficient_matrix
         .qr()
         .solve(&force_vector)
@@ -509,6 +516,13 @@ impl Solver {
 
     pub fn tick_mut(&self, states: &mut [State], external_forces: &[f64], delta_time: f64) -> () {
         let frames = sort_frames(&self.scene.frames);
+        // log(&format!(
+        //     "[rs] frames: {:?}",
+        //     frames
+        //         .iter()
+        //         .map(|frame| frame.get_id())
+        //         .collect::<Vec<&String>>()
+        // ));
         let index_path_map = get_index_path_map(&frames);
         tick_simple_mut(
             &frames,

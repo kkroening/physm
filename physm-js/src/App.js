@@ -33,8 +33,8 @@ const cartResistance = 5;
 const initialScale = 10;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
-const TARGET_PHYSICS_FPS = 400;
-const TIME_SCALE = 0.8;
+const TARGET_PHYSICS_FPS = 300;
+const TIME_SCALE = 1;
 
 const segments = Array(ropeSegmentCount)
   .fill()
@@ -54,7 +54,7 @@ const segments = Array(ropeSegmentCount)
     return [
       new RotationalFrame({
         id: `segment${index}`,
-        initialState: last ? [Math.PI * -0.3, 0] : [0, 0],
+        initialState: last ? [Math.PI * 0.3, 0] : [0, 0],
         decals: [
           new LineDecal({
             endPos: [ropeSegmentLength, 0],
@@ -84,6 +84,7 @@ const cart = new TrackFrame({
     }),
   ],
   frames: segments,
+  initialState: [0, 0],
   weights: [new Weight(cartMass)],
   resistance: cartResistance,
 });
@@ -241,6 +242,7 @@ function simulate(
     stateMap = solver.tick(stateMap, deltaTime, externalForceMap);
   }
   if (!isValidStateMap(stateMap)) {
+    //throw new Error('Encountered invalid state map; aborting...');
     console.warn(
       'Encountered invalid state map; resetting to initial state...',
     );
@@ -261,11 +263,11 @@ function createSolver(
   scene = required('scene'),
   rsWasmModule = required('rsWasmModule'),
 ) {
-  console.log('[js] Creating solver');
+  //console.log('[js] Creating solver');
   //const solver = new JsSolver(scene, { rungeKutta: false });
   const solver = new RsSolver(scene, rsWasmModule );
   window.solver = solver; // (for debugging)
-  console.log('[js] Solver:', solver);
+  //console.log('[js] Solver:', solver);
   return solver;
 }
 

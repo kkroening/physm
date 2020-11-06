@@ -45,10 +45,10 @@ export default class RsSolver extends Solver {
     externalForceMap = null,
   ) {
     //console.log(`[js] RsSolver.tick: deltaTime=${deltaTime}`);
-    //console.log('[js] stateBuffer before:', this.stateBuffer);
     this._flattenStateMap(stateMap);
+    //console.log('[js] stateBuffer before:', this.stateBuffer);
     this.context.tick(this.stateBuffer, deltaTime);
     //console.log('[js] stateBuffer after:', this.stateBuffer);
-    return this._unflattenStateMap();
+    return stateMap = this._unflattenStateMap();
   }
 }

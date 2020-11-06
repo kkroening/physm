@@ -474,8 +474,8 @@ describe('Solver cross-validation', () => {
       for (let timeIndex = 0; timeIndex < stateMaps1.length; timeIndex++) {
         const stateMap1 = stateMaps1[timeIndex];
         const stateMap2 = stateMaps2[timeIndex];
-        if (true) {
-          // (enable for debugging)
+        const debug = false; // (enable for debugging)
+        if (debug) {
           const delta = new Map(
             [...stateMap1].map(([frameId, [q1, qd1]]) => {
               const [q2, qd2] = stateMap2.get(frameId);
