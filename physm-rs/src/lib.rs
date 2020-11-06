@@ -70,18 +70,19 @@ impl Position {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct State {
     q: f64,
     qd: f64,
 }
 
 #[cfg(not(test))]
-fn log(s: &str) {
+pub fn log(s: &str) {
     console::log_1(&s.clone().into());
 }
 
 #[cfg(test)]
-fn log(s: &str) {
+pub fn log(s: &str) {
     println!("{}", s);
 }
 
