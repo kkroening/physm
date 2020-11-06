@@ -464,7 +464,8 @@ fn solve(
         get_system_of_equations(frames, index_path_map, gravity, states, external_forces);
     log(&format!(
         "A: {:?}; b: {:?}",
-        &coefficient_matrix.data, &force_vector.data
+        coefficient_matrix.as_slice(),
+        force_vector.as_slice()
     ));
     coefficient_matrix
         .qr()
