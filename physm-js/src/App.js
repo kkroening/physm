@@ -309,7 +309,9 @@ function App({ rsWasmModule }) {
     <div className="app__main">
       <div className="plot">
         <h2 className="plot__title">CartPoi</h2>
-        {<p>Number of tensors: {tf.memory().numTensors}</p>}
+        {
+          //<p>Number of tensors: {tf.memory().numTensors}</p>
+        }
         {
           //<p>Keys: {[...pressedKeys].join(', ')}</p>
         }
