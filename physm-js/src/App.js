@@ -26,7 +26,7 @@ const ropeSegmentLength = 1.2;
 const ropeSegmentDrag = 8;
 const ropeSegmentMass = 1;
 const ropeSegmentResistance = 10;
-const ropeSegmentCount = 12;
+const ropeSegmentCount = 10;
 const cartMass = 250;
 const cartForce = 8500;
 const cartResistance = 5;
@@ -34,8 +34,8 @@ const cartResistance = 5;
 const initialScale = 12;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
-const TARGET_PHYSICS_FPS = 300;
-const TIME_SCALE = 1;
+const TIME_SCALE = 1.5;
+const TARGET_PHYSICS_FPS = 300 * TIME_SCALE;
 
 const segments = Array(ropeSegmentCount)
   .fill()
@@ -43,7 +43,7 @@ const segments = Array(ropeSegmentCount)
   .reduce((childFrames, index) => {
     const first = index === 0;
     const last = index === ropeSegmentCount - 1;
-    const radius = first ? 1 : 0.38/2;
+    const radius = first ? 1 : 0.38 / 2;
     const mass = first ? poiMass : ropeSegmentMass;
     const drag = first ? poiDrag : ropeSegmentDrag;
     const weights = [
@@ -225,10 +225,24 @@ function simulate(
   animationDeltaTime = required('animationDeltaTime'),
 ) {
   const startTime = new Date().getTime();
-  const tickCount = Math.ceil(TARGET_PHYSICS_FPS * animationDeltaTime);
-  const deltaTime = (animationDeltaTime / tickCount) * TIME_SCALE;
+  const deltaTime = TIME_SCALE / TARGET_PHYSICS_FPS;
+  let tickCount = Math.floor(
+    Math.min(animationDeltaTime / deltaTime, TARGET_PHYSICS_FPS),
+  );
+  if (animationDeltaTime > 1 / MIN_ANIMATION_FPS) {
+    tickCount = Math.floor(
+      Math.min(tickCount, TARGET_PHYSICS_FPS / MIN_ANIMATION_FPS),
+    );
+    console.warn(
+      `Falling below minimum desired animation FPS; limiting simulation to ${tickCount} ticks`,
+    );
+  }
   try {
-    solver.tick(deltaTime, tickCount, externalForceMap);
+    solver.tick(
+      deltaTime,
+      Math.min(tickCount, TARGET_PHYSICS_FPS),
+      externalForceMap,
+    );
   } catch (error) {
     if (error instanceof InvalidStateMapError) {
       console.warn(
@@ -238,14 +252,6 @@ function simulate(
     } else {
       throw error;
     }
-  }
-  const endTime = new Date().getTime();
-  const realDeltaTime = (endTime - startTime) / 1000;
-  if (realDeltaTime > MIN_ANIMATION_FPS) {
-    console.warn(
-      `Overshot physics computation deadline by ${realDeltaTime} seconds; unable ` +
-        'to sustain desired animation FPS',
-    );
   }
   return solver.getStateMap();
 }
