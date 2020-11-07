@@ -8,13 +8,13 @@ export default class RsSolver extends Solver {
     { rungeKutta = true } = {},
   ) {
     super(scene);
-    // TODO: serialize scene as json and create rs scene.
-    const sceneJson = JSON.stringify(scene.toJsonObj());
-    console.log('[js] Creating solver context');
-    this.context = new rsWasmModule.SolverContext(sceneJson);
-    this.context.setRungeKutta(rungeKutta);
     this.stateBuffer = new Float64Array(this.scene.sortedFrames.length * 2);
     this.extForceBuffer = new Float64Array(this.scene.sortedFrames.length);
+    this.resetStateMap();
+    console.log('[js] Creating solver context');
+    const sceneJson = JSON.stringify(scene.toJsonObj());
+    this.context = new rsWasmModule.SolverContext(sceneJson);
+    this.context.setRungeKutta(rungeKutta);
     console.log('[js] Created solver context:', this.context);
   }
 
@@ -25,27 +25,35 @@ export default class RsSolver extends Solver {
     this.context = null;
   }
 
-  tick(
-    stateMap = required('stateMap'),
-    deltaTime = required('deltaTime'),
-    externalForceMap = null,
-  ) {
-    this.stateBuffer.set(
-      this.scene.sortedFrames.flatMap(
-        (frame) => stateMap.get(frame.id) || [0, 0],
-      ),
-    );
-    this.extForceBuffer.set(
-      this.scene.sortedFrames.map((frame) =>
-        externalForceMap ? externalForceMap.get(frame.id) || 0 : 0,
-      ),
-    );
-    this.context.tick(this.stateBuffer, deltaTime, this.extForceBuffer);
+  getStateMap() {
     return new Map(
       this.scene.sortedFrames.map((frame, index) => [
         frame.id,
         [this.stateBuffer[index * 2], this.stateBuffer[index * 2 + 1]],
       ]),
     );
+  }
+
+  setStateMap(stateMap = required('stateMap')) {
+    this.stateBuffer.set(
+      this.scene.sortedFrames.flatMap(
+        (frame) => stateMap.get(frame.id) || [0, 0],
+      ),
+    );
+  }
+
+  tick(
+    deltaTime = required('deltaTime'),
+    tickCount = 1,
+    externalForceMap = null,
+  ) {
+    this.extForceBuffer.set(
+      this.scene.sortedFrames.map((frame) =>
+        externalForceMap ? externalForceMap.get(frame.id) || 0 : 0,
+      ),
+    );
+    for (let i = 0; i < tickCount; i++) {
+      this.context.tick(this.stateBuffer, deltaTime, this.extForceBuffer);
+    }
   }
 }

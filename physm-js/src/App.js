@@ -33,7 +33,7 @@ const cartResistance = 5;
 const initialScale = 10;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
-const TARGET_PHYSICS_FPS = 500;
+const TARGET_PHYSICS_FPS = 800;
 const TIME_SCALE = 1;
 
 const segments = Array(ropeSegmentCount)

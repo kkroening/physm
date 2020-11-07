@@ -8,9 +8,21 @@ export default class Solver {
 
   dispose() {}
 
+  getStateMap() {
+    throw new NotImplementedError('abstract method');
+  }
+
+  setStateMap(stateMap = required('stateMap')) {
+    throw new NotImplementedError('abstract method');
+  }
+
+  resetStateMap() {
+    this.setStateMap(this.scene.getInitialStateMap());
+  }
+
   tick(
-    stateMap = required('stateMap'),
     deltaTime = required('deltaTime'),
+    tickCount = 1,
     externalForceMap = null,
   ) {
     throw new NotImplementedError('abstract method');

@@ -8,6 +8,15 @@ export default class JsSolver extends Solver {
   constructor(scene = required('scene'), { rungeKutta = true } = {}) {
     super(scene);
     this.rungeKutta = rungeKutta;
+    this.stateMap = scene.getInitialStateMap();
+  }
+
+  getStateMap() {
+    return this.stateMap;
+  }
+
+  setStateMap(stateMap = required('stateMap')) {
+    this.stateMap = stateMap;
   }
 
   _getPosMatMap(stateMap = required('stateMap')) {
@@ -439,11 +448,17 @@ export default class JsSolver extends Solver {
   }
 
   tick(
-    stateMap = required('stateMap'),
     deltaTime = required('deltaTime'),
+    tickCount = 1,
     externalForceMap = null,
   ) {
     const doTick = this.rungeKutta ? this._tickRungeKutta : this._tickSimple;
-    return doTick.bind(this)(stateMap, deltaTime, externalForceMap);
+    for (let i = 0; i < tickCount; i++) {
+      this.stateMap = doTick.bind(this)(
+        this.stateMap,
+        deltaTime,
+        externalForceMap,
+      );
+    }
   }
 }

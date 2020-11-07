@@ -81,9 +81,10 @@ describe('Solver subclass cross-validation', () => {
       const DELTA_TIME = 1 / 60;
       let curStateMap = initialStateMap;
       for (let timeIndex = 0; timeIndex < MAX_TIME_INDEX; timeIndex++) {
-        const newStateMap = checkTfMemory(() =>
-          solver.tick(curStateMap, DELTA_TIME),
-        );
+        const newStateMap = checkTfMemory(() => {
+          solver.tick(DELTA_TIME);
+          return solver.getStateMap();
+        });
         stateMaps[solverIndex].push(curStateMap);
         expect(curStateMap).not.toEqual(newStateMap);
         [...newStateMap].forEach(([frameId, [newQ, newQd]]) => {
