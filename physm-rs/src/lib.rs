@@ -128,9 +128,17 @@ impl SolverContext {
         Self::_new(scene_json).map_err(|err| JsValue::from_str(&err.to_string()))
     }
 
-    pub fn tick(&self, flattened_states: &mut [f64], delta_time: f64, ext_forces: &[f64]) -> () {
+    pub fn tick(
+        &self,
+        flattened_states: &mut [f64],
+        delta_time: f64,
+        tick_count: usize,
+        ext_forces: &[f64],
+    ) -> () {
         let mut states = unflatten_states(flattened_states);
-        self.solver.tick_mut(&mut states, &ext_forces, delta_time);
+        for _ in 0..tick_count {
+            self.solver.tick_mut(&mut states, &ext_forces, delta_time);
+        }
         reflatten_states(flattened_states, &states);
     }
 

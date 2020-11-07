@@ -53,9 +53,7 @@ export default class RsSolver extends Solver {
         externalForceMap ? externalForceMap.get(frame.id) || 0 : 0,
       ),
     );
-    for (let i = 0; i < tickCount; i++) {
-      this.context.tick(this.stateBuffer, deltaTime, this.extForceBuffer);
-    }
+    this.context.tick(this.stateBuffer, deltaTime, tickCount, this.extForceBuffer);
     for (let i = 0; i < this.stateBuffer.length; i++) {
       if (isNaN(this.stateBuffer[i])) {
         throw new InvalidStateMapError();
