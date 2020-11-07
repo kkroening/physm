@@ -16,8 +16,10 @@ export default class Frame {
     resistance = 0,
     initialState = ZERO_STATE,
     id = null,
+    typeName = null,
   } = {}) {
     this.id = id != null ? id : generateRandomId();
+    this.typeName = typeName || this.constructor.name;
     this.position = coercePositionVector(position);
     this.decals = decals;
     this.weights = weights;
@@ -77,7 +79,7 @@ export default class Frame {
       initialState: this.initialState,
       position: tf.tidy(() => [...this.position.dataSync().slice(0, -1)]),
       resistance: this.resistance,
-      type: this.constructor.name,
+      type: this.typeName,
       weights: this.weights.map((weight) => weight.toJsonObj()),
     };
     if (includeDecals) {

@@ -20,12 +20,13 @@ export default class TrackFrame extends Frame {
     super({
       angle: angle,
       decals: decals,
-      weights: weights,
       frames: frames,
-      resistance: resistance,
+      id: id,
       initialState: initialState,
       position: position,
-      id: id,
+      resistance: resistance,
+      typeName: 'TrackFrame',
+      weights: weights,
     });
     this.angle = angle;
   }

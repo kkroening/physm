@@ -15,13 +15,14 @@ export default class RotationalFrame extends Frame {
     id = null,
   } = {}) {
     super({
-      position: position,
       decals: decals,
-      weights: weights,
       frames: frames,
-      resistance: resistance,
-      initialState: initialState,
       id: id,
+      initialState: initialState,
+      position: position,
+      resistance: resistance,
+      typeName: 'RotationalFrame',
+      weights: weights,
     });
   }
 
