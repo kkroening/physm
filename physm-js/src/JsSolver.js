@@ -1,5 +1,6 @@
 import * as tf from './tfjs';
 import Solver from './Solver';
+import { checkStateMapValid } from './Solver';
 import { invertXformMatrix } from './utils';
 import { required } from './utils';
 import { solveLinearSystem } from './utils';
@@ -452,13 +453,13 @@ export default class JsSolver extends Solver {
     tickCount = 1,
     externalForceMap = null,
   ) {
-    const doTick = this.rungeKutta ? this._tickRungeKutta : this._tickSimple;
+    const doTick = (this.rungeKutta
+      ? this._tickRungeKutta
+      : this._tickSimple
+    ).bind(this);
     for (let i = 0; i < tickCount; i++) {
-      this.stateMap = doTick.bind(this)(
-        this.stateMap,
-        deltaTime,
-        externalForceMap,
-      );
+      this.stateMap = doTick(this.stateMap, deltaTime, externalForceMap);
+      checkStateMapValid(this.stateMap);
     }
   }
 }

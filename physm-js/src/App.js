@@ -18,11 +18,12 @@ import { required } from './utils';
 import { useEffect } from 'react';
 import { useRef } from 'react';
 import { useState } from 'react';
+import { InvalidStateMapError } from './Solver';
 
 const poiMass = 60;
 const poiDrag = 20;
-const ropeSegmentLength = 3;
-const ropeSegmentDrag = 8;
+const ropeSegmentLength = 1.8;
+const ropeSegmentDrag = 15;
 const ropeSegmentMass = 1;
 const ropeSegmentResistance = 20;
 const ropeSegmentCount = 8;
@@ -30,10 +31,10 @@ const cartMass = 250;
 const cartForce = 7000;
 const cartResistance = 5;
 
-const initialScale = 10;
+const initialScale = 12;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
-const TARGET_PHYSICS_FPS = 800;
+const TARGET_PHYSICS_FPS = 300;
 const TIME_SCALE = 1;
 
 const segments = Array(ropeSegmentCount)
@@ -42,7 +43,7 @@ const segments = Array(ropeSegmentCount)
   .reduce((childFrames, index) => {
     const first = index === 0;
     const last = index === ropeSegmentCount - 1;
-    const radius = first ? 1 : 0.4;
+    const radius = first ? 1 : 0.3;
     const mass = first ? poiMass : ropeSegmentMass;
     const drag = first ? poiDrag : ropeSegmentDrag;
     const weights = [
@@ -51,20 +52,25 @@ const segments = Array(ropeSegmentCount)
         drag: drag,
       }),
     ];
+    const decals = [
+      new LineDecal({
+        endPos: [ropeSegmentLength * 1.1, 0],
+        lineWidth: 0.38,
+      }),
+    ];
+    if (first || true) {
+      decals.push(
+        new CircleDecal({
+          position: [ropeSegmentLength, 0],
+          radius: radius,
+        }),
+      );
+    }
     return [
       new RotationalFrame({
         id: `segment${index}`,
         initialState: last ? [Math.PI * 0.3, 0] : [0, 0],
-        decals: [
-          new LineDecal({
-            endPos: [ropeSegmentLength, 0],
-            lineWidth: 0.2,
-          }),
-          new CircleDecal({
-            position: [ropeSegmentLength, 0],
-            radius: radius,
-          }),
-        ],
+        decals: decals,
         frames: childFrames,
         position: [last ? 0 : ropeSegmentLength, 0],
         weights: weights,
@@ -159,7 +165,7 @@ const useAnimationFrame = (callback, { fps = TARGET_ANIMATION_FPS } = {}) => {
 
   React.useEffect(() => {
     function animate(time = required('time')) {
-      const deltaTime = ((time - state.current.prevTime) / 1000) * TIME_SCALE;
+      const deltaTime = (time - state.current.prevTime) / 1000;
       const delay = Math.max(1000 / fps - deltaTime, 0);
       state.current.callback(deltaTime);
       state.current.prevTime = time;
@@ -176,10 +182,6 @@ const useAnimationFrame = (callback, { fps = TARGET_ANIMATION_FPS } = {}) => {
   }, [fps]);
 };
 
-function isValidStateMap(stateMap = required('stateMap')) {
-  return [...stateMap].every(([frameId, [q, qd]]) => !isNaN(q) && !isNaN(qd));
-}
-
 function handleViewControls({
   deltaTime = required('deltaTime'),
   pressedKeys = required('pressedKeys'),
@@ -191,10 +193,10 @@ function handleViewControls({
   Object.entries({
     Minus: () => setScale(scale * Math.exp(-deltaTime)),
     Equal: () => setScale(scale * Math.exp(deltaTime)),
-    KeyJ: () => setTranslation(([x, y]) => [x + deltaTime * 20, y]),
-    KeyL: () => setTranslation(([x, y]) => [x - deltaTime * 20, y]),
-    KeyI: () => setTranslation(([x, y]) => [x, y - deltaTime * 20]),
-    KeyK: () => setTranslation(([x, y]) => [x, y + deltaTime * 20]),
+    KeyH: () => setTranslation(([x, y]) => [x + deltaTime * 20, y]),
+    KeyK: () => setTranslation(([x, y]) => [x - deltaTime * 20, y]),
+    KeyU: () => setTranslation(([x, y]) => [x, y - deltaTime * 20]),
+    KeyJ: () => setTranslation(([x, y]) => [x, y + deltaTime * 20]),
   }).forEach(([keyName, func]) => pressedKeys.has(keyName) && func());
 }
 
@@ -219,36 +221,33 @@ function getExternalForceMap(pressedKeys, deltaTime) {
 
 function simulate(
   solver = required('solver'),
-  stateMap = required('stateMap'),
   externalForceMap = required('externalForceMap'),
   animationDeltaTime = required('animationDeltaTime'),
 ) {
-  /**
-   * TODO: possibly move this logic to the Solver class; it's tightly coupled
-   * to the DOM though, so maybe not.
-   */
   const startTime = new Date().getTime();
-  const deadline = startTime + 1000 / MIN_ANIMATION_FPS;
   const tickCount = Math.ceil(TARGET_PHYSICS_FPS * animationDeltaTime);
-  const deltaTime = animationDeltaTime / tickCount;
-  for (let timeIndex = 0; timeIndex < tickCount; timeIndex++) {
-    if (new Date().getTime() > deadline) {
+  const deltaTime = (animationDeltaTime / tickCount) * TIME_SCALE;
+  try {
+    solver.tick(deltaTime, tickCount, externalForceMap);
+  } catch (error) {
+    if (error instanceof InvalidStateMapError) {
       console.warn(
-        'Deadline exceeded for physics computation; ' +
-          `skipping ${tickCount - timeIndex} ticks`,
+        'Encountered invalid state map; resetting to initial state...',
       );
-      break;
+      solver.resetStateMap();
+    } else {
+      throw error;
     }
-    stateMap = solver.tick(stateMap, deltaTime, externalForceMap);
   }
-  if (!isValidStateMap(stateMap)) {
-    //throw new Error('Encountered invalid state map; aborting...');
+  const endTime = new Date().getTime();
+  const realDeltaTime = (endTime - startTime) / 1000;
+  if (realDeltaTime > MIN_ANIMATION_FPS) {
     console.warn(
-      'Encountered invalid state map; resetting to initial state...',
+      `Overshot physics computation deadline by ${realDeltaTime} seconds; unable ` +
+        'to sustain desired animation FPS',
     );
-    stateMap = scene.getInitialStateMap();
   }
-  return stateMap;
+  return solver.getStateMap();
 }
 
 function getViewXformMatrix(translation, scale) {
@@ -265,7 +264,7 @@ function createSolver(
 ) {
   //console.log('[js] Creating solver');
   //const solver = new JsSolver(scene, { rungeKutta: false });
-  const solver = new RsSolver(scene, rsWasmModule );
+  const solver = new RsSolver(scene, rsWasmModule);
   window.solver = solver; // (for debugging)
   //console.log('[js] Solver:', solver);
   return solver;
@@ -297,12 +296,7 @@ function App({ rsWasmModule }) {
     });
     if (!paused) {
       const externalForceMap = getExternalForceMap(pressedKeys, deltaTime);
-      const newStateMap = simulate(
-        solver.current,
-        stateMap,
-        externalForceMap,
-        deltaTime,
-      );
+      const newStateMap = simulate(solver.current, externalForceMap, deltaTime);
       setStateMap(newStateMap);
     }
   });

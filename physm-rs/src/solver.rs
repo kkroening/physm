@@ -598,7 +598,7 @@ impl Solver {
         // ));
         let index_path_map = get_index_path_map(&frames);
         if self.runge_kutta {
-            tick_simple_mut(
+            tick_runge_kutta_mut(
                 &frames,
                 &index_path_map,
                 &self.scene.gravity,
@@ -607,7 +607,7 @@ impl Solver {
                 delta_time,
             );
         } else {
-            tick_runge_kutta_mut(
+            tick_simple_mut(
                 &frames,
                 &index_path_map,
                 &self.scene.gravity,

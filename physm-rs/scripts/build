@@ -2,7 +2,7 @@
 set -euo pipefail
 
 >&2 echo '========== Building Wasm bundle (Webpack target) =========='
-wasm-pack build
+wasm-pack build --release
 
 >&2 echo '========== Building Wasm bundle (Node.js target) =========='
 wasm-pack build --target nodejs -d nodepkg

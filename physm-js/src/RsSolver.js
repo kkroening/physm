@@ -1,4 +1,5 @@
 import Solver from './Solver';
+import { InvalidStateMapError } from './Solver';
 import { required } from './utils';
 
 export default class RsSolver extends Solver {
@@ -54,6 +55,11 @@ export default class RsSolver extends Solver {
     );
     for (let i = 0; i < tickCount; i++) {
       this.context.tick(this.stateBuffer, deltaTime, this.extForceBuffer);
+    }
+    for (let i = 0; i < this.stateBuffer.length; i++) {
+      if (isNaN(this.stateBuffer[i])) {
+        throw new InvalidStateMapError();
+      }
     }
   }
 }
