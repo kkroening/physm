@@ -1,4 +1,4 @@
-#[macro_use]
+#[cfg_attr(test, macro_use)]
 extern crate approx;
 
 use std::convert::TryInto;
@@ -136,6 +136,7 @@ impl SolverContext {
 
     #[wasm_bindgen(js_name = setRungeKutta)]
     pub fn set_runge_kutta(&mut self, runge_kutta: bool) {
+        log(&format!("[rs] setting runge_kutta={}", runge_kutta));
         self.solver.runge_kutta = runge_kutta;
     }
 
