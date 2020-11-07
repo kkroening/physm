@@ -430,13 +430,6 @@ fn get_system_of_equations(
     );
     let weight_offsets = get_weight_offsets(frames);
     let weight_pos_vecs = get_weight_pos_vecs(frames, &pos_mats);
-    // log(&format!(
-    //     "[rs] weight_pos_vecs: {:?}",
-    //     weight_pos_vecs
-    //         .iter()
-    //         .map(|m| m.transpose().as_slice().to_owned())
-    //         .collect::<Vec<_>>()
-    // ));
     let coefficient_matrix = get_coefficient_matrix(
         frames,
         index_path_map,
@@ -468,42 +461,12 @@ fn solve(
 ) -> Vec<f64> {
     let (coefficient_matrix, force_vector) =
         get_system_of_equations(frames, index_path_map, gravity, states, external_forces);
-    // log(&format!(
-    //     "A: {:?}; b: {:?}",
-    //     coefficient_matrix.as_slice(),
-    //     force_vector.as_slice()
-    // ));
     coefficient_matrix
         .qr()
         .solve(&force_vector)
         .unwrap()
         .as_slice()
         .to_vec()
-}
-
-fn apply_deltas_mut(states: &mut [State], qdd_vec: &[f64], delta_time: f64) {
-    states.iter_mut().enumerate().for_each(|(index, state)| {
-        state.q += state.qd * delta_time;
-        state.qd += qdd_vec[index] * delta_time;
-    });
-}
-
-fn apply_deltas(
-    q_vec: &[f64],
-    qd_vec: &[f64],
-    qdd_vec: &[f64],
-    delta_time: f64,
-) -> (Vec<f64>, Vec<f64>) {
-    let count = q_vec.len();
-    let mut new_q_vec = Vec::<f64>::new();
-    let mut new_qd_vec = Vec::<f64>::new();
-    new_q_vec.reserve(count);
-    new_qd_vec.reserve(count);
-    for i in 0..count {
-        new_q_vec.push(q_vec[i] + qd_vec[i] * delta_time);
-        new_qd_vec.push(qd_vec[i] + qdd_vec[i] * delta_time);
-    }
-    (new_q_vec, new_qd_vec)
 }
 
 fn tick_simple_mut(
@@ -514,6 +477,12 @@ fn tick_simple_mut(
     external_forces: &[f64],
     delta_time: f64,
 ) {
+    let apply_deltas_mut = |states: &mut [State], qdd_vec: &[f64], delta_time: f64| {
+        states.iter_mut().enumerate().for_each(|(index, state)| {
+            state.q += state.qd * delta_time;
+            state.qd += qdd_vec[index] * delta_time;
+        });
+    };
     let qdd_vec = solve(frames, index_path_map, gravity, states, external_forces);
     apply_deltas_mut(states, &qdd_vec, delta_time);
 }
@@ -545,17 +514,29 @@ fn tick_runge_kutta_mut(
             external_forces,
         )
     };
+    let apply_deltas =
+        |qs: &[f64], qds: &[f64], delta_qs: &[f64], delta_qds: &[f64], delta_time: f64| {
+            let mut new_qs = Vec::<f64>::new();
+            let mut new_qds = Vec::<f64>::new();
+            new_qs.reserve(count);
+            new_qds.reserve(count);
+            for i in 0..count {
+                new_qs.push(qs[i] + delta_qs[i] * delta_time);
+                new_qds.push(qds[i] + delta_qds[i] * delta_time);
+            }
+            (new_qs, new_qds)
+        };
 
     let (qs0, qds0) = unzip_states(states);
     let qdds0 = solve(&qs0, &qds0);
 
-    let (qs1, qds1) = apply_deltas(&qs0, &qds0, &qdds0, delta_time / 2.);
+    let (qs1, qds1) = apply_deltas(&qs0, &qds0, &qds0, &qdds0, delta_time / 2.);
     let qdds1 = solve(&qs1, &qds1);
 
-    let (qs2, qds2) = apply_deltas(&qs0, &qds1, &qdds1, delta_time / 2.);
+    let (qs2, qds2) = apply_deltas(&qs0, &qds0, &qds1, &qdds1, delta_time / 2.);
     let qdds2 = solve(&qs2, &qds2);
 
-    let (qs3, qds3) = apply_deltas(&qs0, &qds2, &qdds2, delta_time);
+    let (qs3, qds3) = apply_deltas(&qs0, &qds0, &qds2, &qdds2, delta_time);
     let qdds3 = solve(&qs3, &qds3);
 
     let mut qds = Vec::<f64>::new();
@@ -567,7 +548,7 @@ fn tick_runge_kutta_mut(
         qdds.push((qdds0[i] + 2. * qdds1[i] + 2. * qdds2[i] + qdds3[i]) / 6.);
     }
 
-    let (qs, qds) = apply_deltas(&qs0, &qds, &qdds, delta_time);
+    let (qs, qds) = apply_deltas(&qs0, &qds0, &qds, &qdds, delta_time);
     for i in 0..count {
         states[i].q = qs[i];
         states[i].qd = qds[i];
@@ -582,20 +563,10 @@ impl Solver {
         }
     }
 
-    pub fn set_runge_kutta(mut self, runge_kutta: bool) -> Self {
-        self.runge_kutta = runge_kutta;
-        self
-    }
-
     pub fn tick_mut(&self, states: &mut [State], external_forces: &[f64], delta_time: f64) -> () {
         let frames = sort_frames(&self.scene.frames);
-        // log(&format!(
-        //     "[rs] frames: {:?}",
-        //     frames
-        //         .iter()
-        //         .map(|frame| frame.get_id())
-        //         .collect::<Vec<&String>>()
-        // ));
+        assert_eq!(states.len(), frames.len());
+        assert_eq!(external_forces.len(), frames.len());
         let index_path_map = get_index_path_map(&frames);
         if self.runge_kutta {
             tick_runge_kutta_mut(
@@ -1272,12 +1243,12 @@ mod tests {
         println!("states1: {:?}", states1);
         println!("states2: {:?}", states2);
         states1.iter().zip(states2.iter()).enumerate().for_each(
-            |(time_index, (state1, state2))| {
+            |(frame_index, (state1, state2))| {
                 let delta_q = state2.q - state1.q;
                 let delta_qd = state2.qd - state1.qd;
                 println!(
-                    "time_index: {}, state1: {:?}, state2: {:?}, delta_q: {}, delta_qd: {}",
-                    time_index, state1, state2, delta_q, delta_qd
+                    "frame_index: {}, state1: {:?}, state2: {:?}, delta_q: {}, delta_qd: {}",
+                    frame_index, state1, state2, delta_q, delta_qd
                 );
                 assert!(delta_q.abs() > 0.02);
                 assert!(delta_q.abs() < 0.5);
@@ -1285,6 +1256,52 @@ mod tests {
                 assert!(delta_qd.abs() < 2.);
             },
         );
+    }
+
+    #[test]
+    fn test_tick_cross_validate() {
+        let mut scene = Scene::new();
+        for frame in get_sample_frames() {
+            scene = scene.add_frame(frame);
+        }
+        let mut solver = Solver::new(scene);
+        let frames = super::sort_frames(&solver.scene.frames);
+        let ext_forces: Vec<f64> = iter::repeat(2.).take(frames.len()).collect();
+        let mut state_history1: Vec<Vec<State>> = Vec::new();
+        let mut state_history2: Vec<Vec<State>> = Vec::new();
+        let max_time_index = 50;
+        let delta_time = 1. / 60.;
+
+        println!("Simulating with runge_kutta=false...");
+        solver.runge_kutta = false;
+        let mut states = get_sample_states();
+        for time_index in 0..max_time_index {
+            state_history1.push(states.clone());
+            solver.tick_mut(&mut states, &ext_forces, delta_time);
+        }
+
+        println!("Simulating with runge_kutta=true...");
+        solver.runge_kutta = true;
+        let mut states = get_sample_states();
+        for time_index in 0..max_time_index {
+            state_history2.push(states.clone());
+            solver.tick_mut(&mut states, &ext_forces, delta_time);
+        }
+
+        for time_index in 0..max_time_index {
+            let states1 = &state_history1[time_index];
+            let states2 = &state_history2[time_index];
+            for (frame_index, (state1, state2)) in states1.iter().zip(states2).enumerate() {
+                let delta_q = state2.q - state1.q;
+                let delta_qd = state2.qd - state1.qd;
+                println!(
+                    "time_index: {}, frame_index: {}, state1: {:?}, state2: {:?}, delta_q: {}, delta_qd: {}",
+                    time_index, frame_index, state1, state2, delta_q, delta_qd
+                );
+                assert!(delta_q.abs() < 0.2);
+                assert!(delta_qd.abs() < 0.2);
+            }
+        }
     }
 
     #[test]

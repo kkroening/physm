@@ -63,12 +63,12 @@ describe('Solver subclass cross-validation', () => {
     {
       name: 'RsSolver with rungeKutta=false',
       createSolver: async () =>
-        new RsSolver(scene, await loadRsWasmModule(), { runge_kutta: false }),
+        new RsSolver(scene, await loadRsWasmModule(), { rungeKutta: false }),
     },
     {
       name: 'RsSolver with rungeKutta=true',
       createSolver: async () =>
-        new RsSolver(scene, await loadRsWasmModule(), { runge_kutta: true }),
+        new RsSolver(scene, await loadRsWasmModule(), { rungeKutta: true }),
     },
   ];
 
@@ -77,7 +77,7 @@ describe('Solver subclass cross-validation', () => {
   solverInfos.forEach((solverInfo, solverIndex) => {
     test(solverInfo.name, async () => {
       const solver = await solverInfo.createSolver();
-      const MAX_TIME_INDEX = 1;
+      const MAX_TIME_INDEX = 50;
       const DELTA_TIME = 1 / 60;
       let curStateMap = initialStateMap;
       for (let timeIndex = 0; timeIndex < MAX_TIME_INDEX; timeIndex++) {
@@ -108,6 +108,7 @@ describe('Solver subclass cross-validation', () => {
   const solver1Index = 0;
   const solver1Info = solverInfos[solver1Index];
   solverInfos.slice(1).forEach((solver2Info, solver2Index) => {
+    solver2Index++;
     test(`Cross-validation: ${solver1Info.name} vs ${solver2Info.name}`, () => {
       const stateMaps1 = stateMaps[solver1Index];
       const stateMaps2 = stateMaps[solver2Index];
@@ -134,8 +135,8 @@ describe('Solver subclass cross-validation', () => {
         scene.sortedFrames.forEach((frame) => {
           const [q1, qd1] = stateMap1.get(frame.id);
           const [q2, qd2] = stateMap2.get(frame.id);
-          expect(Math.abs(q2 - q1)).toBeLessThan(1);
-          expect(Math.abs(qd2 - qd1)).toBeLessThan(1);
+          expect(Math.abs(q2 - q1)).toBeLessThan(0.2);
+          expect(Math.abs(qd2 - qd1)).toBeLessThan(0.2);
         });
       }
     });

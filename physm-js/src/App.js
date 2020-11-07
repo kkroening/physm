@@ -264,7 +264,7 @@ function createSolver(
 ) {
   //console.log('[js] Creating solver');
   //const solver = new JsSolver(scene, { rungeKutta: false });
-  const solver = new RsSolver(scene, rsWasmModule);
+  const solver = new RsSolver(scene, rsWasmModule, { rungeKutta: true });
   window.solver = solver; // (for debugging)
   //console.log('[js] Solver:', solver);
   return solver;

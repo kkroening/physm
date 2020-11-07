@@ -2,4 +2,4 @@
 set -euo pipefail
 
 >&2 echo '========== Building Wasm bundle (Webpack target) =========='
-wasm-pack build
+wasm-pack build --release
