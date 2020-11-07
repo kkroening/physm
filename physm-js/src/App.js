@@ -22,13 +22,13 @@ import { InvalidStateMapError } from './Solver';
 
 const poiMass = 60;
 const poiDrag = 20;
-const ropeSegmentLength = 1.8;
-const ropeSegmentDrag = 15;
+const ropeSegmentLength = 1.2;
+const ropeSegmentDrag = 8;
 const ropeSegmentMass = 1;
-const ropeSegmentResistance = 20;
-const ropeSegmentCount = 8;
+const ropeSegmentResistance = 10;
+const ropeSegmentCount = 12;
 const cartMass = 250;
-const cartForce = 7000;
+const cartForce = 8500;
 const cartResistance = 5;
 
 const initialScale = 12;
@@ -43,7 +43,7 @@ const segments = Array(ropeSegmentCount)
   .reduce((childFrames, index) => {
     const first = index === 0;
     const last = index === ropeSegmentCount - 1;
-    const radius = first ? 1 : 0.3;
+    const radius = first ? 1 : 0.38/2;
     const mass = first ? poiMass : ropeSegmentMass;
     const drag = first ? poiDrag : ropeSegmentDrag;
     const weights = [
