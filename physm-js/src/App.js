@@ -271,7 +271,7 @@ function createSolver(
 }
 
 function App({ rsWasmModule }) {
-  const [paused, setPaused] = useState(true);
+  const [paused, setPaused] = useState(false);
   const [translation, setTranslation] = useState([0, 0]);
   const [scale, setScale] = useState(initialScale);
   const pressedKeys = useKeyboard();
