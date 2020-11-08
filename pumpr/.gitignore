@@ -1,7 +1,0 @@
-/target
-.nrepl-port
-.nrepl-history
-/out
-
-dist/
-out.svg

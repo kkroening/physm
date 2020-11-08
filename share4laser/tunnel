@@ -1,2 +1,0 @@
-#!/usr/bin/env bash
-ssh mobius -R 8070:localhost:8070 'echo "****** WAITING FOR CONNECTIONS ON PORT 8070 ******"; while true; do sleep 1000; done'

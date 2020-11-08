@@ -1,7 +1,0 @@
-.cache
-dist/
-ffmpeg/tests/sample_data/dummy2.mp4
-venv
-actorgraph.egg-info/
-.eggs
-.tox

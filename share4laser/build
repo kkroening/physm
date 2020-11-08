@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-cd $(dirname $0)
-#./transcrypt -b -m -e 6 -n hello.py
-./transcrypt -b -m -n client.py
-
