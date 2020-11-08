@@ -202,17 +202,20 @@ function useTouch(elementRef = required('elementRef')) {
         setStartLocation([event.touches[0].clientX, event.touches[0].clientY]);
         setEndLocation(null);
       }
+      event.preventDefault();
     }
     function handleTouchMove(event) {
       if (event.which === 0 && event.touches.length > 0) {
         setEndLocation([event.touches[0].clientX, event.touches[0].clientY]);
       }
+      event.preventDefault();
     }
     function handleTouchEnd(event) {
       if (event.which === 0) {
         setStartLocation(null);
         setEndLocation(null);
       }
+      event.preventDefault();
     }
     const element = elementRef.current;
     element.addEventListener('touchstart', handleTouchStart);
@@ -294,7 +297,7 @@ function getExternalForceMap(
     cartForce += (clickLocationDelta[0] / 200) * maxCartForce;
   }
   if (touchLocationDelta) {
-    cartForce += (touchLocationDelta[0] / 200) * maxCartForce;
+    cartForce += (touchLocationDelta[0] / 60) * maxCartForce;
   }
   if (Math.abs(cartForce) > maxCartForce) {
     cartForce = Math.sign(cartForce) * maxCartForce;
