@@ -21,11 +21,11 @@ import { InvalidStateMapError } from './Solver';
 
 const poiMass = 60;
 const poiDrag = 20;
-const ropeSegmentLength = 1.2;
+const ropeSegmentLength = 1.6;
 const ropeSegmentDrag = 8;
 const ropeSegmentMass = 1;
 const ropeSegmentResistance = 10;
-const ropeSegmentCount = 10;
+const ropeSegmentCount = 5;
 const cartMass = 250;
 const maxCartForce = 8500;
 const cartResistance = 5;
@@ -34,49 +34,64 @@ const initialScale = 12;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
 const TIME_SCALE = 1.5;
-const TARGET_PHYSICS_FPS = 300 * TIME_SCALE;
+const TARGET_PHYSICS_FPS = 400 * TIME_SCALE;
 
-const segments = Array(ropeSegmentCount)
-  .fill()
-  .map((x, index) => index)
-  .reduce((childFrames, index) => {
-    const first = index === 0;
-    const last = index === ropeSegmentCount - 1;
-    const radius = first ? 1 : 0.38 / 2;
-    const mass = first ? poiMass : ropeSegmentMass;
-    const drag = first ? poiDrag : ropeSegmentDrag;
-    const weights = [
-      new Weight(mass, {
-        position: [ropeSegmentLength, 0],
-        drag: drag,
-      }),
-    ];
-    const decals = [
-      new LineDecal({
-        endPos: [ropeSegmentLength * 1.1, 0],
-        lineWidth: 0.38,
-      }),
-    ];
-    if (first || true) {
-      decals.push(
-        new CircleDecal({
-          position: [ropeSegmentLength, 0],
-          radius: radius,
+const stickLength = 8;
+const segments = [0, 1].map((ropeNum) =>
+  Array(ropeSegmentCount)
+    .fill()
+    .map((x, index) => index)
+    .reduce((childSegment, index) => {
+      const length = ropeSegmentLength * (1 + ropeNum * 0.02);
+      const first = index === 0;
+      const last = index === ropeSegmentCount - 1;
+      const radius = first ? 1 : 0.3 / 2;
+      const mass = first ? poiMass : ropeSegmentMass;
+      const drag = first ? poiDrag : ropeSegmentDrag;
+      const weights = [
+        new Weight(mass, {
+          position: [length, 0],
+          drag: drag,
         }),
-      );
-    }
-    return [
-      new RotationalFrame({
-        id: `segment${index}`,
-        initialState: last ? [Math.PI * 0.3, 0] : [0, 0],
+      ];
+      const decals = [
+        new LineDecal({
+          endPos: [length * 1.03, 0],
+          lineWidth: 0.3,
+        }),
+      ];
+      if (first || true) {
+        decals.push(
+          new CircleDecal({
+            position: [length, 0],
+            radius: radius,
+          }),
+        );
+      }
+      return new RotationalFrame({
+        id: `segment${ropeNum}-${index}`,
+        initialState: last ? [Math.PI * 0.3 * (2 * ropeNum + 1), 0] : [0, 0],
         decals: decals,
-        frames: childFrames,
-        position: [last ? 0 : ropeSegmentLength, 0],
+        frames: childSegment ? [childSegment] : [],
+        position: [last ? stickLength : length, 0],
         weights: weights,
         resistance: ropeSegmentResistance,
-      }),
-    ];
-  }, []);
+      });
+    }, null),
+);
+
+const stick = new RotationalFrame({
+  id: 'stick',
+  decals: [
+    new LineDecal({
+      endPos: [stickLength * 1.02, 0],
+      lineWidth: 0.45,
+    }),
+    new CircleDecal({ position: [stickLength, 0], radius: 0.5 }),
+  ],
+  weights: [new Weight(40, { position: [stickLength, 0], drag: 15 })],
+  frames: segments,
+});
 
 const cart = new TrackFrame({
   id: 'cart',
@@ -88,7 +103,7 @@ const cart = new TrackFrame({
       lineWidth: 0.2,
     }),
   ],
-  frames: segments,
+  frames: [stick],
   initialState: [0, 0],
   weights: [new Weight(cartMass)],
   resistance: cartResistance,
@@ -361,8 +376,22 @@ function createSolver(
   return solver;
 }
 
+function MatrixViewer({ aMat, bVec }) {
+  return (
+    <table>
+      {aMat.map((row, rowIndex) => (
+        <tr key={rowIndex}>
+          {[...row, bVec[rowIndex]].map((value, colIndex) => (
+            <td key={colIndex}>{value}</td>
+          ))}
+        </tr>
+      ))}
+    </table>
+  );
+}
+
 function App({ rsWasmModule }) {
-  const [paused, setPaused] = useState(false);
+  const [paused, setPaused] = useState(true);
   const [translation, setTranslation] = useState([0, 0]);
   const [scale, setScale] = useState(initialScale);
   const svgRef = React.useRef();
@@ -404,10 +433,16 @@ function App({ rsWasmModule }) {
     setPaused(!paused);
   };
 
+  const aMat = [
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9],
+  ];
+  const bVec = [10, 11, 12];
   return (
     <div className="app__main">
       <div className="plot">
-        <h2 className="plot__title">CartPoi</h2>
+        <h2 className="plot__title">Double CartPoi</h2>
         {
           //<p>Number of tensors: {tf.memory().numTensors}</p>
         }
@@ -424,6 +459,7 @@ function App({ rsWasmModule }) {
         </div>
         <button onClick={togglePaused}>{paused ? 'Unpause' : 'Pause'}</button>
       </div>
+      <MatrixViewer aMat={aMat} bVec={bVec} />
     </div>
   );
 }
