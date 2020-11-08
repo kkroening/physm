@@ -3,7 +3,6 @@ import 'normalize.css';
 import * as tf from './tfjs';
 import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
-import JsSolver from './JsSolver';
 import LineDecal from './LineDecal';
 import producer from 'immer';
 import React from 'react';
@@ -28,7 +27,7 @@ const ropeSegmentMass = 1;
 const ropeSegmentResistance = 10;
 const ropeSegmentCount = 10;
 const cartMass = 250;
-const cartForce = 8500;
+const maxCartForce = 8500;
 const cartResistance = 5;
 
 const initialScale = 12;
@@ -157,7 +156,86 @@ function useKeyboard(callback = null) {
   return pressedKeys;
 }
 
-const useAnimationFrame = (callback, { fps = TARGET_ANIMATION_FPS } = {}) => {
+function useMouse(elementRef = required('elementRef')) {
+  const [startLocation, setStartLocation] = useState(null);
+  const [endLocation, setEndLocation] = useState(null);
+
+  useEffect(() => {
+    function handleMouseDown(event) {
+      console.log('start', event);
+      setStartLocation([event.x, event.y]);
+      setEndLocation(null);
+    }
+    function handleMouseMove(event) {
+      setEndLocation([event.x, event.y]);
+    }
+    function handleMouseUp(event) {
+      console.log('end');
+      setStartLocation(null);
+      setEndLocation(null);
+    }
+    const element = elementRef.current;
+    element.addEventListener('mousedown', handleMouseDown);
+    element.addEventListener('mousemove', handleMouseMove);
+    element.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      element.removeEventListener('mousedown', handleMouseDown);
+      element.removeEventListener('mousemove', handleMouseMove);
+      element.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [elementRef]);
+
+  const locationDelta =
+    startLocation && endLocation
+      ? [endLocation[0] - startLocation[0], endLocation[1] - startLocation[1]]
+      : null;
+  return locationDelta;
+}
+
+function useTouch(elementRef = required('elementRef')) {
+  const [startLocation, setStartLocation] = useState(null);
+  const [endLocation, setEndLocation] = useState(null);
+
+  useEffect(() => {
+    function handleTouchStart(event) {
+      if (event.which === 0 && event.touches.length > 0) {
+        setStartLocation([event.touches[0].clientX, event.touches[0].clientY]);
+        setEndLocation(null);
+      }
+    }
+    function handleTouchMove(event) {
+      if (event.which === 0 && event.touches.length > 0) {
+        setEndLocation([event.touches[0].clientX, event.touches[0].clientY]);
+      }
+    }
+    function handleTouchEnd(event) {
+      if (event.which === 0) {
+        setStartLocation(null);
+        setEndLocation(null);
+      }
+    }
+    const element = elementRef.current;
+    element.addEventListener('touchstart', handleTouchStart);
+    element.addEventListener('touchmove', handleTouchMove);
+    element.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      element.removeEventListener('touchstart', handleTouchStart);
+      element.removeEventListener('touchmove', handleTouchMove);
+      element.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [elementRef]);
+
+  const locationDelta =
+    startLocation && endLocation
+      ? [endLocation[0] - startLocation[0], endLocation[1] - startLocation[1]]
+      : null;
+  return locationDelta;
+}
+
+const useAnimationFrame = (
+  callback = required('callback'),
+  { fps = TARGET_ANIMATION_FPS } = {},
+) => {
   const state = React.useRef({ prevTime: 0 });
   const requestRef = React.useRef();
   const timerRef = React.useRef();
@@ -200,23 +278,28 @@ function handleViewControls({
   }).forEach(([keyName, func]) => pressedKeys.has(keyName) && func());
 }
 
-function getExternalForceMap(pressedKeys, deltaTime) {
-  let cartForceValue = 0;
-  Object.entries({
-    KeyA: () => {
-      cartForceValue -= cartForce;
-    },
-    ArrowLeft: () => {
-      cartForceValue -= cartForce;
-    },
-    KeyD: () => {
-      cartForceValue += cartForce;
-    },
-    ArrowRight: () => {
-      cartForceValue += cartForce;
-    },
-  }).forEach(([keyName, func]) => pressedKeys.has(keyName) && func());
-  return new Map([[cart.id, cartForceValue]]);
+function getExternalForceMap(
+  pressedKeys = required('pressedKeys'),
+  clickLocationDelta = required('clickLocationDelta'),
+  touchLocationDelta = required('touchLocationDelta'),
+  deltaTime = required('deltaTime'),
+) {
+  let cartForce = 0;
+  if (pressedKeys.has('KeyA') || pressedKeys.has('ArrowLeft')) {
+    cartForce -= maxCartForce;
+  } else if (pressedKeys.has('KeyD') || pressedKeys.has('ArrowRight')) {
+    cartForce += maxCartForce;
+  }
+  if (clickLocationDelta) {
+    cartForce += (clickLocationDelta[0] / 200) * maxCartForce;
+  }
+  if (touchLocationDelta) {
+    cartForce += (touchLocationDelta[0] / 200) * maxCartForce;
+  }
+  if (Math.abs(cartForce) > maxCartForce) {
+    cartForce = Math.sign(cartForce) * maxCartForce;
+  }
+  return new Map([[cart.id, cartForce]]);
 }
 
 function simulate(
@@ -224,7 +307,6 @@ function simulate(
   externalForceMap = required('externalForceMap'),
   animationDeltaTime = required('animationDeltaTime'),
 ) {
-  const startTime = new Date().getTime();
   const deltaTime = TIME_SCALE / TARGET_PHYSICS_FPS;
   let tickCount = Math.floor(
     Math.min(animationDeltaTime / deltaTime, TARGET_PHYSICS_FPS),
@@ -280,7 +362,10 @@ function App({ rsWasmModule }) {
   const [paused, setPaused] = useState(false);
   const [translation, setTranslation] = useState([0, 0]);
   const [scale, setScale] = useState(initialScale);
+  const svgRef = React.useRef();
   const pressedKeys = useKeyboard();
+  const clickLocationDelta = useMouse(svgRef);
+  const touchLocationDelta = useTouch(svgRef);
   const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
   const viewXformMatrix = getViewXformMatrix(translation, scale);
   const sceneDomElement = scene.getDomElement(stateMap, viewXformMatrix);
@@ -301,7 +386,12 @@ function App({ rsWasmModule }) {
       translation,
     });
     if (!paused) {
-      const externalForceMap = getExternalForceMap(pressedKeys, deltaTime);
+      const externalForceMap = getExternalForceMap(
+        pressedKeys,
+        clickLocationDelta,
+        touchLocationDelta,
+        deltaTime,
+      );
       const newStateMap = simulate(solver.current, externalForceMap, deltaTime);
       setStateMap(newStateMap);
     }
@@ -325,7 +415,9 @@ function App({ rsWasmModule }) {
           //<p>Scale: {scale.toFixed(2)}</p>
         }
         <div className="plot__main">
-          <svg className="plot__svg">{sceneDomElement}</svg>
+          <svg className="plot__svg" ref={svgRef}>
+            {sceneDomElement}
+          </svg>
         </div>
         <button onClick={togglePaused}>{paused ? 'Unpause' : 'Pause'}</button>
       </div>
