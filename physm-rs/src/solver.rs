@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::iter;
 
+use crate::constraint::ConstraintCtx;
+use crate::ConstraintBox;
 use crate::FrameBox;
 use crate::FrameId;
 use crate::Mat3;
@@ -262,6 +264,48 @@ fn path_contains(path: &FramePath, parent_index: FrameIndex) -> bool {
     path.iter().any(|index| *index == parent_index)
 }
 
+/// The configuration-only sweeps: everything a constraint's `value` and
+/// `jacobian_rows` read, as a function of `q` alone.
+///
+/// Extracted rather than left inline so those can be evaluated at trial
+/// configurations no solve was run at — which is what a projection stabilization
+/// pass iterates over, and what an interface that only ever handed out a solve's
+/// own sweeps would quietly prevent (`docs/constraints.md` §7, seam 4).
+fn get_config_kinematics(
+    frames: &[&FrameBox],
+    index_path_map: &FrameIndexPathMap,
+    states: &[State],
+) -> (Vec<Mat3>, Vec<Mat3>) {
+    let pos_mats = get_pos_mats(frames, index_path_map, states);
+    let inv_pos_mats = get_inv_pos_mats(&pos_mats);
+    let vel_mats = get_vel_mats(frames, index_path_map, &pos_mats, &inv_pos_mats, states);
+    (pos_mats, vel_mats)
+}
+
+/// Resolves each constraint's two frame ids to sorted-frame indices.
+///
+/// Fails loudly rather than skipping: a constraint naming a frame that is not in
+/// the scene is an authoring error, and silently dropping it would leave a loop
+/// open with nothing to show for it.
+fn get_constraint_frame_indices(
+    frames: &[&FrameBox],
+    constraints: &[ConstraintBox],
+) -> Vec<(FrameIndex, FrameIndex)> {
+    let id_index_map = get_id_index_map(frames);
+    constraints
+        .iter()
+        .map(|constraint| {
+            let (id1, id2) = constraint.frame_ids();
+            let lookup = |id: &FrameId| {
+                *id_index_map
+                    .get(id)
+                    .unwrap_or_else(|| panic!("constraint references unknown frame id: {}", id))
+            };
+            (lookup(id1), lookup(id2))
+        })
+        .collect()
+}
+
 fn get_composite_moment_mats(
     frames: &[&FrameBox],
     index_path_map: &FrameIndexPathMap,
@@ -413,16 +457,72 @@ fn get_force_vector(
     ForceVector::from_fn(frames.len(), get_entry)
 }
 
+/// Writes the constraint blocks into an already-sized augmented system.
+///
+/// The layout is the symmetric saddle point
+///
+/// ```text
+///   [ g    Jᵀ ] [ q̈ ]   [ f     ]
+///   [ J    0  ] [ λ  ] = [ -J̇q̇ ]
+/// ```
+///
+/// Kept symmetric deliberately. λ is a free variable, so scaling one off-diagonal
+/// block and not the other still yields the correct q̈ — it only rescales λ, which
+/// is what `physm-py` did. Symmetry is what allows a symmetric indefinite
+/// factorization later, and what makes a reported constraint force mean anything.
+fn write_constraint_blocks(
+    coefficient_matrix: &mut CoefficientMatrix,
+    force_vector: &mut ForceVector,
+    frames: &[&FrameBox],
+    index_path_map: &FrameIndexPathMap,
+    constraints: &[ConstraintBox],
+    constraint_frame_indices: &[(FrameIndex, FrameIndex)],
+    pos_mats: &[Mat3],
+    vel_mats: &[Mat3],
+    vel_sum_mats: &[Mat3],
+    accel_sum_mats: &[Mat3],
+) {
+    let frame_count = frames.len();
+    let mut row = frame_count;
+    for (constraint, &(index_a, index_b)) in constraints.iter().zip(constraint_frame_indices) {
+        let ctx = ConstraintCtx {
+            frame_count,
+            index_a,
+            index_b,
+            path_a: &index_path_map[&index_a],
+            path_b: &index_path_map[&index_b],
+            pos_mats,
+            vel_mats,
+            vel_sum_mats: Some(vel_sum_mats),
+            accel_sum_mats: Some(accel_sum_mats),
+        };
+        let jacobian_rows = constraint.jacobian_rows(&ctx);
+        let bias = constraint.bias(&ctx);
+        debug_assert_eq!(jacobian_rows.len(), constraint.row_count());
+        debug_assert_eq!(bias.len(), constraint.row_count());
+        for (jacobian_row, bias_entry) in jacobian_rows.iter().zip(bias.iter()) {
+            for (col, &entry) in jacobian_row.iter().enumerate() {
+                coefficient_matrix[(row, col)] = entry;
+                coefficient_matrix[(col, row)] = entry;
+            }
+            force_vector[row] = -bias_entry;
+            row += 1;
+        }
+    }
+    debug_assert_eq!(row, coefficient_matrix.nrows());
+}
+
 fn get_system_of_equations(
     frames: &[&FrameBox],
     index_path_map: &FrameIndexPathMap,
+    constraints: &[ConstraintBox],
+    constraint_frame_indices: &[(FrameIndex, FrameIndex)],
     gravity: &Vec3,
     states: &[State],
     external_forces: &[f64],
 ) -> (CoefficientMatrix, ForceVector) {
-    let pos_mats = get_pos_mats(frames, index_path_map, states);
+    let (pos_mats, vel_mats) = get_config_kinematics(frames, index_path_map, states);
     let inv_pos_mats = get_inv_pos_mats(&pos_mats);
-    let vel_mats = get_vel_mats(frames, index_path_map, &pos_mats, &inv_pos_mats, states);
     let vel_sum_mats = get_vel_sum_mats(frames, index_path_map, &pos_mats, &vel_mats, states);
     let accel_mats = get_accel_mats(frames, index_path_map, &pos_mats, &inv_pos_mats, states);
     let accel_sum_mats = get_accel_sum_mats(
@@ -447,14 +547,47 @@ fn get_system_of_equations(
         &weight_pos_vecs,
         gravity,
     );
-    let coefficient_matrix =
+    let unconstrained_matrix =
         get_coefficient_matrix(frames, index_path_map, &vel_mats, &composite_moment_mats);
-    let force_vector = get_force_vector(
+    let unconstrained_forces = get_force_vector(
         frames,
         &vel_mats,
         &composite_force_mats,
         states,
         external_forces,
+    );
+
+    let frame_count = frames.len();
+    let row_count: usize = constraints.iter().map(|c| c.row_count()).sum();
+    if row_count == 0 {
+        return (unconstrained_matrix, unconstrained_forces);
+    }
+
+    // The (1,1) block and the first n forces are exactly the unconstrained system;
+    // constraints are additive rather than a different assembly.
+    let size = frame_count + row_count;
+    let mut coefficient_matrix = CoefficientMatrix::zeros(size, size);
+    for row in 0..frame_count {
+        for col in 0..frame_count {
+            coefficient_matrix[(row, col)] = unconstrained_matrix[(row, col)];
+        }
+    }
+    let mut force_vector = ForceVector::zeros(size);
+    for row in 0..frame_count {
+        force_vector[row] = unconstrained_forces[row];
+    }
+
+    write_constraint_blocks(
+        &mut coefficient_matrix,
+        &mut force_vector,
+        frames,
+        index_path_map,
+        constraints,
+        constraint_frame_indices,
+        &pos_mats,
+        &vel_mats,
+        &vel_sum_mats,
+        &accel_sum_mats,
     );
     (coefficient_matrix, force_vector)
 }
@@ -462,23 +595,34 @@ fn get_system_of_equations(
 fn solve(
     frames: &[&FrameBox],
     index_path_map: &FrameIndexPathMap,
+    constraints: &[ConstraintBox],
+    constraint_frame_indices: &[(FrameIndex, FrameIndex)],
     gravity: &Vec3,
     states: &[State],
     external_forces: &[f64],
 ) -> Vec<f64> {
-    let (coefficient_matrix, force_vector) =
-        get_system_of_equations(frames, index_path_map, gravity, states, external_forces);
-    coefficient_matrix
-        .qr()
-        .solve(&force_vector)
-        .unwrap()
-        .as_slice()
-        .to_vec()
+    let (coefficient_matrix, force_vector) = get_system_of_equations(
+        frames,
+        index_path_map,
+        constraints,
+        constraint_frame_indices,
+        gravity,
+        states,
+        external_forces,
+    );
+    // QR, not Cholesky: with constraints the augmented matrix is symmetric
+    // *indefinite* -- the zero block guarantees negative eigenvalues -- so the
+    // Cholesky suggestion in algorithm.md is constraint-incompatible.
+    let solution = coefficient_matrix.qr().solve(&force_vector).unwrap();
+    // The tail entries are the multipliers; only q̈ leaves this function.
+    solution.as_slice()[..frames.len()].to_vec()
 }
 
 fn tick_simple_mut(
     frames: &[&FrameBox],
     index_path_map: &FrameIndexPathMap,
+    constraints: &[ConstraintBox],
+    constraint_frame_indices: &[(FrameIndex, FrameIndex)],
     gravity: &Vec3,
     states: &mut [State],
     external_forces: &[f64],
@@ -490,13 +634,23 @@ fn tick_simple_mut(
             state.qd += qdd_vec[index] * delta_time;
         });
     };
-    let qdd_vec = solve(frames, index_path_map, gravity, states, external_forces);
+    let qdd_vec = solve(
+        frames,
+        index_path_map,
+        constraints,
+        constraint_frame_indices,
+        gravity,
+        states,
+        external_forces,
+    );
     apply_deltas_mut(states, &qdd_vec, delta_time);
 }
 
 fn tick_runge_kutta_mut(
     frames: &[&FrameBox],
     index_path_map: &FrameIndexPathMap,
+    constraints: &[ConstraintBox],
+    constraint_frame_indices: &[(FrameIndex, FrameIndex)],
     gravity: &Vec3,
     states: &mut [State],
     external_forces: &[f64],
@@ -516,6 +670,8 @@ fn tick_runge_kutta_mut(
         solve(
             frames,
             index_path_map,
+            constraints,
+            constraint_frame_indices,
             gravity,
             &zip_states(qs, qds),
             external_forces,
@@ -575,10 +731,14 @@ impl Solver {
         assert_eq!(states.len(), frames.len());
         assert_eq!(external_forces.len(), frames.len());
         let index_path_map = get_index_path_map(&frames);
+        let constraints = &self.scene.constraints;
+        let constraint_frame_indices = get_constraint_frame_indices(&frames, constraints);
         if self.runge_kutta {
             tick_runge_kutta_mut(
                 &frames,
                 &index_path_map,
+                constraints,
+                &constraint_frame_indices,
                 &self.scene.gravity,
                 states,
                 external_forces,
@@ -588,6 +748,8 @@ impl Solver {
             tick_simple_mut(
                 &frames,
                 &index_path_map,
+                constraints,
+                &constraint_frame_indices,
                 &self.scene.gravity,
                 states,
                 external_forces,
@@ -601,6 +763,9 @@ impl Solver {
 mod tests {
     use std::f64::consts::PI;
 
+    use crate::CoincidenceConstraint;
+    use crate::ConstraintBox;
+    use crate::DistanceConstraint;
     use crate::Position;
     use crate::RotationalFrame;
     use crate::Scene;
@@ -1617,6 +1782,263 @@ mod tests {
         println!();
     }
 
+    // ----------------------------------------------------------------------------------
+    // Constraints.
+    //
+    // The scene is branched on purpose. `physm-py`'s constraint block indexed its
+    // matrix by position along a frame's root path where the mass block converted to
+    // a global index; the two agree only for an unbranched chain from the first root,
+    // so an unbranched fixture would pass with the defect present.
+    // ----------------------------------------------------------------------------------
+
+    /// Cart on a track, two 2-link arms hanging from it — a miniature of the rope rig.
+    /// `tip_separation` places the arms so the free ends start that far apart.
+    fn get_branched_frames() -> Vec<FrameBox> {
+        let arm = |side: &str, x: f64, q_sign: f64| {
+            let _ = q_sign;
+            Box::new(
+                RotationalFrame::new(format!("{}0", side))
+                    .set_position(Position([x, 0.]))
+                    .add_weight(Weight::new(2.).set_position(Position([2., 0.])))
+                    .add_child(Box::new(
+                        RotationalFrame::new(format!("{}1", side))
+                            .set_position(Position([2., 0.]))
+                            .add_weight(Weight::new(1.).set_position(Position([2., 0.]))),
+                    )),
+            )
+        };
+        vec![Box::new(
+            TrackFrame::new("cart".into())
+                .add_weight(Weight::new(20.))
+                .add_child(arm("left", -3., 1.))
+                .add_child(arm("right", 3., -1.)),
+        )]
+    }
+
+    fn get_branched_states(seed: f64) -> Vec<State> {
+        get_varied_states(5, seed)
+    }
+
+    fn distance_constraint() -> ConstraintBox {
+        Box::new(
+            DistanceConstraint::new("left1".into(), "right1".into(), 1.5)
+                .set_positions(Position([2., 0.]), Position([2., 0.])),
+        )
+    }
+
+    fn coincidence_constraint() -> ConstraintBox {
+        Box::new(
+            CoincidenceConstraint::new("left1".into(), "right1".into())
+                .set_positions(Position([2., 0.]), Position([2., 0.])),
+        )
+    }
+
+    /// Builds a `ConstraintCtx` at an arbitrary state. Configuration-only unless
+    /// `with_motion`, which is the point of seam 4.
+    fn make_ctx<'a>(
+        frames: &[&FrameBox],
+        index_path_map: &'a FrameIndexPathMap,
+        states: &[State],
+        indices: (usize, usize),
+        motion: Option<&'a (Vec<Mat3>, Vec<Mat3>)>,
+        config: &'a (Vec<Mat3>, Vec<Mat3>),
+    ) -> ConstraintCtx<'a> {
+        let _ = frames;
+        ConstraintCtx {
+            frame_count: states.len(),
+            index_a: indices.0,
+            index_b: indices.1,
+            path_a: &index_path_map[&indices.0],
+            path_b: &index_path_map[&indices.1],
+            pos_mats: &config.0,
+            vel_mats: &config.1,
+            vel_sum_mats: motion.map(|m| m.0.as_slice()),
+            accel_sum_mats: motion.map(|m| m.1.as_slice()),
+        }
+    }
+
+    #[test]
+    fn test_constraint_jacobian_matches_finite_difference() {
+        // Catches a Jacobian written to the wrong coordinates, and any error in
+        // dC/dq. It CANNOT catch a sign error in the velocity-product term -- the
+        // Jacobian contains no qd at all. See
+        // test_constraint_acceleration_is_zero, which is the check for that.
+        let scene_frames = get_branched_frames();
+        let frames = super::sort_frames(&scene_frames);
+        let index_path_map = super::get_index_path_map(&frames);
+        let count = frames.len();
+
+        for constraint in [distance_constraint(), coincidence_constraint()].iter() {
+            let indices =
+                super::get_constraint_frame_indices(&frames, std::slice::from_ref(constraint))[0];
+            for &seed in [0.3, -1.1, 2.2].iter() {
+                let states = get_branched_states(seed);
+                let config = super::get_config_kinematics(&frames, &index_path_map, &states);
+                let ctx = make_ctx(&frames, &index_path_map, &states, indices, None, &config);
+                let analytic = constraint.jacobian_rows(&ctx);
+
+                let h = 1e-6;
+                for i in 0..count {
+                    let bump = |sign: f64| {
+                        let mut s: Vec<State> = states.to_vec();
+                        s[i].q += sign * h;
+                        let c = super::get_config_kinematics(&frames, &index_path_map, &s);
+                        let ctx = make_ctx(&frames, &index_path_map, &s, indices, None, &c);
+                        constraint.value(&ctx)
+                    };
+                    let plus = bump(1.);
+                    let minus = bump(-1.);
+                    for row in 0..constraint.row_count() {
+                        let numeric = (plus[row] - minus[row]) / (2. * h);
+                        assert_abs_diff_eq!(
+                            analytic[row][i],
+                            numeric,
+                            epsilon = 1e-5 * (1. + numeric.abs())
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_constraint_acceleration_is_zero() {
+        // The check that catches a wrong sign in the bias term, which the
+        // finite-difference test above cannot see and which asserting
+        // `J*qdd + Jdot*qd == 0` also cannot -- that is the augmented system's own
+        // second block row and is satisfied by construction.
+        //
+        // Instead: solve for qdd, then central-difference Cd in time, computing Cd
+        // from the Jacobian and the state alone. Nothing here reads `bias`, so a
+        // wrong sign there makes qdd wrong and shows up as a non-zero Cdd.
+        let scene_frames = get_branched_frames();
+        let frames = super::sort_frames(&scene_frames);
+        let index_path_map = super::get_index_path_map(&frames);
+        let gravity = Vec3::new(0., -10., 0.);
+
+        for constraint in [distance_constraint(), coincidence_constraint()].iter() {
+            let constraints = std::slice::from_ref(constraint);
+            let indices = super::get_constraint_frame_indices(&frames, constraints)[0];
+            for &seed in [0.3, -1.1, 2.2].iter() {
+                let states = get_branched_states(seed);
+                let ext: Vec<f64> = vec![0.; frames.len()];
+                let qdds = super::solve(
+                    &frames,
+                    &index_path_map,
+                    constraints,
+                    &[indices],
+                    &gravity,
+                    &states,
+                    &ext,
+                );
+
+                // Cd(q, qd) = J(q) . qd, from `jacobian_rows` only.
+                let c_dot = |s: &[State]| -> Vec<f64> {
+                    let config = super::get_config_kinematics(&frames, &index_path_map, s);
+                    let ctx = make_ctx(&frames, &index_path_map, s, indices, None, &config);
+                    constraint
+                        .jacobian_rows(&ctx)
+                        .iter()
+                        .map(|row| row.iter().zip(s).map(|(j, st)| j * st.qd).sum())
+                        .collect()
+                };
+
+                let h = 1e-6;
+                let step = |sign: f64| -> Vec<State> {
+                    states
+                        .iter()
+                        .enumerate()
+                        .map(|(i, st)| State {
+                            q: st.q + sign * h * st.qd,
+                            qd: st.qd + sign * h * qdds[i],
+                        })
+                        .collect()
+                };
+                let plus = c_dot(&step(1.));
+                let minus = c_dot(&step(-1.));
+                for row in 0..constraint.row_count() {
+                    let c_ddot = (plus[row] - minus[row]) / (2. * h);
+                    assert_abs_diff_eq!(c_ddot, 0., epsilon = 1e-4);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_augmented_system_is_symmetric_and_sized() {
+        let scene_frames = get_branched_frames();
+        let frames = super::sort_frames(&scene_frames);
+        let index_path_map = super::get_index_path_map(&frames);
+        let gravity = Vec3::new(0., -10., 0.);
+        let states = get_branched_states(0.7);
+        let ext: Vec<f64> = vec![0.; frames.len()];
+
+        // One of each type, so the row count is 1 + 2 rather than a multiple.
+        let constraints: Vec<ConstraintBox> = vec![distance_constraint(), coincidence_constraint()];
+        let indices = super::get_constraint_frame_indices(&frames, &constraints);
+        let (mat, vec_) = super::get_system_of_equations(
+            &frames,
+            &index_path_map,
+            &constraints,
+            &indices,
+            &gravity,
+            &states,
+            &ext,
+        );
+
+        let n = frames.len();
+        assert_eq!(mat.shape(), (n + 3, n + 3));
+        assert_eq!(vec_.shape(), (n + 3, 1));
+        for row in 0..n + 3 {
+            for col in 0..n + 3 {
+                assert_eq!(
+                    mat[(row, col)],
+                    mat[(col, row)],
+                    "asymmetric at ({}, {})",
+                    row,
+                    col
+                );
+            }
+        }
+        // The (1,1) block is the unconstrained mass matrix, untouched.
+        let (plain, _) = super::get_system_of_equations(
+            &frames,
+            &index_path_map,
+            &[],
+            &[],
+            &gravity,
+            &states,
+            &ext,
+        );
+        assert_eq!(plain.shape(), (n, n));
+        for row in 0..n {
+            for col in 0..n {
+                assert_eq!(mat[(row, col)], plain[(row, col)]);
+            }
+        }
+    }
+
+    #[test]
+    fn test_unconstrained_scene_is_bit_identical() {
+        // A scene with no constraints must take exactly the path it took before.
+        let states = get_sample_states();
+        let scene_frames = get_sample_frames();
+        let frames = super::sort_frames(&scene_frames);
+        let index_path_map = super::get_index_path_map(&frames);
+        let gravity = Vec3::new(0., -10., 0.);
+        let ext: Vec<f64> = iter::repeat(2.).take(frames.len()).collect();
+        let (mat, _) = super::get_system_of_equations(
+            &frames,
+            &index_path_map,
+            &[],
+            &[],
+            &gravity,
+            &states,
+            &ext,
+        );
+        assert_eq!(mat.shape(), (frames.len(), frames.len()));
+    }
+
     #[test]
     fn test_get_system_of_equations() {
         let states = get_sample_states();
@@ -1628,6 +2050,8 @@ mod tests {
         let (coeff_matrix, force_vector) = super::get_system_of_equations(
             &frames,
             &index_path_map,
+            &[],
+            &[],
             &gravity,
             &states,
             &ext_forces,
@@ -1650,6 +2074,8 @@ mod tests {
         super::tick_simple_mut(
             &frames,
             &index_path_map,
+            &[],
+            &[],
             &gravity,
             &mut states2,
             &ext_forces,
@@ -1687,6 +2113,8 @@ mod tests {
         super::tick_runge_kutta_mut(
             &frames,
             &index_path_map,
+            &[],
+            &[],
             &gravity,
             &mut states2,
             &ext_forces,

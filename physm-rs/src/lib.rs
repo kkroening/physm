@@ -8,6 +8,10 @@ use wasm_bindgen::prelude::*;
 #[cfg(not(test))]
 use web_sys::console;
 
+pub use crate::constraint::CoincidenceConstraint;
+pub use crate::constraint::Constraint;
+pub use crate::constraint::ConstraintBox;
+pub use crate::constraint::DistanceConstraint;
 pub use crate::frame::Frame;
 pub use crate::frame::FrameBox;
 pub use crate::frame::FrameId;
@@ -17,6 +21,7 @@ pub use crate::solver::Solver;
 pub use crate::track_frame::TrackFrame;
 pub use crate::weight::Weight;
 
+mod constraint;
 mod frame;
 mod json;
 mod rotational_frame;
@@ -40,7 +45,7 @@ impl std::error::Error for Error {}
 type Mat3 = nalgebra::Matrix3<f64>;
 type Vec3 = nalgebra::Vector3<f64>;
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Position([f64; 2]);
 
 impl Position {

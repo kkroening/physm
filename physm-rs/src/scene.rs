@@ -1,4 +1,6 @@
+use crate::constraint;
 use crate::json;
+use crate::ConstraintBox;
 use crate::Error;
 use crate::FrameBox;
 use crate::Vec3;
@@ -9,6 +11,7 @@ const DEFAULT_GRAVITY: &[f64] = &[0., -10.0, 0.];
 pub struct Scene {
     pub gravity: Vec3,
     pub frames: Vec<FrameBox>,
+    pub constraints: Vec<ConstraintBox>,
 }
 
 impl Scene {
@@ -16,6 +19,7 @@ impl Scene {
         Self {
             gravity: Vec3::from_column_slice(DEFAULT_GRAVITY),
             frames: Vec::new(),
+            constraints: Vec::new(),
         }
     }
 
@@ -29,9 +33,19 @@ impl Scene {
         self
     }
 
+    pub fn add_constraint(mut self, constraint: ConstraintBox) -> Self {
+        self.constraints.push(constraint);
+        self
+    }
+
     pub fn from_json_value(value: &serde_json::Value) -> Result<Self, Error> {
         let obj = json::value_to_json_obj(value)?;
         Ok(Scene {
+            constraints: json::map_obj_item_or_default(
+                obj,
+                "constraints",
+                constraint::value_to_constraints,
+            )?,
             frames: json::map_obj_item_or_default(obj, "frames", json::value_to_frames)?,
             gravity: Vec3::new(
                 0.,
