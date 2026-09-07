@@ -1,0 +1,221 @@
+# Continuous integration: one job per package.
+#
+# What this catches, and what it does not, because the distinction is the whole
+# point and a comment that overstates it is worse than none:
+#
+#   Caught — a change that breaks a package. Push or open a PR touching either
+#   package and its job runs.
+#
+#   Not caught, by the physm-js job — the world moving under a dormant tree,
+#   which is what actually happened here between November 2020 and September
+#   2026. `setup-node` pins Node from .nvmrc and `npm ci` installs an exact
+#   lockfile, so neither a newer Node nor a newer dependency is ever met; and
+#   `ubuntu-latest` never sees a platform-specific break like the missing
+#   darwin-arm64 build that made this package uninstallable. Those are the right
+#   choices for reproducibility and the opposite of drift detection.
+#
+#   Caught anyway, by the physm-rs job — that job does see ecosystem drift, for
+#   an accidental reason worth writing down: physm-rs commits no Cargo.lock, so
+#   `cargo test` re-resolves dependencies on every run.
+#
+# The `schedule:` below is a partial answer to the dormancy half: it runs the
+# suite without anyone pushing. Note that GitHub disables scheduled workflows in
+# public repositories after 60 days of repository inactivity — so on a truly
+# dormant repo the disable notice becomes the signal rather than a red build.
+# The instrument that actually addresses drift is a dependency-update bot, whose
+# PRs would trigger this workflow; there isn't one here yet.
+#
+# `on.*.paths` filters the whole workflow, not individual jobs, so the list is
+# the union across every job. A package whose files did not change may still have
+# its job run; for jobs this cheap that beats per-job change detection. physm-py
+# has no job and is not in the list — there is nothing runnable there yet, so
+# "one job per package" describes two packages of three. The `push` and
+# `pull_request` lists are duplicated verbatim; drift between them fails silently
+# in the direction of running less.
+#
+# Note also that a *skipped* workflow is not a passing one: a PR touching only
+# docs/ or physm-py/ produces no run at all. That is harmless today and becomes a
+# trap the moment `CI` is a required status check, since such PRs would wait
+# forever for a status nobody reports.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'physm-js/**'
+      - 'physm-rs/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'physm-js/**'
+      - 'physm-rs/**'
+      - '.github/workflows/ci.yml'
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Superseded pushes to a PR are worth cancelling; a push to master is not.
+  # `github.ref` is a shared group for master, so an unconditional cancel means
+  # two merges minutes apart leave the first commit never verified — and master's
+  # green history is the record this workflow exists to create.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Pinned rather than taking whatever the installer script serves on the day.
+  # This is the toolchain the wasm artifacts are built with, and an unpinned
+  # input in a workflow about preventing drift is the wrong one to leave open.
+  WASM_PACK_VERSION: '0.15.0'
+
+jobs:
+  physm-rs:
+    name: physm-rs (fmt, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: physm-rs
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Keyed separately from the physm-js job, which builds wasm32 artifacts into
+      # the same target directory; one shared key would mean whichever job finished
+      # first decided what the other restored.
+      #
+      # The primary key carries `github.run_id` so it never hits exactly and the
+      # cache is therefore always saved: `actions/cache` skips its save step on an
+      # exact primary-key hit, so a key that never changes — and `Cargo.toml` has
+      # not changed since 2020 — freezes the cache at whatever the first run
+      # produced. `restore-keys` does the actual matching.
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            physm-rs/target
+          key: cargo-native-${{ runner.os }}-${{ hashFiles('physm-rs/Cargo.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            cargo-native-${{ runner.os }}-${{ hashFiles('physm-rs/Cargo.toml') }}-
+            cargo-native-${{ runner.os }}-
+
+      # Unlike the JS side's lint step, this one blocks: the tree is already
+      # rustfmt-clean, so it costs nothing and catches drift the moment it appears.
+      # `cargo clippy` is deliberately not run — it reports ~58 warnings of
+      # pre-existing debt, and deciding what to do about those is its own change.
+      # `cargo test` likewise emits an unasserted warning count; same reasoning.
+      - name: Check formatting
+        run: cargo fmt --check
+
+      # `tests/web.rs` is gated to `target_arch = "wasm32"`, so it compiles to
+      # nothing here and a plain `cargo test` needs no wasm toolchain.
+      - name: Test
+        run: cargo test
+
+  physm-js:
+    name: physm-js (lint, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # This job also covers physm-rs end to end: physm-js/src/Solver.test.js steps
+    # JsSolver and RsSolver over the same scene and asserts they agree, so it is a
+    # cross-language check on the whole solver, and would catch an error in the
+    # equations that both Rust implementations shared. That is a different check
+    # from physm-rs's own `test_composite_assembly_matches_naive`, which compares
+    # the composite assembly against a naive one within the crate — and which the
+    # job above already runs. Either way it is why `physm-rs/**` is in the trigger
+    # paths.
+    defaults:
+      run:
+        working-directory: physm-js
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: physm-js/.nvmrc
+          cache: npm
+          cache-dependency-path: physm-js/package-lock.json
+
+      # Both files are committed and the README points different version managers
+      # at different ones — nvm reads .nvmrc, fnm/asdf/Volta read .node-version —
+      # so CI pinning to one of them only guarantees agreement if they agree.
+      - name: Check the Node version files agree
+        run: test "$(cat .nvmrc)" = "$(cat .node-version)"
+
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ~/.cargo/bin
+            physm-rs/target
+          key: cargo-wasm-${{ runner.os }}-${{ hashFiles('physm-rs/Cargo.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            cargo-wasm-${{ runner.os }}-${{ hashFiles('physm-rs/Cargo.toml') }}-
+            cargo-wasm-${{ runner.os }}-
+
+      # `shell: bash` for pipefail. The default is `bash -e {0}` without it, so a
+      # failed download would pipe an empty script into `sh`, exit 0, and surface
+      # as a confusing `wasm-pack: command not found` two steps later.
+      - name: Install wasm-pack
+        shell: bash
+        run: |
+          if [ "$(wasm-pack --version 2>/dev/null)" = "wasm-pack ${WASM_PACK_VERSION}" ]; then
+            echo "wasm-pack ${WASM_PACK_VERSION} already present (restored from cache)"
+            exit 0
+          fi
+          url="https://github.com/rustwasm/wasm-pack/releases/download/v${WASM_PACK_VERSION}/wasm-pack-v${WASM_PACK_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          mkdir -p ~/.cargo/bin
+          curl -sSfL "$url" | tar -xz --strip-components=1 -C ~/.cargo/bin \
+            "wasm-pack-v${WASM_PACK_VERSION}-x86_64-unknown-linux-musl/wasm-pack"
+          wasm-pack --version
+
+      # physm-js depends on physm-rs as `file:../physm-rs/pkg`, a build output that
+      # is not committed. Both wasm targets are built before `npm ci` so the link
+      # resolves to a real directory rather than dangling until the first build.
+      # The two targets are not interchangeable: `pkg` (bundler) is what the browser
+      # imports, `nodepkg` (nodejs) is what Solver.test.js imports.
+      #
+      # These are not the only wasm builds in the run: package.json's `pretest` and
+      # `prebuild` hooks fire the same commands again, so wasm-pack runs four times,
+      # not two. That is a few seconds against a warm target directory, and it is
+      # what makes a wasm failure legible as its own step rather than as a confusing
+      # failure inside `npm test`. Removing a step here does not remove a build.
+      #
+      # A third entry point exists and is not exercised anywhere: physm-rs/scripts/build
+      # and scripts/build-node produce the same output and nothing holds them honest.
+      - name: Build wasm (bundler target, for the app)
+        run: npm run wasm
+
+      - name: Build wasm (nodejs target, for the tests)
+        run: npm run wasm:node
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Warnings do not block, but the floor is frozen: restoring lint after five
+      # unlinted years surfaced 48 pre-existing unused imports, and without the cap
+      # warning 49 would land green — a result reported rather than asserted, which
+      # is the same failure this file exists to fix. Ratchet the number down as the
+      # debt is paid. The react-hooks rules are configured as errors regardless.
+      - name: Lint
+        run: npm run lint -- --max-warnings 48
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
