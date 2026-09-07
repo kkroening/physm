@@ -109,7 +109,8 @@ one-sided `2. * qd * vel_sum_mats[parent_index] * vel_mats[index]` rather than a
 anticommutator. For $i = j$, $`\partial_i^2 M = \mathcal{A}_i M`$.
 
 **Sparsity is the tree order.** $`\partial_i x_w = 0`$ unless $`i \preceq f(w)`$, which is
-precisely the `path_contains` test. The consequence is the classical branch-induced
+precisely what `path_contains` tests, and the relation `get_coefficient_matrix` iterates.
+The consequence is the classical branch-induced
 sparsity of the joint-space inertia matrix: $`g_{ij} = 0`$ **unless $i$ and $j$ are
 comparable in the tree order.** The converse fails — a comparable pair whose subtree carries
 no weights is zero too, and so is any pair whose contributions happen to cancel at a given
@@ -126,7 +127,8 @@ the only frames whose motion it shares. Right: $g$ is structurally nonzero only 
 comparable pairs,
 so frame 2's row and column carry entries only at 1, 2, 3. Frames 2 and 4 lie on disjoint
 branches, and the corresponding blocks are structurally zero — the code never even visits
-them, via the `path_contains` guard in `get_coefficient_matrix_entry`.
+them: `get_coefficient_matrix` walks each column's root path rather than testing all
+pairs, so an incomparable pair is never enumerated in the first place.
 
 ---
 
@@ -134,8 +136,8 @@ them, via the `path_contains` guard in `get_coefficient_matrix_entry`.
 
 Seven numbered sweeps, plus the two derived passes 1′ and 2′ that feed them. Sweeps 1–5 run
 root-to-leaf in topological order; 6 and 7 run leaf-to-root, over the same array reversed. `sort_frames` is a reverse post-order, so every parent index
-precedes its children — which is also what lets `get_descendent_frames` scan only forward
-from its argument.
+precedes its children — which is also what lets sweeps 6 and 7 accumulate leaf-to-root by
+walking the same array backwards.
 
 | # | Function | Object | Recurrence |
 | --- | --- | --- | --- |
@@ -209,10 +211,9 @@ With physical space $`\mathbb{R}^2`$ carrying the Euclidean metric $`\delta`$ an
 weight contributing $`m_w\delta`$, this is $`g = \varphi^*\big(\bigoplus_w m_w\delta\big)`$ —
 the mass-weighted pullback along $`\varphi : Q \to (\mathbb{R}^2)^W`$. Kinetic energy is
 $`T = \tfrac12 g_{ij}\dot q^i\dot q^j`$; the code builds $g$ itself, correctly without the
-$`\tfrac12`$, and fills the lower triangle by symmetry. The summation range in
-`get_coefficient_matrix_entry` is right because
-$`\mathrm{supp}(\partial_i)\cap\mathrm{supp}(\partial_j) = D(j)`$ when
-$`i \preceq j`$.
+$`\tfrac12`$. Restricting the sum to $`D(j)`$ is right because
+$`\mathrm{supp}(\partial_i)\cap\mathrm{supp}(\partial_j) = D(j)`$ when $`i \preceq j`$ —
+which is why the composite moment below is indexed by the *column*, the deeper of the pair.
 
 ### The force vector is force minus Christoffel
 
@@ -330,7 +331,7 @@ $`\mathrm{Ad}`$ to act on — §§2–5 do not survive that.
 The other route keeps the tree a tree and admits the extra relations as **Lagrange-multiplier
 rows on an augmented system**. `physm-py` in this repo already does it: `NaiveSolver._solve`
 sizes its matrix `nframes + nconstraints`, assembles the frame block by the same
-comparability walk the Rust uses, appends the constraint rows, and discards the multipliers
+comparability relation the Rust uses, appends the constraint rows, and discards the multipliers
 on the way out — with `Spring` and `Constraint` as first-class scene nodes. That is what the
 2019 notes' springs and constraints were heading toward, and it leaves everything above
 intact.
@@ -343,25 +344,40 @@ $`O(n \cdot \mathrm{depth})`$ — it scanned the whole suffix of the sort order 
 membership by walking each candidate's entire root path. Two terms came out of that on a
 chain: $`\Theta(n^4)`$ root-path comparisons, and $`\Theta(n^3)`$ floating-point work.
 
-Both are gone, and the measured effect is worth recording because the two terms make the
-asymptotics misleading over any practical range. `bench_assembly` in `solver.rs`, chain
-scenes, release build:
+Both are gone, and the measured effect is worth recording, because neither the asymptotics
+nor a single scene shape describes it honestly. `bench_assembly` in `solver.rs`, release
+build:
 
-| $n$ | naive (µs) | composite (µs) | speedup |
-| ---: | ---: | ---: | ---: |
-| 10 | 12.1 | 3.0 | 4.0× |
-| 20 | 82.2 | 8.5 | 9.7× |
-| 40 | 524.3 | 24.4 | 21.5× |
-| 80 | 3 969.4 | 86.7 | 45.8× |
-| 160 | 35 139.6 | 285.2 | 123.2× |
-| 320 | 400 384.9 | 1 100.3 | 363.9× |
+| $n$ | chain: naive | composite | speedup | | hub: naive | composite | speedup |
+| ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| 10 | 14.9 µs | 3.9 | 3.8× | | 2.7 µs | 1.1 | 2.5× |
+| 20 | 97.8 | 10.3 | 9.5× | | 6.5 | 2.3 | 2.9× |
+| 40 | 608.9 | 25.7 | 23.7× | | 21.4 | 4.7 | 4.6× |
+| 80 | 4 413.3 | 100.6 | 43.9× | | 71.0 | 9.9 | 7.1× |
+| 160 | 35 221.3 | 275.5 | 127.8× | | 281.3 | 21.4 | 13.2× |
+| 320 | 404 103.7 | 1 105.4 | 365.6× | | 1 062.5 | 53.7 | 19.8× |
 
-The naive column's ratio per doubling climbs 6.4 → 7.6 → 8.9 → 11.4 rather than sitting at
-16: the cheap $`\Theta(n^4)`$ comparisons only overtake the expensive $`\Theta(n^3)`$
-floating-point work somewhere inside this range. Quoting $`\Theta(n^4)`$ without that caveat
-would predict the wrong number at every $n$ measured here. The composite column grows about
-3.9× per doubling, which is the $`O(n \cdot \mathrm{depth})`$ bound with $`\mathrm{depth} = n`$
-for a chain.
+**Three things the table says that a summary would lose.**
+
+The chain's naive ratios per doubling are 6.6, 6.2, 7.2, 8.0, 11.5 — they do not climb
+monotonically, and they are nowhere near the 16 that $`\Theta(n^4)`$ predicts. The cheap
+quartic comparison term only overtakes the expensive cubic floating-point term somewhere
+inside this range, so quoting the asymptotic alone predicts the wrong number at every $n$
+measured here.
+
+The composite column's ratios are 2.6, 2.5, 3.9, 2.7, 4.0 on a chain: consistent with the
+$`O(n \cdot \mathrm{depth})`$ bound at $`\mathrm{depth} = n`$, but only loosely, and the
+quadratic reading rests on the upper end of the range rather than on the whole of it.
+
+**The speedup is shape-dependent by more than an order of magnitude** — 365× on a chain
+against 19.8× on a hub at the same $n$ — which is why the benchmark measures both. A chain
+has $`\mathrm{depth} = n`$, so the bound and the dense `CoefficientMatrix::zeros(n, n)` fill
+are the same order and the fill disappears into the constant. A hub has $`\mathrm{depth} = 2`$,
+so the bound reads $O(n)$ while the allocation is still $`n^2`$: at $n = 320$ the zero-fill
+alone is already a substantial fraction of the hub's assembly time, and its share grows with
+every further doubling. **The assembly still materializes $g$ densely**, which §3 notes is
+exactly what the sparsity pattern would let a sparse factorization avoid — but the QR wants a
+dense matrix, so that is a separate change.
 
 **One saving remains unclaimed, and it is independent of this one.** The old cost had two
 causes — the per-entry subtree walk, now gone, and `get_descendent_frames` being linear in

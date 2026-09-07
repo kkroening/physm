@@ -274,14 +274,13 @@ fn get_composite_moment_mats(
     let mut moment_mats = vec![Mat3::zeros(); frames.len()];
     for index in (0..frames.len()).rev() {
         let offset = weight_offsets[index];
-        let own_moment = frames[index]
-            .get_weights()
-            .iter()
-            .enumerate()
-            .fold(Mat3::zeros(), |acc, (weight_index, weight)| {
+        let own_moment = frames[index].get_weights().iter().enumerate().fold(
+            Mat3::zeros(),
+            |acc, (weight_index, weight)| {
                 let pos = weight_pos_vecs[offset + weight_index];
                 acc + (weight.mass * pos) * pos.transpose()
-            });
+            },
+        );
         moment_mats[index] += own_moment;
         if let Some(parent_index) = get_parent_index(index, index_path_map) {
             let subtree_moment = moment_mats[index];
@@ -308,17 +307,16 @@ fn get_composite_force_mats(
     let mut force_mats = vec![Mat3::zeros(); frames.len()];
     for index in (0..frames.len()).rev() {
         let offset = weight_offsets[index];
-        let own_force = frames[index]
-            .get_weights()
-            .iter()
-            .enumerate()
-            .fold(Mat3::zeros(), |acc, (weight_index, weight)| {
+        let own_force = frames[index].get_weights().iter().enumerate().fold(
+            Mat3::zeros(),
+            |acc, (weight_index, weight)| {
                 let pos = weight_pos_vecs[offset + weight_index];
                 let force_vec = weight.mass * gravity
                     - weight.mass * accel_sum_mats[index] * pos
                     - weight.drag * vel_sum_mats[index] * pos;
                 acc + force_vec * pos.transpose()
-            });
+            },
+        );
         force_mats[index] += own_force;
         if let Some(parent_index) = get_parent_index(index, index_path_map) {
             let subtree_force = force_mats[index];
@@ -328,15 +326,23 @@ fn get_composite_force_mats(
     force_mats
 }
 
+/// Requires `row_index` to be an inclusive ancestor of `col_index`.
+///
+/// Off that relation the contraction is against the wrong subtree's composite moment and
+/// returns a plausible but meaningless number rather than the structural zero the entry
+/// actually has. `get_coefficient_matrix` only ever asks for pairs drawn from a column's
+/// root path, so the precondition holds by construction there.
 fn get_coefficient_matrix_entry(
     row_index: FrameIndex,
     col_index: FrameIndex,
+    index_path_map: &FrameIndexPathMap,
     vel_mats: &[Mat3],
     composite_moment_mats: &[Mat3],
 ) -> f64 {
     debug_assert!(row_index < vel_mats.len());
     debug_assert!(col_index < vel_mats.len());
     debug_assert_eq!(composite_moment_mats.len(), vel_mats.len());
+    debug_assert!(path_contains(&index_path_map[&col_index], row_index));
     (vel_mats[row_index].transpose() * vel_mats[col_index] * composite_moment_mats[col_index])
         .trace()
 }
@@ -354,8 +360,13 @@ fn get_coefficient_matrix(
     let mut coefficient_matrix = CoefficientMatrix::zeros(size, size);
     for col_index in 0..size {
         for &row_index in index_path_map[&col_index].iter() {
-            let entry =
-                get_coefficient_matrix_entry(row_index, col_index, vel_mats, composite_moment_mats);
+            let entry = get_coefficient_matrix_entry(
+                row_index,
+                col_index,
+                index_path_map,
+                vel_mats,
+                composite_moment_mats,
+            );
             coefficient_matrix[(row_index, col_index)] = entry;
             coefficient_matrix[(col_index, row_index)] = entry;
         }
@@ -376,8 +387,7 @@ fn get_force_vector_entry(
     debug_assert_eq!(composite_force_mats.len(), frames.len());
     debug_assert_eq!(states.len(), frames.len());
     debug_assert_eq!(external_forces.len(), frames.len());
-    let weight_force =
-        (vel_mats[row_index].transpose() * composite_force_mats[row_index]).trace();
+    let weight_force = (vel_mats[row_index].transpose() * composite_force_mats[row_index]).trace();
     let resistance_force = -states[row_index].qd * frames[row_index].get_resistance();
     resistance_force + weight_force + external_forces[row_index]
 }
@@ -619,10 +629,6 @@ mod tests {
     // See `test_composite_assembly_matches_naive`.
     // ----------------------------------------------------------------------------------
 
-    fn path_contains(path: &FramePath, parent_index: FrameIndex) -> bool {
-        path.iter().any(|index| *index == parent_index)
-    }
-
     fn naive_get_descendent_frames(
         parent_index: FrameIndex,
         index_path_map: &FrameIndexPathMap,
@@ -651,8 +657,9 @@ mod tests {
                     .map(|&frame_index| {
                         let weights = frames[frame_index].get_weights();
                         let offset = weight_offsets[frame_index];
-                        (0..weights.len())
-                            .map(move |index| (weights[index].mass, weight_pos_vecs[offset + index]))
+                        (0..weights.len()).map(move |index| {
+                            (weights[index].mass, weight_pos_vecs[offset + index])
+                        })
                     })
                     .flatten()
                     .map(|(mass, weight_pos)| {
@@ -687,13 +694,11 @@ mod tests {
                 .iter()
                 .map(|&frame_index| {
                     let weight_offset = weight_offsets[frame_index];
-                    frames[frame_index]
-                        .get_weights()
-                        .iter()
-                        .enumerate()
-                        .map(move |(weight_index, weight)| {
+                    frames[frame_index].get_weights().iter().enumerate().map(
+                        move |(weight_index, weight)| {
                             (frame_index, weight_offset + weight_index, weight)
-                        })
+                        },
+                    )
                 })
                 .flatten()
                 .map(|(frame_index, weight_index, weight)| {
@@ -727,6 +732,27 @@ mod tests {
                         .set_position(Position([3., 0.]))
                         .set_drag(0.02 * index as f64),
                 );
+            if let Some(frame) = child.take() {
+                link = link.add_child(frame);
+            }
+            child = Some(Box::new(link));
+        }
+        child.into_iter().collect()
+    }
+
+    /// A chain in which only odd-numbered links carry weight, so the tip subtree is
+    /// entirely weightless. This is the shape §3 of the doc singles out: a *comparable*
+    /// pair whose subtree carries no mass, and therefore a structural zero that the
+    /// ancestor relation alone does not predict.
+    fn get_sparse_chain_frames(link_count: usize) -> Vec<FrameBox> {
+        let mut child: Option<FrameBox> = None;
+        for index in (0..link_count).rev() {
+            let mut link = RotationalFrame::new(format!("link{}", index))
+                .set_position(Position([if index == 0 { 0. } else { 3. }, 0.]));
+            if index % 2 == 1 {
+                link = link
+                    .add_weight(Weight::new(1. + index as f64).set_position(Position([3., 0.])));
+            }
             if let Some(frame) = child.take() {
                 link = link.add_child(frame);
             }
@@ -1151,6 +1177,7 @@ mod tests {
             super::get_coefficient_matrix_entry(
                 row_index,
                 col_index,
+                &index_path_map,
                 &vel_mats,
                 &composite_moment_mats,
             )
@@ -1160,14 +1187,15 @@ mod tests {
         // `get_coefficient_matrix`, so they are not valid inputs here any more.
         // `test_composite_assembly_matches_naive` covers the full matrix, zeros included.
         //
-        // The tolerances below are for summation order. These expectations add up the
-        // per-weight terms directly, while the assembly sums them into a composite moment
-        // first and contracts once, so the two differ in the last ulp or two.
+        // Two of the four expectations below match exactly and carry no tolerance. The
+        // other two differ by one or two ulps -- 9.1e-13 at most, on values around 3.6e3 --
+        // because they add up the per-weight terms directly while the assembly sums them
+        // into a composite moment first and contracts once. 1e-9 leaves a thousandfold
+        // margin over that while staying far too tight to hide a dropped term.
         assert_abs_diff_eq!(
             get_coefficient(BALL_INDEX, BALL_INDEX),
             get_mass(BALL_INDEX, 0)
-                * (vel_mats[BALL_INDEX] * get_pos(BALL_INDEX, 0)).norm_squared(),
-            epsilon = 1e-6
+                * (vel_mats[BALL_INDEX] * get_pos(BALL_INDEX, 0)).norm_squared()
         );
         assert_abs_diff_eq!(
             get_coefficient(CART_INDEX, CART_INDEX),
@@ -1178,8 +1206,7 @@ mod tests {
                 + get_mass(PENDULUM1_INDEX, 0)
                     * (vel_mats[CART_INDEX] * get_pos(PENDULUM1_INDEX, 0)).norm_squared()
                 + get_mass(PENDULUM2_INDEX, 0)
-                    * (vel_mats[CART_INDEX] * get_pos(PENDULUM2_INDEX, 0)).norm_squared(),
-            epsilon = 1e-6
+                    * (vel_mats[CART_INDEX] * get_pos(PENDULUM2_INDEX, 0)).norm_squared()
         );
         assert_abs_diff_eq!(
             get_coefficient(PENDULUM1_INDEX, PENDULUM1_INDEX),
@@ -1187,13 +1214,13 @@ mod tests {
                 * (vel_mats[PENDULUM1_INDEX] * get_pos(PENDULUM1_INDEX, 0)).norm_squared()
                 + get_mass(PENDULUM2_INDEX, 0)
                     * (vel_mats[PENDULUM1_INDEX] * get_pos(PENDULUM2_INDEX, 0)).norm_squared(),
-            epsilon = 1e-6
+            epsilon = 1e-9
         );
         assert_abs_diff_eq!(
             get_coefficient(PENDULUM2_INDEX, PENDULUM2_INDEX),
             get_mass(PENDULUM2_INDEX, 0)
                 * (vel_mats[PENDULUM2_INDEX] * get_pos(PENDULUM2_INDEX, 0)).norm_squared(),
-            epsilon = 1e-6
+            epsilon = 1e-9
         );
         assert_abs_diff_eq!(
             get_coefficient(PENDULUM1_INDEX, PENDULUM2_INDEX),
@@ -1234,6 +1261,7 @@ mod tests {
             super::get_coefficient_matrix_entry(
                 row_index,
                 col_index,
+                &index_path_map,
                 &vel_mats,
                 &composite_moment_mats,
             )
@@ -1351,6 +1379,11 @@ mod tests {
             ("chain-9", get_chain_frames(9)),
             ("chain-24", get_chain_frames(24)),
             ("hub-6", get_hub_frames(6)),
+            ("sparse chain-8", get_sparse_chain_frames(8)),
+            (
+                "sparse chain-1 (no weights at all)",
+                get_sparse_chain_frames(1),
+            ),
         ];
         let gravities = [Vec3::new(0., -10., 0.), Vec3::new(0., 0., 0.)];
 
@@ -1361,8 +1394,7 @@ mod tests {
 
             for &seed in [0., 0.61, 2.4, -1.35].iter() {
                 let states = get_varied_states(count, seed);
-                let external_forces: Vec<f64> =
-                    (0..count).map(|i| 0.5 * i as f64 - 1.).collect();
+                let external_forces: Vec<f64> = (0..count).map(|i| 0.5 * i as f64 - 1.).collect();
 
                 let pos_mats = super::get_pos_mats(&frames, &index_path_map, &states);
                 let inv_pos_mats = super::get_inv_pos_mats(&pos_mats);
@@ -1508,63 +1540,79 @@ mod tests {
     fn bench_assembly() {
         use std::time::Instant;
 
-        println!(
-            "\n{:>6}  {:>12}  {:>12}  {:>8}",
-            "n", "naive (us)", "composite", "speedup"
-        );
-        for &link_count in [10usize, 20, 40, 80, 160, 320].iter() {
-            let scene_frames = get_chain_frames(link_count);
-            let frames = super::sort_frames(&scene_frames);
-            let index_path_map = super::get_index_path_map(&frames);
-            let states = get_varied_states(link_count, 0.4);
-            let pos_mats = super::get_pos_mats(&frames, &index_path_map, &states);
-            let inv_pos_mats = super::get_inv_pos_mats(&pos_mats);
-            let vel_mats =
-                super::get_vel_mats(&frames, &index_path_map, &pos_mats, &inv_pos_mats, &states);
-            let weight_offsets = super::get_weight_offsets(&frames);
-            let weight_pos_vecs = super::get_weight_pos_vecs(&frames, &pos_mats);
-
-            let reps = if link_count > 40 { 3 } else { 50 };
-
-            let start = Instant::now();
-            for _ in 0..reps {
-                let m = naive_get_coefficient_matrix(
-                    &frames,
-                    &index_path_map,
-                    &vel_mats,
-                    &weight_offsets,
-                    &weight_pos_vecs,
-                );
-                std::hint::black_box(m);
-            }
-            let naive_us = start.elapsed().as_secs_f64() * 1e6 / reps as f64;
-
-            let start = Instant::now();
-            for _ in 0..reps {
-                // The composite sweep is part of the cost being measured, not a fixture.
-                let composite_moment_mats = super::get_composite_moment_mats(
-                    &frames,
-                    &index_path_map,
-                    &weight_offsets,
-                    &weight_pos_vecs,
-                );
-                let m = super::get_coefficient_matrix(
-                    &frames,
-                    &index_path_map,
-                    &vel_mats,
-                    &composite_moment_mats,
-                );
-                std::hint::black_box(m);
-            }
-            let composite_us = start.elapsed().as_secs_f64() * 1e6 / reps as f64;
-
+        // Both shapes, because they are not interchangeable: a chain has depth == n, so
+        // the O(n*depth) bound and the dense CoefficientMatrix::zeros(n, n) fill are the
+        // same order and the fill hides inside the constant. A hub has depth 2, so the
+        // bound reads O(n) while the fill is still n^2 -- and it dominates sooner.
+        for (shape, build) in [
+            ("chain", get_chain_frames as fn(usize) -> Vec<FrameBox>),
+            ("hub", get_hub_frames as fn(usize) -> Vec<FrameBox>),
+        ]
+        .iter()
+        {
             println!(
-                "{:>6}  {:>12.1}  {:>12.1}  {:>7.1}x",
-                link_count,
-                naive_us,
-                composite_us,
-                naive_us / composite_us
+                "\n{} scenes\n{:>6}  {:>12}  {:>12}  {:>8}",
+                shape, "n", "naive (us)", "composite", "speedup"
             );
+            for &link_count in [10usize, 20, 40, 80, 160, 320].iter() {
+                let scene_frames = build(link_count);
+                let frames = super::sort_frames(&scene_frames);
+                let index_path_map = super::get_index_path_map(&frames);
+                let states = get_varied_states(frames.len(), 0.4);
+                let pos_mats = super::get_pos_mats(&frames, &index_path_map, &states);
+                let inv_pos_mats = super::get_inv_pos_mats(&pos_mats);
+                let vel_mats = super::get_vel_mats(
+                    &frames,
+                    &index_path_map,
+                    &pos_mats,
+                    &inv_pos_mats,
+                    &states,
+                );
+                let weight_offsets = super::get_weight_offsets(&frames);
+                let weight_pos_vecs = super::get_weight_pos_vecs(&frames, &pos_mats);
+
+                let reps = if link_count > 40 { 3 } else { 50 };
+
+                let start = Instant::now();
+                for _ in 0..reps {
+                    let m = naive_get_coefficient_matrix(
+                        &frames,
+                        &index_path_map,
+                        &vel_mats,
+                        &weight_offsets,
+                        &weight_pos_vecs,
+                    );
+                    std::hint::black_box(m);
+                }
+                let naive_us = start.elapsed().as_secs_f64() * 1e6 / reps as f64;
+
+                let start = Instant::now();
+                for _ in 0..reps {
+                    // The composite sweep is part of the cost being measured, not a fixture.
+                    let composite_moment_mats = super::get_composite_moment_mats(
+                        &frames,
+                        &index_path_map,
+                        &weight_offsets,
+                        &weight_pos_vecs,
+                    );
+                    let m = super::get_coefficient_matrix(
+                        &frames,
+                        &index_path_map,
+                        &vel_mats,
+                        &composite_moment_mats,
+                    );
+                    std::hint::black_box(m);
+                }
+                let composite_us = start.elapsed().as_secs_f64() * 1e6 / reps as f64;
+
+                println!(
+                    "{:>6}  {:>12.1}  {:>12.1}  {:>7.1}x",
+                    link_count,
+                    naive_us,
+                    composite_us,
+                    naive_us / composite_us
+                );
+            }
         }
         println!();
     }
