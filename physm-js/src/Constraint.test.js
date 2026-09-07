@@ -203,6 +203,32 @@ describe('Constraint', () => {
       }
     });
 
+    test(`${kind.name}: constraint drift stays bounded over a trajectory`, () => {
+      // The formulation is index-1: it holds `C̈` at zero, so `C(t) = C₀ + Ċ₀t`
+      // exactly, and nothing pulls a violation back. Starting consistent --
+      // `C₀ = 0` by geometry, `Ċ₀ = 0` because the rig starts at rest -- what
+      // is left is integration error alone, and this pins how much of it there
+      // is: over these two seconds it reaches 9e-6 for the distance form and
+      // 2e-6 -- one float32 ulp -- for the coincidence one, so the bound below
+      // sits about an order of magnitude clear. When stabilization lands, this
+      // is what it has to beat.
+      const solver = getConstrainedSolver({ kind, rungeKutta: true });
+      const constraint = solver.scene.constraints[0];
+      const readC = () => {
+        const ctx = solver._getConfigKinematics(solver.getStateMap());
+        const value = constraint.value(ctx);
+        solver._disposeConstraintCtx(ctx);
+        return Math.max(...value.map(Math.abs));
+      };
+      expect(readC()).toBeLessThan(1e-5); // consistent at t = 0
+      let worst = 0;
+      for (let step = 0; step < 120; step++) {
+        solver.tick(1 / 60);
+        worst = Math.max(worst, readC());
+      }
+      expect(worst).toBeLessThan(1e-2);
+    });
+
     test(`${kind.name}: bias refuses a configuration-only context`, () => {
       // `_getConfigKinematics` deliberately omits the velocity sweeps, so that
       // evaluating a constraint at a trial configuration cannot silently read

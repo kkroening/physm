@@ -1965,6 +1965,83 @@ mod tests {
     }
 
     #[test]
+    fn test_constraint_drift_is_conserved() {
+        // The formulation is index-1: it holds C-ddot at zero and nothing pulls a
+        // violation back, so C(t) = C0 + C0dot*t exactly. Starting from rest makes
+        // C0dot zero, which leaves C *conserved*, and whatever movement is left is
+        // integration error alone.
+        //
+        // Conservation, not satisfaction, is the property under test -- so both
+        // constraints deliberately start at a non-zero C0. A test that only checked
+        // `C ~ 0` would need a pre-solved initial pose and would pass just as well
+        // on an implementation that quietly snapped C to zero every step.
+        //
+        // The assertion is on the *order*, not a magic threshold: refining the step
+        // by 4x must cut the drift by at least 100x. Measured 246x for both types
+        // -- 4^4 to two figures -- which says the drift is RK4 truncation and the
+        // constraint machinery contributes none of its own. A wrong bias term does
+        // not merely drift faster, it stops being fourth-order.
+        let scene_frames = get_branched_frames();
+        let frames = super::sort_frames(&scene_frames);
+        let index_path_map = super::get_index_path_map(&frames);
+
+        let makers: [fn() -> ConstraintBox; 2] = [distance_constraint, coincidence_constraint];
+        for make in makers.iter() {
+            let constraint = make();
+            let indices =
+                super::get_constraint_frame_indices(&frames, std::slice::from_ref(&constraint))[0];
+
+            let value_of = |s: &[State]| -> Vec<f64> {
+                let config = super::get_config_kinematics(&frames, &index_path_map, s);
+                let ctx = make_ctx(&frames, &index_path_map, s, indices, None, &config);
+                constraint.value(&ctx)
+            };
+
+            // Worst |C(t) - C0| over two seconds of simulated time.
+            let drift_over_two_seconds = |steps: usize| -> f64 {
+                let mut states: Vec<State> = get_branched_states(0.4)
+                    .iter()
+                    .map(|state| State { q: state.q, qd: 0. })
+                    .collect();
+                let initial = value_of(&states);
+                // The solver owns its scene, so it gets its own constraint; the one
+                // above stays borrowed for reading C back out along the way.
+                let scene = get_branched_frames()
+                    .into_iter()
+                    .fold(Scene::new(), |scene, frame| scene.add_frame(frame))
+                    .add_constraint(make());
+                let solver = Solver::new(scene);
+                let external_forces = vec![0.; frames.len()];
+                let delta_time = 2. / steps as f64;
+                let mut worst: f64 = 0.;
+                for _ in 0..steps {
+                    solver.tick_mut(&mut states, &external_forces, delta_time);
+                    for (row, value) in value_of(&states).iter().enumerate() {
+                        worst = worst.max((value - initial[row]).abs());
+                    }
+                }
+                worst
+            };
+
+            let coarse = drift_over_two_seconds(120);
+            let fine = drift_over_two_seconds(480);
+            assert!(
+                coarse < 5e-3,
+                "drift at 60 Hz was {:e}, well above what RK4 truncation explains",
+                coarse
+            );
+            assert!(
+                fine * 100. < coarse,
+                "refining 4x cut the drift only {:.0}x ({:e} -> {:e}); \
+                 fourth-order convergence is what says the drift is the integrator's",
+                coarse / fine,
+                coarse,
+                fine
+            );
+        }
+    }
+
+    #[test]
     fn test_augmented_system_is_symmetric_and_sized() {
         let scene_frames = get_branched_frames();
         let frames = super::sort_frames(&scene_frames);
