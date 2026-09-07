@@ -48,6 +48,8 @@ objects were already right.
 | **`vel_sum_mats[i]`** | **Spatial twist** of body $i$: $`\dot M_i M_i^{-1}`$ | $`S_i`$ |
 | **`accel_sum_mats[i]`** | **Bias (velocity-product) spatial acceleration** — the $`\ddot q`$-free part of $`\ddot M_i M_i^{-1}`$ | $`A_i`$ |
 | `weight_pos_vecs` | The image of the configuration→physical map $`\varphi`$, evaluated | $`x_w`$ |
+| **`composite_moment_mats[i]`** | Composite second moment of $`D(i)`$, accumulated leaf-to-root | $`\mathcal{J}_i`$ |
+| **`composite_force_mats[i]`** | Composite applied-force moment of $`D(i)`$, likewise | $`\mathcal{K}_i`$ |
 | **`coefficient_matrix`** | **Pullback metric** $`g = \varphi^*(\bigoplus_w m_w\delta)`$ — the joint-space inertia, i.e. the mass matrix | $`g_{ij}`$ |
 | **`force_vector`** | Generalized force minus the Christoffel term: $`Q_i - \Gamma_{i,jk}\dot q^j \dot q^k`$ | $`f_i`$ |
 | `resistance`, `drag` | Rayleigh dissipation coefficients — joint-space and task-space | $`c_i`$, $`b_w`$ |
@@ -107,7 +109,8 @@ one-sided `2. * qd * vel_sum_mats[parent_index] * vel_mats[index]` rather than a
 anticommutator. For $i = j$, $`\partial_i^2 M = \mathcal{A}_i M`$.
 
 **Sparsity is the tree order.** $`\partial_i x_w = 0`$ unless $`i \preceq f(w)`$, which is
-precisely the `path_contains` test. The consequence is the classical branch-induced
+precisely what `path_contains` tests, and the relation `get_coefficient_matrix` iterates.
+The consequence is the classical branch-induced
 sparsity of the joint-space inertia matrix: $`g_{ij} = 0`$ **unless $i$ and $j$ are
 comparable in the tree order.** The converse fails — a comparable pair whose subtree carries
 no weights is zero too, and so is any pair whose contributions happen to cancel at a given
@@ -124,16 +127,17 @@ the only frames whose motion it shares. Right: $g$ is structurally nonzero only 
 comparable pairs,
 so frame 2's row and column carry entries only at 1, 2, 3. Frames 2 and 4 lie on disjoint
 branches, and the corresponding blocks are structurally zero — the code never even visits
-them, via the `path_contains` guard in `get_coefficient_matrix_entry`.
+them: `get_coefficient_matrix` walks each column's root path rather than testing all
+pairs, so an incomparable pair is never enumerated in the first place.
 
 ---
 
 ## 4. The sweeps
 
-Five numbered sweeps in the implementation as it stands, plus the two derived passes 1′ and
-2′ that feed them, all in topological order. `sort_frames` is a reverse post-order, so every parent index
-precedes its children — which is also what lets `get_descendent_frames` scan only forward
-from its argument.
+Seven numbered sweeps, plus the two derived passes 1′ and 2′ that feed them. Sweeps 1–5 run
+root-to-leaf in topological order; 6 and 7 run leaf-to-root, over the same array reversed. `sort_frames` is a reverse post-order, so every parent index
+precedes its children — which is also what lets sweeps 6 and 7 accumulate leaf-to-root by
+walking the same array backwards.
 
 | # | Function | Object | Recurrence |
 | --- | --- | --- | --- |
@@ -144,6 +148,8 @@ from its argument.
 | 3 | `get_vel_sum_mats` | $`S_i`$ | $`S_i = S_{p(i)} + \dot q^i V_i`$ |
 | 4 | `get_accel_sum_mats` | $`A_i`$ | $`A_i = A_{p(i)} + (\dot q^i)^2\mathcal{A}_i + 2\dot q^i S_{p(i)}V_i`$ |
 | 5 | `get_weight_pos_vecs` | $`x_w`$ | $`x_w = M_{f(w)}\,r_w`$ |
+| 6 | `get_composite_moment_mats` | $`\mathcal{J}_i`$ | $`\mathcal{J}_i = \sum_{w\,\text{on}\,i} m_w x_w x_w^{\mathsf T} + \sum_c \mathcal{J}_c`$ &nbsp;(*leaf-to-root*) |
+| 7 | `get_composite_force_mats` | $`\mathcal{K}_i`$ | $`\mathcal{K}_i = \sum_{w\,\text{on}\,i} u_w x_w^{\mathsf T} + \sum_c \mathcal{K}_c`$ &nbsp;(*leaf-to-root*) |
 
 Sweeps 3 and 4 are prefix sums along the root path, and what they accumulate is the
 kinematics of any attached point:
@@ -178,16 +184,16 @@ the twist" is exactly the failure of $`\mathfrak{se}(2)`$ to be abelian.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figures/dataflow-dark.svg">
-  <img alt="Dataflow of one solve: five linear-time sweeps feed a shared bus, which feeds an assembly step that costs cubic time, then a QR solve. A dashed sixth sweep, absent from the code, would reduce the assembly to quadratic time." src="figures/dataflow-light.svg" width="880">
+  <img alt="Dataflow of one solve: five root-to-leaf sweeps feed a shared bus, which feeds two leaf-to-root composite sweeps, then an assembly costing order n times depth, then a QR solve." src="figures/dataflow-light.svg" width="880">
 </picture>
 
 **Where the cost actually is.** Five linear-time sweeps feed a shared bus; the assembly that
-consumes it re-sums each subtree once per matrix entry, which is quartic for a chain — see
-[§7](#the-assembly-is-coded-naively--complexity). The dashed box is the sixth sweep — a
-leaf-to-root accumulation of composite second moments, derived in
-[§5](#the-assembly-factors-a-sixth-sweep) and not implemented. The sweeps themselves run four
-times per tick under RK4, correctly, since they depend on state; the tree ordering they use
-is rebuilt with them and need not be.
+consumes them contracts one pair of screws per ancestor relation, which is
+$`O(n \cdot \mathrm{depth})`$ — see
+[§5](#the-assembly-factors-the-leaf-to-root-sweeps). Sweeps 6 and 7 run the other way, leaf
+to root, over the same sorted array reversed. Everything above the bus runs four times per
+tick under RK4, correctly, since it depends on state; the tree ordering it uses is rebuilt
+with it and need not be.
 
 ---
 
@@ -205,10 +211,9 @@ With physical space $`\mathbb{R}^2`$ carrying the Euclidean metric $`\delta`$ an
 weight contributing $`m_w\delta`$, this is $`g = \varphi^*\big(\bigoplus_w m_w\delta\big)`$ —
 the mass-weighted pullback along $`\varphi : Q \to (\mathbb{R}^2)^W`$. Kinetic energy is
 $`T = \tfrac12 g_{ij}\dot q^i\dot q^j`$; the code builds $g$ itself, correctly without the
-$`\tfrac12`$, and fills the lower triangle by symmetry. The summation range in
-`get_coefficient_matrix_entry` is right because
-$`\mathrm{supp}(\partial_i)\cap\mathrm{supp}(\partial_j) = D(j)`$ when
-$`i \preceq j`$.
+$`\tfrac12`$. Restricting the sum to $`D(j)`$ is right because
+$`\mathrm{supp}(\partial_i)\cap\mathrm{supp}(\partial_j) = D(j)`$ when $`i \preceq j`$ —
+which is why the composite moment below is indexed by the *column*, the deeper of the pair.
 
 ### The force vector is force minus Christoffel
 
@@ -239,9 +244,9 @@ covariant form, and `solve` a step of forced geodesic flow on $(Q, g)$:
 The "gnarly simplification" remembered from the original derivation is that Christoffel
 identity. It was found by hand, in matrix form, without the name attached.
 
-### The assembly factors: a sixth sweep
+### The assembly factors: the leaf-to-root sweeps
 
-**Derived here — not in the source.** Both assembled objects are sums over a subtree of terms that are *bilinear* in $`V`$ and the
+Both assembled objects are sums over a subtree of terms that are *bilinear* in $`V`$ and the
 weight positions, so the subtree sum can be lifted out of the per-entry loop entirely.
 Writing $`\langle A, B\rangle_F = \mathrm{tr}(A^{\mathsf T} B)`$ for the Frobenius product:
 
@@ -272,10 +277,12 @@ accumulation — they belong to $i$ alone.
 
 This is the **Composite Rigid Body Algorithm**, and the $`\mathcal{K}`$ half is the backward
 pass of **RNEA**. It reduces the mass matrix to $`O(n \cdot \mathrm{depth})`$ and the force
-vector to $O(n)$. The implementation does not do this yet — see
-[§7](#the-assembly-is-coded-naively--complexity), which also describes a second, independent
-saving in the same code. The two are worth keeping apart: measuring this sweep against the
-implementation as it stands would credit it with both.
+vector to $O(n)$.
+
+`get_coefficient_matrix` walks `index_path_map[j]` — which *is* the list of $j$'s inclusive
+ancestors — rather than testing all $n^2$ pairs, so the comparability test disappears instead
+of being made cheaper, and both triangles are written as they are computed. There is no
+`fill_lower_triangle_with_upper_triangle` pass any more, and symmetry holds by construction.
 
 ---
 
@@ -324,25 +331,59 @@ $`\mathrm{Ad}`$ to act on — §§2–5 do not survive that.
 The other route keeps the tree a tree and admits the extra relations as **Lagrange-multiplier
 rows on an augmented system**. `physm-py` in this repo already does it: `NaiveSolver._solve`
 sizes its matrix `nframes + nconstraints`, assembles the frame block by the same
-comparability walk the Rust uses, appends the constraint rows, and discards the multipliers
+comparability relation the Rust uses, appends the constraint rows, and discards the multipliers
 on the way out — with `Spring` and `Constraint` as first-class scene nodes. That is what the
 2019 notes' springs and constraints were heading toward, and it leaves everything above
 intact.
 
-### The assembly is coded naively — *complexity*
+### The assembly used to be quadratic in the wrong thing — *resolved*
 
-`get_coefficient_matrix_entry` re-sums the weights of $`D(j)`$ for *every* comparable pair
-$(i,j)$, and `get_descendent_frames` is itself $`O(n \cdot \mathrm{depth})`$: it scans the
-whole suffix of the sort order and decides membership by walking each candidate's entire root
-path, rather than descending a subtree. For a chain the assembly is therefore
-$`\Theta(n^4)`$, with leading constant $`1/8`$; the force vector, which makes only $n$ such
-calls, is $`\Theta(n^3)`$.
+Until the composite sweeps landed, `get_coefficient_matrix_entry` re-summed the weights of
+$`D(j)`$ for *every* comparable pair, and `get_descendent_frames` was itself
+$`O(n \cdot \mathrm{depth})`$ — it scanned the whole suffix of the sort order and decided
+membership by walking each candidate's entire root path. Two terms came out of that on a
+chain: $`\Theta(n^4)`$ root-path comparisons, and $`\Theta(n^3)`$ floating-point work.
 
-**Two independent savings are available here, and they are worth keeping apart.** Memoizing
-the descendant sets once per solve removes the $n$ from `get_descendent_frames` without
-touching any of the algebra. The composite sweep derived in
-[§5](#the-assembly-factors-a-sixth-sweep) is the separate, structural one. Benchmarking the
-second against the code as it stands would credit it with both.
+Both are gone, and the measured effect is worth recording, because neither the asymptotics
+nor a single scene shape describes it honestly. `bench_assembly` in `solver.rs`, release
+build:
+
+| $n$ | chain: naive | composite | speedup | | hub: naive | composite | speedup |
+| ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| 10 | 14.9 µs | 3.9 | 3.8× | | 2.7 µs | 1.1 | 2.5× |
+| 20 | 97.8 | 10.3 | 9.5× | | 6.5 | 2.3 | 2.9× |
+| 40 | 608.9 | 25.7 | 23.7× | | 21.4 | 4.7 | 4.6× |
+| 80 | 4 413.3 | 100.6 | 43.9× | | 71.0 | 9.9 | 7.1× |
+| 160 | 35 221.3 | 275.5 | 127.8× | | 281.3 | 21.4 | 13.2× |
+| 320 | 404 103.7 | 1 105.4 | 365.6× | | 1 062.5 | 53.7 | 19.8× |
+
+**Three things the table says that a summary would lose.**
+
+The chain's naive ratios per doubling are 6.6, 6.2, 7.2, 8.0, 11.5 — they do not climb
+monotonically, and they are nowhere near the 16 that $`\Theta(n^4)`$ predicts. The cheap
+quartic comparison term only overtakes the expensive cubic floating-point term somewhere
+inside this range, so quoting the asymptotic alone predicts the wrong number at every $n$
+measured here.
+
+The composite column's ratios are 2.6, 2.5, 3.9, 2.7, 4.0 on a chain: consistent with the
+$`O(n \cdot \mathrm{depth})`$ bound at $`\mathrm{depth} = n`$, but only loosely, and the
+quadratic reading rests on the upper end of the range rather than on the whole of it.
+
+**The speedup is shape-dependent by more than an order of magnitude** — 365× on a chain
+against 19.8× on a hub at the same $n$ — which is why the benchmark measures both. A chain
+has $`\mathrm{depth} = n`$, so the bound and the dense `CoefficientMatrix::zeros(n, n)` fill
+are the same order and the fill disappears into the constant. A hub has $`\mathrm{depth} = 2`$,
+so the bound reads $O(n)$ while the allocation is still $`n^2`$: at $n = 320$ the zero-fill
+alone is already a substantial fraction of the hub's assembly time, and its share grows with
+every further doubling. **The assembly still materializes $g$ densely**, which §3 notes is
+exactly what the sparsity pattern would let a sparse factorization avoid — but the QR wants a
+dense matrix, so that is a separate change.
+
+**One saving remains unclaimed, and it is independent of this one.** The old cost had two
+causes — the per-entry subtree walk, now gone, and `get_descendent_frames` being linear in
+depth rather than $O(1)$. Nothing in the current code calls it, so the second never had to be
+fixed; if a future change needs descendant sets again, memoizing them once per solve is the
+separate fix, and should not be measured against the pre-composite baseline.
 
 ### Static structure is rebuilt every tick — *complexity*
 
