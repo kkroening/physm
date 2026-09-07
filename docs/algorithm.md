@@ -336,6 +336,10 @@ on the way out — with `Spring` and `Constraint` as first-class scene nodes. Th
 2019 notes' springs and constraints were heading toward, and it leaves everything above
 intact.
 
+That route is designed out in [`constraints.md`](constraints.md), including why the constraint
+Jacobian needs no kinematics beyond the sweeps in §4. **None of it is implemented** — this
+section still describes the code as it stands.
+
 ### The assembly used to be quadratic in the wrong thing — *resolved*
 
 Until the composite sweeps landed, `get_coefficient_matrix_entry` re-summed the weights of
