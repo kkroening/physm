@@ -16,5 +16,7 @@ GitHub's own palette so the drawings read as native on either canvas:
 | Source identifiers | `#953800` | `#db6d28` |
 | Knockout text on an accent fill | `#ffffff` | `#0d1117` |
 
-When editing a figure, change both files — a `sed` over those four values regenerates one
-variant from the other.
+Do not edit the `-light.svg` / `-dark.svg` files directly. Each figure is authored once
+as `<name>.tpl.svg` with those four values as `@FG@` / `@BLUE@` / `@OXIDE@` / `@BG@`
+placeholders; `./render.sh` expands them into both variants. Edit the template, run it,
+commit all three files.

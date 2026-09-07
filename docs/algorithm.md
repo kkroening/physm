@@ -16,10 +16,10 @@ implementations compute the same thing.
 1. [Two vocabularies](#1-two-vocabularies)
 2. [The kinematic model](#2-the-kinematic-model)
 3. [The identity everything rests on](#3-the-identity-everything-rests-on)
-4. [Five sweeps](#4-five-sweeps)
+4. [The sweeps](#4-the-sweeps)
 5. [Assembly](#5-assembly)
 6. [Integration](#6-integration)
-7. [Where it stops short](#7-where-it-stops-short)
+7. [Where the implementation stops short](#7-where-the-implementation-stops-short)
 
 ### Notation
 
@@ -43,7 +43,7 @@ objects were already right.
 | `get_local_vel_matrix` | Joint-transform derivative, $`\partial_q L_i = L_i\hat\zeta_i`$ | — |
 | `get_local_accel_matrix` | Second derivative, $`\partial_q^2 L_i = L_i\hat\zeta_i^2`$ | — |
 | **`vel_mats[i]`** | **Spatial Jacobian column** — the joint screw pushed into the world frame, $`\mathrm{Ad}_{M_i}\hat\zeta_i \in \mathfrak{se}(2)`$ | $`V_i`$ |
-| `accel_mats[i]` | Second-order screw term; equals $`V_i^2`$ exactly ([§4](#4-five-sweeps)) | $`\mathcal{A}_i`$ |
+| `accel_mats[i]` | Second-order screw term; equals $`V_i^2`$ exactly ([§4](#4-the-sweeps)) | $`\mathcal{A}_i`$ |
 | **`vel_sum_mats[i]`** | **Spatial twist** of body $i$: $`\dot M_i M_i^{-1}`$ | $`S_i`$ |
 | **`accel_sum_mats[i]`** | **Bias (velocity-product) spatial acceleration** — the $`\ddot q`$-free part of $`\ddot M_i M_i^{-1}`$ | $`A_i`$ |
 | `weight_pos_vecs` | The image of the configuration→physical map $`\varphi`$, evaluated | $`x_w`$ |
@@ -123,9 +123,9 @@ them, via the `path_contains` guard in `get_coefficient_matrix_entry`.
 
 ---
 
-## 4. Five sweeps
+## 4. The sweeps
 
-All in topological order. `sort_frames` is a reverse post-order, so every parent index
+Five of them in the implementation as it stands, all in topological order. `sort_frames` is a reverse post-order, so every parent index
 precedes its children — which is also what lets `get_descendent_frames` scan only forward
 from its argument.
 
@@ -176,10 +176,10 @@ the twist" is exactly the failure of $`\mathfrak{se}(2)`$ to be abelian.
 
 **Where the cost actually is.** Five linear-time sweeps feed a shared bus; the assembly that
 consumes it re-walks each subtree once per matrix entry, which is cubic for a chain. The
-dashed box is the sweep that is not there — a single leaf-to-root accumulation of composite
-second moments, which is the Composite Rigid Body Algorithm in the same idiom as the other
-five. Everything above the bus is recomputed four times per tick under RK4, correctly; the
-tree topology is recomputed with it, which is waste.
+dashed box is the sixth sweep — a leaf-to-root accumulation of composite second moments,
+derived in [§5](#the-assembly-factors-a-sixth-sweep) and not implemented. Everything above
+the bus is recomputed four times per tick under RK4, correctly; the tree topology is
+recomputed with it, which is waste.
 
 ---
 
@@ -231,6 +231,42 @@ covariant form, and `solve` a step of forced geodesic flow on $(Q, g)$:
 The "gnarly simplification" remembered from the original derivation is that Christoffel
 identity. It was found by hand, in matrix form, without the name attached.
 
+### The assembly factors: a sixth sweep
+
+Both assembled objects are sums over a subtree of terms that are *bilinear* in $`V`$ and the
+weight positions, so the subtree sum can be lifted out of the per-entry loop entirely.
+Writing $`\langle A, B\rangle_F = \mathrm{tr}(A^{\mathsf T} B)`$ for the Frobenius product:
+
+```math
+g_{ij} \;=\; \mathrm{tr}\!\big(V_i^{\mathsf T} V_j\, \mathcal{J}_j\big),
+\qquad
+\mathcal{J}_j \;\equiv\; \sum_{w \in D(j)} m_w\, x_w x_w^{\mathsf T}
+```
+
+```math
+f_i \;=\; \big\langle V_i,\, \mathcal{K}_i \big\rangle_F \;-\; c_i\dot q^i \;+\; Q_i^{\text{ext}},
+\qquad
+\mathcal{K}_i \;\equiv\; \sum_{w \in D(i)} u_w\, x_w^{\mathsf T},
+\qquad
+u_w \;\equiv\; m_w\mathbf{g} - m_w A_{f(w)}x_w - b_w S_{f(w)}x_w
+```
+
+$`\mathcal{J}`$ and $`\mathcal{K}`$ are single 3×3 matrices per frame, and both accumulate
+by the same **leaf-to-root** recurrence — the mirror image of sweeps 1, 3 and 4:
+
+```math
+\mathcal{J}_i \;=\; \sum_{w \,\text{on}\, i} m_w x_w x_w^{\mathsf T} \;+\; \sum_{c \,\in\, \text{children}(i)} \mathcal{J}_c
+```
+
+Since `sort_frames` already orders parents before children, one reverse pass over that same
+array computes them. The joint-local terms $`-c_i\dot q^i`$ and $`Q_i^{\text{ext}}`$ need no
+accumulation — they belong to $i$ alone.
+
+This is the **Composite Rigid Body Algorithm**, and the $`\mathcal{K}`$ half is the backward
+pass of **RNEA**. It reduces the mass matrix to $`O(n \cdot \mathrm{depth})`$ and the force
+vector to $O(n)$. The implementation does not do this yet — see
+[§7](#the-assembly-is-coded-naively-at-cubic-cost--complexity).
+
 ---
 
 ## 6. Integration
@@ -250,7 +286,11 @@ at zero cost.
 
 ---
 
-## 7. Where it stops short
+## 7. Where the implementation stops short
+
+Everything above describes the algorithm and stays true regardless of how it is
+coded. This section is the volatile one: it describes the Rust implementation as it
+stands at this commit, and is expected to go out of date as the code changes.
 
 ### It is a forest, not a DAG — *structural*
 
@@ -265,21 +305,11 @@ real gap: with multiple parents, $`\partial_i M_j = V_i M_j`$ has to become a su
 paths from $i$ to $j$, and the comparability test that gives $g$ its sparsity becomes
 reachability.
 
-### Assembly is cubic, and the fix is one more sweep — *complexity*
+### The assembly is coded naively, at cubic cost — *complexity*
 
 `get_coefficient_matrix_entry` re-walks the subtree and re-sums its weights for *every* pair
-$(i,j)$. But the entry factors:
-
-```math
-g_{ij} \;=\; \mathrm{tr}\!\big(V_i^{\mathsf T} V_j\, \mathcal{J}_j\big),
-\qquad \mathcal{J}_j \;\equiv\; \sum_{w \in D(j)} m_w\, x_w x_w^{\mathsf T}
-```
-
-and $`\mathcal{J}_j = \sum_{\text{own}} m_w x_w x_w^{\mathsf T} + \sum_{c\,\in\,\text{children}} \mathcal{J}_c`$
-accumulates in one bottom-up sweep. That is $O(n^2)$ assembly, and it is precisely the
-**Composite Rigid Body Algorithm**. The force vector factors the same way —
-$`f_i = \langle V_i, \mathcal{K}_i\rangle_F`$ with $`\mathcal{K}`$ accumulated upward —
-which is the backward pass of RNEA and makes the right-hand side $O(n)$.
+$(i,j)$, which is $O(n^3)$ for a chain. The factorization that removes it is derived in
+[§5](#the-assembly-factors-a-sixth-sweep); no part of it is implemented.
 
 ### Static structure is rebuilt every stage — *complexity*
 
