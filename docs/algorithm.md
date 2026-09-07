@@ -40,6 +40,7 @@ objects were already right.
 | `q`, `qd` | Generalized coordinate and velocity — a point of $TQ$ | $`q^i`$, $`\dot q^i`$ |
 | `get_local_pos_matrix` | Joint transform, $`L_i(q) = C_i \exp(q\hat\zeta_i) \in SE(2)`$ | $`L_i`$ |
 | `pos_mats[i]` | Spatial pose; the product of exponentials along the root path | $`M_i`$ |
+| `inv_pos_mats[i]` | Inverse pose, taken by general 3×3 inversion of an $`SE(2)`$ element | $`M_i^{-1}`$ |
 | `get_local_vel_matrix` | Joint-transform derivative, $`\partial_q L_i = L_i\hat\zeta_i`$ | — |
 | `get_local_accel_matrix` | Second derivative, $`\partial_q^2 L_i = L_i\hat\zeta_i^2`$ | — |
 | **`vel_mats[i]`** | **Spatial Jacobian column** — the joint screw pushed into the world frame, $`\mathrm{Ad}_{M_i}\hat\zeta_i \in \mathfrak{se}(2)`$ | $`V_i`$ |
@@ -107,8 +108,11 @@ anticommutator. For $i = j$, $`\partial_i^2 M = \mathcal{A}_i M`$.
 
 **Sparsity is the tree order.** $`\partial_i x_w = 0`$ unless $`i \preceq f(w)`$, which is
 precisely the `path_contains` test. The consequence is the classical branch-induced
-sparsity of the joint-space inertia matrix: $`g_{ij} \neq 0`$ **if and only if $i$ and $j$
-are comparable in the tree order.**
+sparsity of the joint-space inertia matrix: $`g_{ij} = 0`$ **unless $i$ and $j$ are
+comparable in the tree order.** The converse fails — a comparable pair whose subtree carries
+no weights is zero too, and so is any pair whose contributions happen to cancel at a given
+configuration. What the tree gives is a *structural* confinement of the nonzeros, which is
+what a sparse factorization would exploit; it is not an equivalence.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figures/tree-sparsity-dark.svg">
@@ -116,7 +120,8 @@ are comparable in the tree order.**
 </picture>
 
 **The same fact, twice.** Left: frame 2's inclusive ancestor (ring) and subtree (shaded) —
-the only frames whose motion it shares. Right: $g$ is nonzero exactly on comparable pairs,
+the only frames whose motion it shares. Right: $g$ is structurally nonzero only on
+comparable pairs,
 so frame 2's row and column carry entries only at 1, 2, 3. Frames 2 and 4 lie on disjoint
 branches, and the corresponding blocks are structurally zero — the code never even visits
 them, via the `path_contains` guard in `get_coefficient_matrix_entry`.
@@ -125,13 +130,15 @@ them, via the `path_contains` guard in `get_coefficient_matrix_entry`.
 
 ## 4. The sweeps
 
-Five of them in the implementation as it stands, all in topological order. `sort_frames` is a reverse post-order, so every parent index
+Five numbered sweeps in the implementation as it stands, plus the two derived passes 1′ and
+2′ that feed them, all in topological order. `sort_frames` is a reverse post-order, so every parent index
 precedes its children — which is also what lets `get_descendent_frames` scan only forward
 from its argument.
 
 | # | Function | Object | Recurrence |
 | --- | --- | --- | --- |
 | 1 | `get_pos_mats` | $`M_i`$ | $`M_i = M_{p(i)}\,L_i(q^i)`$ |
+| 1′ | `get_inv_pos_mats` | $`M_i^{-1}`$ | $`M_i^{-1}`$, by general inversion |
 | 2 | `get_vel_mats` | $`V_i`$ | $`V_i = M_{p(i)}\,(\partial_q L_i)\,M_i^{-1}`$ |
 | 2′ | `get_accel_mats` | $`\mathcal{A}_i`$ | $`\mathcal{A}_i = M_{p(i)}\,(\partial_q^2 L_i)\,M_i^{-1}`$ |
 | 3 | `get_vel_sum_mats` | $`S_i`$ | $`S_i = S_{p(i)} + \dot q^i V_i`$ |
@@ -144,7 +151,7 @@ kinematics of any attached point:
 ```math
 \dot x_w \;=\; S_{f(w)}\,x_w,
 \qquad\qquad
-\ddot x_w \;=\; \Big(\sum_i \ddot q^{\,i} V_i\Big) x_w \;+\; A_{f(w)}\,x_w
+\ddot x_w \;=\; \Big(\sum_{i \preceq f(w)} \ddot q^{\,i} V_i\Big) x_w \;+\; A_{f(w)}\,x_w
 ```
 
 The 2019 notes record the reaction to this: *"if these equations are true then this is a
@@ -159,8 +166,8 @@ representation, and the miracle is only that $`\mathrm{Ad}`$ is a homomorphism.
 > information beyond sweep 2. Kept general, presumably, against a frame type that is not a
 > one-parameter subgroup — neither of the two is such a type.
 
-**The bias term is a sum of Lie brackets.** Expanding the sweep-4 recurrence and comparing
-against $`S_i^2`$:
+**Derived here — not in the source: the bias term is a sum of Lie brackets.** Expanding the
+sweep-4 recurrence and comparing against $`S_i^2`$:
 
 ```math
 A_i \;=\; S_i^{\,2} \;+\; \sum_{k \,\prec\, l \,\preceq\, i} \dot q^k \dot q^l\,\big[\,V_k,\,V_l\,\big]
@@ -175,11 +182,12 @@ the twist" is exactly the failure of $`\mathfrak{se}(2)`$ to be abelian.
 </picture>
 
 **Where the cost actually is.** Five linear-time sweeps feed a shared bus; the assembly that
-consumes it re-walks each subtree once per matrix entry, which is cubic for a chain. The
-dashed box is the sixth sweep — a leaf-to-root accumulation of composite second moments,
-derived in [§5](#the-assembly-factors-a-sixth-sweep) and not implemented. Everything above
-the bus is recomputed four times per tick under RK4, correctly; the tree topology is
-recomputed with it, which is waste.
+consumes it re-sums each subtree once per matrix entry, which is quartic for a chain — see
+[§7](#the-assembly-is-coded-naively--complexity). The dashed box is the sixth sweep — a
+leaf-to-root accumulation of composite second moments, derived in
+[§5](#the-assembly-factors-a-sixth-sweep) and not implemented. The sweeps themselves run four
+times per tick under RK4, correctly, since they depend on state; the tree ordering they use
+is rebuilt with them and need not be.
 
 ---
 
@@ -207,9 +215,9 @@ $`i \preceq j`$.
 ```math
 \begin{aligned}
 f_i \;=\;\; & \underbrace{\sum_{w \in D(i)} m_w\langle V_i x_w, \mathbf{g}\rangle}_{-\,\partial_i U}
-  \;\underbrace{-\sum_w b_w \langle V_i x_w, S_{f(w)}x_w\rangle \;-\; c_i\dot q^i}_{-\,\partial\mathcal{F}/\partial\dot q^i \;\text{(Rayleigh)}} \\[1.4ex]
+  \;\underbrace{-\sum_{w \in D(i)} b_w \langle V_i x_w, S_{f(w)}x_w\rangle \;-\; c_i\dot q^i}_{-\,\partial\mathcal{F}/\partial\dot q^i \;\text{(Rayleigh)}} \\[1.4ex]
   & +\; \underbrace{Q_i^{\text{ext}}}_{\text{external}}
-  \;\underbrace{-\sum_w m_w\langle V_i x_w, A_{f(w)}x_w\rangle}_{-\,\Gamma_{i,jk}\dot q^j\dot q^k}
+  \;\underbrace{-\sum_{w \in D(i)} m_w\langle V_i x_w, A_{f(w)}x_w\rangle}_{-\,\Gamma_{i,jk}\dot q^j\dot q^k}
 \end{aligned}
 ```
 
@@ -233,7 +241,7 @@ identity. It was found by hand, in matrix form, without the name attached.
 
 ### The assembly factors: a sixth sweep
 
-Both assembled objects are sums over a subtree of terms that are *bilinear* in $`V`$ and the
+**Derived here — not in the source.** Both assembled objects are sums over a subtree of terms that are *bilinear* in $`V`$ and the
 weight positions, so the subtree sum can be lifted out of the per-entry loop entirely.
 Writing $`\langle A, B\rangle_F = \mathrm{tr}(A^{\mathsf T} B)`$ for the Frobenius product:
 
@@ -265,7 +273,9 @@ accumulation — they belong to $i$ alone.
 This is the **Composite Rigid Body Algorithm**, and the $`\mathcal{K}`$ half is the backward
 pass of **RNEA**. It reduces the mass matrix to $`O(n \cdot \mathrm{depth})`$ and the force
 vector to $O(n)$. The implementation does not do this yet — see
-[§7](#the-assembly-is-coded-naively-at-cubic-cost--complexity).
+[§7](#the-assembly-is-coded-naively--complexity), which also describes a second, independent
+saving in the same code. The two are worth keeping apart: measuring this sweep against the
+implementation as it stands would credit it with both.
 
 ---
 
@@ -296,34 +306,77 @@ stands at this commit, and is expected to go out of date as the code changes.
 
 `children: Vec<Box<dyn Frame>>` is unique ownership, so no node can have two parents. The
 `index_path_map` and `path_contains` machinery *looks* DAG-ready, but `get_index_path_map`
-memoizes exactly one path per node and would silently pick an arbitrary one; duplicate frame
-ids would collide in `get_id_index_map` rather than error.
+memoizes exactly one path per node, and its `contains_key` guard short-circuits before the
+recursion — so a genuine second parent would silently drop that subtree's paths rather than
+pick a wrong one.
 
-The 2019 notes anticipated the DAG — springs relating two frames, a scene graph wider than
-the frame tree — and the Rust never got there. For the "arbitrary DAG" ambition this is the
-real gap: with multiple parents, $`\partial_i M_j = V_i M_j`$ has to become a sum over the
-paths from $i$ to $j$, and the comparability test that gives $g$ its sparsity becomes
-reachability.
+Duplicate frame ids do collide in `get_id_index_map`, and the resulting failure surfaces
+late and nowhere near its cause: `debug_assert_eq!(index_path_map.len(), frames.len())` in
+`get_pos_mats` under a debug build, or a `HashMap` index panic on a missing child in
+release. Neither mentions ids.
 
-### The assembly is coded naively, at cubic cost — *complexity*
+**There are two routes to the DAG, and they are not equally costly.** Generalising the
+*frames* means $`\partial_i M_j = V_i M_j`$ becomes a sum over the paths from $i$ to $j$, and
+the comparability test that gives $g$ its sparsity becomes reachability. It also means a node
+with two parents has no single product of exponentials, so there is no $`M_j`$ for
+$`\mathrm{Ad}`$ to act on — §§2–5 do not survive that.
 
-`get_coefficient_matrix_entry` re-walks the subtree and re-sums its weights for *every* pair
-$(i,j)$, which is $O(n^3)$ for a chain. The factorization that removes it is derived in
-[§5](#the-assembly-factors-a-sixth-sweep); no part of it is implemented.
+The other route keeps the tree a tree and admits the extra relations as **Lagrange-multiplier
+rows on an augmented system**. `physm-py` in this repo already does it: `NaiveSolver._solve`
+sizes its matrix `nframes + nconstraints`, assembles the frame block by the same
+comparability walk the Rust uses, appends the constraint rows, and discards the multipliers
+on the way out — with `Spring` and `Constraint` as first-class scene nodes. That is what the
+2019 notes' springs and constraints were heading toward, and it leaves everything above
+intact.
 
-### Static structure is rebuilt every stage — *complexity*
+### The assembly is coded naively — *complexity*
 
-`sort_frames`, `get_index_path_map` and `get_weight_offsets` are pure functions of the
-topology, and they run inside every `tick_mut` — so four times per tick under RK4, alongside
-the sweeps that genuinely do depend on state. Hoisting them into `Solver` at construction is
-free.
+`get_coefficient_matrix_entry` re-sums the weights of $`D(j)`$ for *every* comparable pair
+$(i,j)$, and `get_descendent_frames` is itself $`O(n \cdot \mathrm{depth})`$: it scans the
+whole suffix of the sort order and decides membership by walking each candidate's entire root
+path, rather than descending a subtree. For a chain the assembly is therefore
+$`\Theta(n^4)`$, with leading constant $`1/8`$; the force vector, which makes only $n$ such
+calls, is $`\Theta(n^3)`$.
 
-### QR on an SPD matrix, with an unwrap behind it — *robustness*
+**Two independent savings are available here, and they are worth keeping apart.** Memoizing
+the descendant sets once per solve removes the $n$ from `get_descendent_frames` without
+touching any of the algebra. The composite sweep derived in
+[§5](#the-assembly-factors-a-sixth-sweep) is the separate, structural one. Benchmarking the
+second against the code as it stands would credit it with both.
 
-$g$ is symmetric positive definite whenever every degree of freedom moves some mass, so
-Cholesky is roughly half the work. More importantly it is *singular* for a frame whose
-subtree carries no weights — a legal scene — and
-`coefficient_matrix.qr().solve(&force_vector).unwrap()` will not be gracious about that.
+### Static structure is rebuilt every tick — *complexity*
+
+`sort_frames` and `get_index_path_map` run once per `tick_mut`, which hands their results to
+the integrator by reference; they are pure functions of the topology and belong on `Solver`.
+`get_weight_offsets` is the odd one out — it sits inside `get_system_of_equations`, so it
+runs once per RK4 *stage*, four times per tick, and has to come out of there before there is
+anywhere to hoist it to.
+
+`get_inv_pos_mats` is a full pass per solve as well, and takes a general 3×3 inverse of a
+matrix that is always in $`SE(2)`$, where the inverse is
+$`[\,R^{\mathsf T} \mid -R^{\mathsf T}t\,]`$ and costs a handful of flops. Cheaper to fix
+than either of the above.
+
+### A singular matrix, with an unwrap behind it — *robustness*
+
+$g$ is the Gram matrix of the columns of the mass-weighted stacked Jacobian, so it is
+positive **semi**definite always, and positive definite exactly when those columns are
+linearly independent. Every degree of freedom moving *some* mass makes the diagonal entries
+positive; it does not make the columns independent.
+
+It goes singular two ways, and they want different handling. $`\mathrm{rank}\,g \le 2W`$ for
+$W$ weights, so any scene with fewer than $n/2$ weights is singular at *every* configuration;
+a subtree with no weights at all gives an exactly-zero row, which is structural and cheap to
+check once, up front. The other is a rank drop at isolated configurations — a two-link chain
+with a single tip mass has $`\det g \propto \sin^2 q_b`$, so it degenerates every time the
+links align, with severe ill-conditioning either side of it and nothing to assert on. A
+pendulum passes through that on every swing.
+
+Cholesky is generically about half the work of the QR in use, but neither factorization makes
+`coefficient_matrix.qr().solve(&force_vector).unwrap()` a reasonable thing to leave there.
+
+*(The other `unwrap` in the file, in `get_inv_pos_mats`, genuinely cannot fire: every
+`pos_mat` is a product of $`SE(2)`$ elements and so has determinant 1.)*
 
 ---
 
