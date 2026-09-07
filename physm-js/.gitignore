@@ -4,13 +4,8 @@
 .env.local
 .env.production.local
 .env.test.local
-.pnp.js
-/.pnp
-/build/
 /coverage/
+/dist/
 /node_modules/
 /out/
 npm-debug.log*
-public/tfjs-backend-wasm.wasm
-yarn-debug.log*
-yarn-error.log*

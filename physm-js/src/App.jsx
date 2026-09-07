@@ -4,7 +4,7 @@ import * as tf from './tfjs';
 import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
 import LineDecal from './LineDecal';
-import producer from 'immer';
+import { produce as producer } from 'immer';
 import React from 'react';
 import RotationalFrame from './RotationalFrame';
 import RsSolver from './RsSolver';
@@ -379,13 +379,15 @@ function createSolver(
 function MatrixViewer({ aMat, bVec }) {
   return (
     <table>
-      {aMat.map((row, rowIndex) => (
-        <tr key={rowIndex}>
-          {[...row, bVec[rowIndex]].map((value, colIndex) => (
-            <td key={colIndex}>{value}</td>
-          ))}
-        </tr>
-      ))}
+      <tbody>
+        {aMat.map((row, rowIndex) => (
+          <tr key={rowIndex}>
+            {[...row, bVec[rowIndex]].map((value, colIndex) => (
+              <td key={colIndex}>{value}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
     </table>
   );
 }
@@ -406,6 +408,12 @@ function App({ rsWasmModule }) {
 
   useEffect(() => {
     solver.current = createSolver(scene, rsWasmModule);
+    // React 18+ StrictMode mounts, unmounts and remounts in development, so
+    // without this the Rust-side SolverContext from the first mount is orphaned.
+    return () => {
+      solver.current?.dispose();
+      solver.current = null;
+    };
   }, [rsWasmModule]);
 
   useAnimationFrame((deltaTime) => {

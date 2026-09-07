@@ -1,12 +1,12 @@
-import '@testing-library/jest-dom/extend-expect';
-import * as tf from '@tensorflow/tfjs-node';
+import '@testing-library/jest-dom/vitest';
+import * as immer from 'immer';
+import * as tf from '@tensorflow/tfjs';
 
-jest.mock('./tfjs')
+// Immer's Map/Set support is opt-in, and Scene keys frames by id in a Map.
+immer.enableMapSet();
 
-beforeAll(() => {
-  //tf.setBackend('cpu');
-})
-
-afterAll(() => {
-  tf.ENV.platform = null;
-})
+// The pure-JS CPU backend. Tests used to swap in `@tensorflow/tfjs-node` via a
+// manual mock for speed; that package is a native addon with no darwin-arm64
+// build, so it is gone and `src/tfjs.js` now resolves to plain tfjs everywhere.
+await tf.setBackend('cpu');
+await tf.ready();

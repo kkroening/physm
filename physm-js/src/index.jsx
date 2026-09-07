@@ -1,11 +1,9 @@
 import './index.css';
 import * as immer from 'immer';
-import * as serviceWorker from './serviceWorker';
 import * as tf from '@tensorflow/tfjs';
-import * as tfWasm from '@tensorflow/tfjs-backend-wasm';
 import App from './App';
 import React from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 
 immer.enableMapSet();
 
@@ -20,11 +18,6 @@ function initTfWebGLBackend() {
   tf.setBackend('webgl');
 }
 
-async function initTfWasmBackend() {
-  tfWasm.setWasmPaths('/');
-  await tf.setBackend('wasm');
-}
-
 async function initRsWasmModule() {
   const rsWasmModule = await import('physm-rs');
   window.wasm = rsWasmModule; // (for debugging)
@@ -35,19 +28,15 @@ async function init() {
   tf.enableProdMode();
   initTfCpuBackend();
   //initTfWebGLBackend();
-  //await initTfWasmBackend();
   return await initRsWasmModule();
 }
 
 function main(rsWasmModule) {
-  ReactDOM.render(
+  createRoot(document.getElementById('root')).render(
     <React.StrictMode>
       <App rsWasmModule={rsWasmModule} />
     </React.StrictMode>,
-    document.getElementById('root'),
   );
 }
 
 init().then((rsWasmModule) => main(rsWasmModule));
-
-serviceWorker.unregister();
