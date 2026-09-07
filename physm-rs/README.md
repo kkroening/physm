@@ -1,11 +1,11 @@
 <div align="center">
 
-  <h1><code>wasm-pack-template</code></h1>
+  <h1><code>physm-rs</code></h1>
 
-  <strong>A template for kick starting a Rust and WebAssembly project using <a href="https://github.com/rustwasm/wasm-pack">wasm-pack</a>.</strong>
+  <strong>The Rust implementation of the <a href="../">physm</a> solver, compiled to WebAssembly with <a href="https://github.com/rustwasm/wasm-pack">wasm-pack</a>.</strong>
 
   <p>
-    <a href="https://travis-ci.org/rustwasm/wasm-pack-template"><img src="https://img.shields.io/travis/rustwasm/wasm-pack-template.svg?style=flat-square" alt="Build Status" /></a>
+    <a href="https://github.com/kkroening/physm/actions/workflows/ci.yml"><img src="https://github.com/kkroening/physm/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   </p>
 
   <h3>
