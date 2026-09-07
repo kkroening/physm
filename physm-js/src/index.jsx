@@ -1,11 +1,10 @@
 import './index.css';
 import * as immer from 'immer';
-import * as serviceWorker from './serviceWorker';
 import * as tf from '@tensorflow/tfjs';
 import * as tfWasm from '@tensorflow/tfjs-backend-wasm';
 import App from './App';
 import React from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 
 immer.enableMapSet();
 
@@ -40,14 +39,11 @@ async function init() {
 }
 
 function main(rsWasmModule) {
-  ReactDOM.render(
+  createRoot(document.getElementById('root')).render(
     <React.StrictMode>
       <App rsWasmModule={rsWasmModule} />
     </React.StrictMode>,
-    document.getElementById('root'),
   );
 }
 
 init().then((rsWasmModule) => main(rsWasmModule));
-
-serviceWorker.unregister();

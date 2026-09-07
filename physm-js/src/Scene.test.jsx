@@ -1,6 +1,6 @@
 import * as tf from './tfjs';
 import CircleDecal from './CircleDecal';
-import faker from 'faker';
+import { faker } from '@faker-js/faker';
 import Frame from './Frame';
 import React from 'react';
 import renderer from 'react-test-renderer';
@@ -104,7 +104,7 @@ describe('Scene class', () => {
   });
 
   test('.getInitialStateMap method', () => {
-    const generateState = () => [faker.random.number(), faker.random.number()];
+    const generateState = () => [faker.number.int(99999), faker.number.int(99999)];
     const frame1 = new Frame({
       id: 'frame1',
       initialState: generateState(),

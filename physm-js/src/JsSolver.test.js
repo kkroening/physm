@@ -1,5 +1,5 @@
 import * as tf from './tfjs';
-import faker from 'faker';
+import { faker } from '@faker-js/faker';
 import Frame from './Frame';
 import JsSolver from './JsSolver';
 import RotationalFrame from './RotationalFrame';

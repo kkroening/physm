@@ -1,6 +1,6 @@
 import * as tf from './tfjs';
 import BoxDecal from './BoxDecal';
-import faker from 'faker';
+import { faker } from '@faker-js/faker';
 import React from 'react';
 import renderer from 'react-test-renderer';
 import { areTensorsEqual } from './testutils';
@@ -11,8 +11,8 @@ import { ZERO_POS } from './utils';
 
 describe('BoxDecal class', () => {
   const SAMPLE_POS = coercePositionVector([
-    faker.random.number(),
-    faker.random.number(),
+    faker.number.int(99999),
+    faker.number.int(99999),
   ]);
 
   test('constructor', () => {
@@ -36,8 +36,8 @@ describe('BoxDecal class', () => {
   test('.getDomElement method with non-solid rendering', () => {
     const posX = SAMPLE_POS.dataSync()[0];
     const posY = SAMPLE_POS.dataSync()[1];
-    const width = faker.random.number();
-    const height = faker.random.number();
+    const width = faker.number.int(99999);
+    const height = faker.number.int(99999);
     const decal = new BoxDecal({
       width: width,
       height: height,
@@ -99,8 +99,8 @@ describe('BoxDecal class', () => {
   test('.getDomElement method with solid rendering', () => {
     const posX = SAMPLE_POS.dataSync()[0];
     const posY = SAMPLE_POS.dataSync()[1];
-    const width = faker.random.number();
-    const height = faker.random.number();
+    const width = faker.number.int(99999);
+    const height = faker.number.int(99999);
     const decal = new BoxDecal({
       width: width,
       height: height,
