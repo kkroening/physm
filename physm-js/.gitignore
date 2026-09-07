@@ -9,7 +9,3 @@
 /node_modules/
 /out/
 npm-debug.log*
-
-# Copied out of node_modules by `npm run tfwasm`; tfjs ships three variants and
-# feature-detects which to load at runtime.
-public/tfjs-backend-wasm*.wasm

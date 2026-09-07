@@ -408,6 +408,12 @@ function App({ rsWasmModule }) {
 
   useEffect(() => {
     solver.current = createSolver(scene, rsWasmModule);
+    // React 18+ StrictMode mounts, unmounts and remounts in development, so
+    // without this the Rust-side SolverContext from the first mount is orphaned.
+    return () => {
+      solver.current?.dispose();
+      solver.current = null;
+    };
   }, [rsWasmModule]);
 
   useAnimationFrame((deltaTime) => {

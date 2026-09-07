@@ -9,7 +9,7 @@ coordinate frames and point masses, and steps it with either of two interchangea
 
 | | |
 | --- | --- |
-| **Node** | version in [`.node-version`](.node-version); `nvm use` picks it up |
+| **Node** | see [`.nvmrc`](.nvmrc) / [`.node-version`](.node-version) — `nvm use` reads the former, fnm/asdf/Volta the latter |
 | **Rust** | stable toolchain — [rustup](https://rustup.rs) |
 | **wasm-pack** | `cargo install wasm-pack`, or `brew install wasm-pack` |
 
@@ -22,13 +22,14 @@ npm run setup   # build both wasm targets, then install node deps
 npm run dev     # http://localhost:5173
 ```
 
-`npm run setup` has to come first, and the order inside it matters: `package.json` depends on
-`physm-rs` as `file:../physm-rs/pkg`, so that directory must exist before `npm install` can
-resolve it. Cloning and running a bare `npm install` will fail — that is the expected
-behaviour, not a broken checkout.
+`npm run setup` is a convenience rather than a hard prerequisite. A bare `npm install` also
+works: `package.json` depends on `physm-rs` as `file:../physm-rs/pkg`, but the committed
+lockfile already records that link, so npm never opens the missing directory — it just leaves
+`node_modules/physm-rs` as a dangling symlink until the first `dev`/`build` fills the target
+in. `setup` exists so both wasm builds are in place up front instead.
 
-After the first setup, `npm run dev`, `npm run build` and `npm test` each rebuild the wasm
-they need on their own.
+Either way, `npm run dev`, `npm run build` and `npm test` each rebuild the wasm they need on
+their own.
 
 ## Why there are two wasm builds
 
@@ -54,16 +55,17 @@ resolve `../../physm-rs/nodepkg/physm_rs.js`, run `npm run wasm:node`.
 | `npm run test:watch` | Vitest in watch mode |
 | `npm run wasm` | Just the `bundler` build → `../physm-rs/pkg` |
 | `npm run wasm:node` | Just the `nodejs` build → `../physm-rs/nodepkg` |
-| `npm run tfwasm` | Copies tfjs's wasm backend binaries into `public/` |
 
-The `wasm` and `tfwasm` steps are wired to `dev`/`build`/`test` through npm's `pre*` hooks, so
-they are not steps you have to remember — they are listed because knowing they exist makes the
-failures legible.
+| `npm run lint` | ESLint over the package |
 
-`tfwasm` exists because [`src/index.jsx`](src/index.jsx) calls `tfWasm.setWasmPaths('/')`, which
-makes tfjs fetch its backend binaries from the site root at runtime. Vite serves `public/` at
-the root, so that is where they have to be. tfjs ships three variants and feature-detects which
-to use, so all three are copied.
+The `wasm` steps are wired to `dev`/`build`/`test` through npm's `pre*` hooks, so they are not
+steps you have to remember — they are listed because knowing they exist makes the failures
+legible.
+
+tfjs runs on its CPU backend here. Its WebGL and WASM backends are both available but neither
+is enabled; enabling the WASM one would mean re-adding `@tensorflow/tfjs-backend-wasm` and
+serving its binaries from the site root, which does not compose with this package's relative
+`base`.
 
 ## Cross-validating the two solvers
 

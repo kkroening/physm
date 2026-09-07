@@ -20,7 +20,12 @@ html {
 }
 
 .plot {
-  display: block;
+  /* Column flex rather than block: `.plot__main` below stretches to fill whatever
+     the title and the controls leave, instead of taking 100% of the box and pushing
+     the controls out past the bottom edge on top of whatever follows. */
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
   width: 100%;
   height: 100%;
   max-width: 600px;
@@ -40,7 +45,10 @@ html {
   background-color: #cde1ef;
   border: 1px solid black;
   width: 100%;
-  height: 100%;
+  /* `min-height: 0` lets this shrink below its content's intrinsic size, which a
+     flex item otherwise refuses to do. */
+  flex: 1;
+  min-height: 0;
 }
 
 .plot__svg {
