@@ -1,18 +1,18 @@
-# Builds and tests physm-js on every push and pull request.
+# Continuous integration: one job per package.
 #
-# This exists because nothing built this package between 2020 and 2026, which is
-# how it reached the point of being uninstallable: its toolchain had been
-# deprecated, one of its dependencies had no build for the machine it was next
-# opened on, and nothing anywhere said which Node version it wanted. A job that
-# runs the package from a clean checkout is what turns that class of failure into
-# a red build the week it happens rather than a rewrite five years later.
+# This exists because nothing built physm-js between 2020 and 2026, which is how
+# it reached the point of being uninstallable: its toolchain had been deprecated,
+# one of its dependencies had no build for the machine it was next opened on, and
+# nothing anywhere said which Node version it wanted. Running a package from a
+# clean checkout is what turns that class of failure into a red build the week it
+# happens rather than a rewrite five years later.
 #
-# It covers physm-rs too, incidentally but importantly: physm-js/src/Solver.test.js
-# steps JsSolver and RsSolver over the same scene and asserts they agree, so this
-# is the only differential check the Rust solver has against an independent
-# implementation of the same equations.
+# Note that `on.*.paths` filters the whole workflow, not individual jobs, so the
+# list below is the union across every job here. A package whose files did not
+# change may still have its job run; for jobs this cheap that is preferable to
+# per-job change detection.
 
-name: physm-js
+name: CI
 
 on:
   push:
@@ -20,25 +20,30 @@ on:
     paths:
       - 'physm-js/**'
       - 'physm-rs/**'
-      - '.github/workflows/physm-js.yml'
+      - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'physm-js/**'
       - 'physm-rs/**'
-      - '.github/workflows/physm-js.yml'
+      - '.github/workflows/ci.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: physm-js-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: lint, test, build
+  physm-js:
+    name: physm-js (lint, test, build)
     runs-on: ubuntu-latest
+    # This job covers physm-rs as well, which is most of its value:
+    # physm-js/src/Solver.test.js steps JsSolver and RsSolver over the same scene
+    # and asserts they agree, so it is the only differential check the Rust solver
+    # has against an independent implementation of the same equations. That is also
+    # why `physm-rs/**` is in the trigger paths above.
     defaults:
       run:
         working-directory: physm-js
