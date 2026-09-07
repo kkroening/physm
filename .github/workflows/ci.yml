@@ -36,6 +36,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  physm-rs:
+    name: physm-rs (fmt, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: physm-rs
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Cargo.lock is not committed for this crate, so the key tracks Cargo.toml.
+      # Keyed separately from the physm-js job, which builds wasm32 artifacts into
+      # the same target directory; one shared key would mean whichever job finished
+      # first decided what the other restored.
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            physm-rs/target
+          key: cargo-native-${{ runner.os }}-${{ hashFiles('physm-rs/Cargo.toml') }}
+          restore-keys: cargo-native-${{ runner.os }}-
+
+      # Unlike the JS side's lint step, this one blocks: the tree is already
+      # rustfmt-clean, so it costs nothing and catches drift the moment it appears.
+      # `cargo clippy` is deliberately not run here — it reports ~58 warnings of
+      # pre-existing debt, and deciding what to do about those is its own change.
+      - name: Check formatting
+        run: cargo fmt --check
+
+      # `tests/web.rs` is gated to `target_arch = "wasm32"`, so it compiles to
+      # nothing here and a plain `cargo test` needs no wasm toolchain.
+      - name: Test
+        run: cargo test
+
   physm-js:
     name: physm-js (lint, test, build)
     runs-on: ubuntu-latest
@@ -68,8 +104,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             physm-rs/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('physm-rs/Cargo.toml') }}
-          restore-keys: cargo-${{ runner.os }}-
+          key: cargo-wasm-${{ runner.os }}-${{ hashFiles('physm-rs/Cargo.toml') }}
+          restore-keys: cargo-wasm-${{ runner.os }}-
 
       - name: Install wasm-pack
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
