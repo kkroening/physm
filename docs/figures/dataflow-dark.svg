@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 442" width="920" height="442" role="img" aria-label="Dataflow of one solve: five linear-time sweeps feed a shared bus, which feeds an assembly step that costs quartic time for a chain, then a QR solve. A dashed sixth sweep, absent from the code, would reduce the assembly to order n times depth.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 442" width="920" height="442" role="img" aria-label="Dataflow of one solve: five root-to-leaf sweeps feed a shared bus, which feeds two leaf-to-root composite sweeps, then an assembly costing order n times depth, then a QR solve.">
   <defs>
     <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#e6edf3"/>
@@ -64,14 +64,14 @@
 
   <rect x="290" y="202" width="340" height="68" rx="3" fill="none" stroke="#e6edf3" stroke-width="1.8"/>
   <text x="460" y="228" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#e6edf3">assemble  g<tspan font-size="11" dy="3">ij</tspan><tspan dy="-3">  and  f</tspan><tspan font-size="11" dy="3">i</tspan></text>
-  <text x="460" y="248" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#e6edf3" opacity="0.6">subtree re-summed per matrix entry</text>
-  <text x="460" y="264" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#db6d28">O(n&#8308;)  chain</text>
+  <text x="460" y="248" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#e6edf3" opacity="0.6">one contraction per ancestor pair</text>
+  <text x="460" y="264" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#db6d28">O(n&#183;depth)</text>
 
-  <rect x="660" y="202" width="234" height="68" rx="3" fill="none" stroke="#4493f8" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <text x="777" y="226" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#4493f8">6.  composite  &#119973;<tspan font-size="11" dy="3">j</tspan></text>
-  <text x="777" y="244" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#4493f8" opacity="0.85">&#8593; leaf &#8594; root &#183; absent</text>
-  <text x="777" y="261" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#4493f8" opacity="0.85">would give O(n&#183;depth)</text>
-  <line x1="656" y1="236" x2="634" y2="236" stroke="#4493f8" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar2b)"/>
+  <rect x="660" y="202" width="234" height="68" rx="3" fill="none" stroke="#4493f8" stroke-width="1.8"/>
+  <text x="777" y="226" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#4493f8">6, 7.  composite  &#119973; , &#119974;</text>
+  <text x="777" y="244" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#4493f8" opacity="0.85">&#8593; leaf &#8594; root</text>
+  <text x="777" y="261" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#4493f8" opacity="0.85">O(n)</text>
+  <line x1="656" y1="236" x2="634" y2="236" stroke="#4493f8" stroke-width="1.8" marker-end="url(#ar2b)"/>
 
   <line x1="460" y1="270" x2="460" y2="300" stroke="#e6edf3" stroke-width="1.6" opacity="0.7" marker-end="url(#ar2)"/>
   <rect x="320" y="306" width="280" height="52" rx="3" fill="none" stroke="#e6edf3" stroke-width="1.3" opacity="0.55"/>
