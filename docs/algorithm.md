@@ -23,8 +23,8 @@ implementations compute the same thing.
 
 ### Notation
 
-$n$ frames indexed $i, j, k$; $p(i)$ the parent; $`i \preceq j`$ means *"$i$ is an
-inclusive ancestor of $j$"* (the `^^` of the 2019 notes); $D(i)$ the subtree rooted at $i$;
+$n$ frames indexed $i, j, k$; $p(i)$ the parent; $`i \preceq j`$ means *"$`i`$ is an
+inclusive ancestor of $`j`$"* (the `^^` of the 2019 notes); $D(i)$ the subtree rooted at $i$;
 $w$ ranges over point masses and $f(w)$ is the frame carrying $w$.
 
 ---
@@ -199,7 +199,7 @@ the mass-weighted pullback along $`\varphi : Q \to (\mathbb{R}^2)^W`$. Kinetic e
 $`T = \tfrac12 g_{ij}\dot q^i\dot q^j`$; the code builds $g$ itself, correctly without the
 $`\tfrac12`$, and fills the lower triangle by symmetry. The summation range in
 `get_coefficient_matrix_entry` is right because
-$`\operatorname{supp}(\partial_i)\cap\operatorname{supp}(\partial_j) = D(j)`$ when
+$`\mathrm{supp}(\partial_i)\cap\mathrm{supp}(\partial_j) = D(j)`$ when
 $`i \preceq j`$.
 
 ### The force vector is force minus Christoffel
@@ -271,7 +271,7 @@ reachability.
 $(i,j)$. But the entry factors:
 
 ```math
-g_{ij} \;=\; \operatorname{tr}\!\big(V_i^{\mathsf T} V_j\, \mathcal{J}_j\big),
+g_{ij} \;=\; \mathrm{tr}\!\big(V_i^{\mathsf T} V_j\, \mathcal{J}_j\big),
 \qquad \mathcal{J}_j \;\equiv\; \sum_{w \in D(j)} m_w\, x_w x_w^{\mathsf T}
 ```
 
