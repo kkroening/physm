@@ -11,6 +11,7 @@ import RsSolver from './RsSolver';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
+import { CoincidenceConstraint } from './Constraint';
 import { getScaleMatrix } from './utils';
 import { getTranslationMatrix } from './utils';
 import { required } from './utils';
@@ -19,16 +20,44 @@ import { useRef } from 'react';
 import { useState } from 'react';
 import { InvalidStateMapError } from './Solver';
 
-const poiMass = 60;
-const poiDrag = 20;
-const ropeSegmentLength = 1.6;
-const ropeSegmentDrag = 8;
-const ropeSegmentMass = 1;
-const ropeSegmentResistance = 10;
-const ropeSegmentCount = 5;
+// A rope slung between two poles on a rolling cart.
+//
+// The rope is two chains, one hanging from each pole, and they have to meet in
+// the middle. No frame tree can say that: a frame has one parent, so the point
+// where the chains join would need two. It is not a frame at all -- it is a
+// coincidence constraint, adding two rows to the saddle-point system the solver
+// assembles. See `docs/constraints.md`.
+//
+// The poles are rigid parts of the cart rather than jointed frames, because a
+// pole hinged at its base is an inverted pendulum: whatever it starts at, it
+// falls, and the rig is on the ground within seconds. Joint resistance only
+// slows that down -- nothing in the model restores a frame toward an angle.
 const cartMass = 250;
-const maxCartForce = 8500;
 const cartResistance = 5;
+const maxCartForce = 8500;
+const cartWidth = 4;
+
+const poleHeight = 8;
+const poleMass = 30;
+const poleBaseOffset = cartWidth / 3;
+
+const chainSegmentCount = 5;
+const chainSegmentLength = 1.4;
+const chainSegmentMass = 2;
+const chainSegmentDrag = 6;
+const chainSegmentResistance = 1.5;
+
+// Each chain starts on a circular arc -- every segment turns by the same amount
+// -- running from steeply-downward at the pole to horizontal where the two meet.
+// The arc keeps the initial shape exact rather than eyeballed, and it sags
+// rather than pulling straight: a taut chain is a kinematic singularity, where
+// every segment is collinear and the constraint Jacobian loses rank.
+const chainSweep = 1.15;
+const chainTurn = chainSweep / (chainSegmentCount - 1);
+const chainSegmentAngles = Array.from(
+  { length: chainSegmentCount },
+  (unused, index) => -chainSweep + index * chainTurn,
+);
 
 const initialScale = 12;
 const MIN_ANIMATION_FPS = 5;
@@ -36,76 +65,80 @@ const TARGET_ANIMATION_FPS = 60;
 const TIME_SCALE = 1.5;
 const TARGET_PHYSICS_FPS = 400 * TIME_SCALE;
 
-const stickLength = 8;
-const segments = [0, 1].map((ropeNum) =>
-  Array(ropeSegmentCount)
-    .fill()
-    .map((x, index) => index)
-    .reduce((childSegment, index) => {
-      const length = ropeSegmentLength * (1 + ropeNum * 0.02);
-      const first = index === 0;
-      const last = index === ropeSegmentCount - 1;
-      const radius = first ? 1 : 0.3 / 2;
-      const mass = first ? poiMass : ropeSegmentMass;
-      const drag = first ? poiDrag : ropeSegmentDrag;
-      const weights = [
-        new Weight(mass, {
-          position: [length, 0],
-          drag: drag,
-        }),
-      ];
-      const decals = [
-        new LineDecal({
-          endPos: [length * 1.03, 0],
-          lineWidth: 0.3,
-        }),
-      ];
-      if (first || true) {
-        decals.push(
-          new CircleDecal({
-            position: [length, 0],
-            radius: radius,
-          }),
-        );
-      }
-      return new RotationalFrame({
-        id: `segment${ropeNum}-${index}`,
-        initialState: last ? [Math.PI * 0.3 * (2 * ropeNum + 1), 0] : [0, 0],
-        decals: decals,
-        frames: childSegment ? [childSegment] : [],
-        position: [last ? stickLength : length, 0],
-        weights: weights,
-        resistance: ropeSegmentResistance,
-      });
-    }, null),
-);
+function advance([x, y], angle, length) {
+  return [x + length * Math.cos(angle), y + length * Math.sin(angle)];
+}
 
-const stick = new RotationalFrame({
-  id: 'stick',
-  decals: [
-    new LineDecal({
-      endPos: [stickLength * 1.02, 0],
-      lineWidth: 0.45,
-    }),
-    new CircleDecal({ position: [stickLength, 0], radius: 0.5 }),
-  ],
-  weights: [new Weight(40, { position: [stickLength, 0], drag: 15 })],
-  frames: segments,
-});
+// How far a chain reaches from the pole it hangs off. The poles are then placed
+// exactly that far to either side of the cart's centreline, so the two chains
+// meet on it -- the loop closes at `t = 0`, which is what this formulation
+// needs: it holds `C̈` at zero, which leaves `C` free to keep whatever value it
+// starts with, forever.
+const chainReach = chainSegmentAngles.reduce(
+  (point, angle) => advance(point, angle, chainSegmentLength),
+  [0, 0],
+);
+const poleTips = [-1, 1].map((side) => [side * chainReach[0], poleHeight]);
+
+// Built leaf-first, so each segment can be handed to its parent as a child.
+function getChain(side) {
+  return Array.from({ length: chainSegmentCount }, (unused, index) => index)
+    .reverse()
+    .reduce((childSegment, index) => {
+      const first = index === 0;
+      // A frame's coordinate is its angle relative to its parent. The cart does
+      // not rotate, so the first segment's coordinate is just its arc angle;
+      // every one after that is the arc's shared turn.
+      const angle = first ? chainSegmentAngles[0] : chainTurn;
+      // Mirroring about the cart's centreline sends an *absolute* angle `φ` to
+      // `π − φ`, which is the first segment; the relative turns that follow are
+      // differences of absolute angles, so for them the mirror is just a
+      // negation.
+      const mirrored = first ? Math.PI - angle : -angle;
+      return new RotationalFrame({
+        id: `chain${side < 0 ? 'L' : 'R'}${index}`,
+        initialState: [side < 0 ? angle : mirrored, 0],
+        position: first ? poleTips[side < 0 ? 0 : 1] : [chainSegmentLength, 0],
+        decals: [
+          new LineDecal({ endPos: [chainSegmentLength, 0], lineWidth: 0.18 }),
+          new CircleDecal({ position: [chainSegmentLength, 0], radius: 0.16 }),
+        ],
+        weights: [
+          new Weight(chainSegmentMass, {
+            position: [chainSegmentLength, 0],
+            drag: chainSegmentDrag,
+          }),
+        ],
+        frames: childSegment ? [childSegment] : [],
+        resistance: chainSegmentResistance,
+      });
+    }, null);
+}
 
 const cart = new TrackFrame({
   id: 'cart',
   decals: [
     new BoxDecal({
-      width: 3,
-      height: 3 / 1.618,
-      //color: 'blue',
+      width: cartWidth,
+      height: cartWidth / 1.618,
       lineWidth: 0.2,
     }),
+    ...poleTips.map(
+      (tip, index) =>
+        new LineDecal({
+          startPos: [index === 0 ? -poleBaseOffset : poleBaseOffset, 0],
+          endPos: tip,
+          lineWidth: 0.35,
+        }),
+    ),
+    ...poleTips.map((tip) => new CircleDecal({ position: tip, radius: 0.3 })),
   ],
-  frames: [stick],
+  frames: [getChain(-1), getChain(1)],
   initialState: [0, 0],
-  weights: [new Weight(cartMass)],
+  weights: [
+    new Weight(cartMass),
+    ...poleTips.map((tip) => new Weight(poleMass, { position: tip })),
+  ],
   resistance: cartResistance,
 });
 
@@ -119,7 +152,14 @@ const scene = new Scene({
       lineWidth: 0.1,
     }),
   ],
-});
+}).addConstraint(
+  new CoincidenceConstraint({
+    frame1: `chainL${chainSegmentCount - 1}`,
+    frame2: `chainR${chainSegmentCount - 1}`,
+    position1: [chainSegmentLength, 0],
+    position2: [chainSegmentLength, 0],
+  }),
+);
 
 function useKeyboard(callback = null) {
   const [pressedKeys, setPressedKeys] = useState(new Set());
@@ -450,7 +490,7 @@ function App({ rsWasmModule }) {
   return (
     <div className="app__main">
       <div className="plot">
-        <h2 className="plot__title">Double CartPoi</h2>
+        <h2 className="plot__title">Cart, Poles &amp; Rope</h2>
         {
           //<p>Number of tensors: {tf.memory().numTensors}</p>
         }

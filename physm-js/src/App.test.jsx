@@ -12,7 +12,7 @@ beforeAll(async () => {
 describe('App component', () => {
   test('renders stuff', () => {
     const { getByText } = render(<App rsWasmModule={rsWasmModule} />);
-    const element = getByText(/CartPoi/);
+    const element = getByText(/Cart, Poles/);
     expect(element).toBeInTheDocument();
   });
 });
