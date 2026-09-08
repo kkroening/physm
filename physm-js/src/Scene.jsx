@@ -5,7 +5,7 @@ import { coercePositionVector } from './utils';
 import { invertXformMatrix } from './utils';
 import { required } from './utils';
 import { solveLinearSystem } from './utils';
-import { consistencyTolerance } from './Constraint';
+import { CONSISTENCY_RELATIVE_TOLERANCE } from './Constraint';
 import { ZERO_POS } from './utils';
 import { ZERO_STATE } from './utils';
 
@@ -60,8 +60,16 @@ export default class Scene {
         parentPaths.length ? [...parentPaths[0], frame.id] : [frame.id],
     });
     // ...only now, with the derived tables built, is there a pose to solve
-    // constraints against.
-    constraints.forEach((constraint) => this.addConstraint(constraint));
+    // constraints against. One pose for the whole list: `addConstraint` moves
+    // the constraint, never the scene, so re-sweeping per constraint would
+    // re-derive the same matrices.
+    if (constraints.length) {
+      const posMatMap = this.getPosMatrixMap();
+      constraints.forEach((constraint) =>
+        this.addConstraint(constraint, { posMatMap }),
+      );
+      tf.dispose([...posMatMap.values()]);
+    }
   }
 
   getPosMatrixMap(stateMap = null) {
@@ -405,7 +413,8 @@ export default class Scene {
           weight.mass *
           tf.tidy(
             () =>
-              tf.matMul(velMat2.matMul(pos), velMat1.matMul(pos), true)
+              tf
+                .matMul(velMat2.matMul(pos), velMat1.matMul(pos), true)
                 .dataSync()[0],
           );
       });
@@ -442,7 +451,10 @@ export default class Scene {
     return tf.tensor2d(array);
   }
 
-  _getProjectedVelocities(stateMap = required('stateMap')) {
+  _getProjectedVelocities(
+    stateMap = required('stateMap'),
+    constraints = required('constraints'),
+  ) {
     /**
      * The velocity half of the consistency step (`docs/constraints.md` §7):
      * the smallest correction to `q̇₀` that satisfies `J q̇ = 0`.
@@ -470,19 +482,42 @@ export default class Scene {
      * is a generalized *force* along `Jᵀ`, not a velocity along it.
      */
     const qd = this.sortedFrames.map(
-      (frame) => (stateMap.get(frame.id) || ZERO_STATE)[1],
+      (frame) => (stateMap.get(frame.id) || frame.initialState)[1],
     );
     const ctx = this.getConfigKinematics(stateMap);
-    const rows = this.constraints.flatMap((constraint) =>
-      constraint.jacobianRows(ctx),
-    );
-    this.disposeConfigKinematics(ctx);
+    let rows;
+    try {
+      rows = constraints.flatMap((constraint) => constraint.jacobianRows(ctx));
+    } finally {
+      this.disposeConfigKinematics(ctx);
+    }
     const residual = rows.map((row) =>
       row.reduce((total, entry, index) => total + entry * qd[index], 0),
     );
+    // `J q` is a sum of signed terms, so what makes a residual meaningful is
+    // how much cancellation produced it -- not how big it is. An absolute
+    // threshold here would be a length squared in disguise for a
+    // `DistanceConstraint`, which is the unit-dependence the projection below
+    // was reformulated to remove: measured, it made the correction
+    // discontinuous in the authored velocity, halving one value and passing the
+    // next one through untouched on the same rig.
+    const termScale = Math.max(
+      ...rows.map((row) =>
+        row.reduce(
+          (total, entry, index) => total + Math.abs(entry * qd[index]),
+          0,
+        ),
+      ),
+    );
+    // A pure ratio, with no absolute floor: residual and termScale scale
+    // together, so the floor in `consistencyTolerance` -- which exists to keep a
+    // scene near the origin from being asked for exactness -- would reassert the
+    // absolute comparison this is here to avoid. Measured, the floor alone made
+    // the projection skip below about `1e-4` of the demo's scale.
     if (
+      termScale === 0 ||
       Math.max(...residual.map(Math.abs)) <=
-      consistencyTolerance(Math.max(...rows.flat().map(Math.abs), 1))
+        CONSISTENCY_RELATIVE_TOLERANCE * termScale
     ) {
       return qd; // already consistent — don't perturb it with a needless solve
     }
@@ -490,26 +525,52 @@ export default class Scene {
     // small -- one row per constraint row -- and positive definite exactly when
     // `J` has full row rank, which is the condition the augmented system needs
     // anyway.
-    const massMatrix = this.getMassMatrix(stateMap);
-    const correction = tf.tidy(() => {
-      const jMat = tf.tensor2d(rows);
-      // `g⁻¹Jᵀ`, column by column, rather than forming the inverse.
-      const invMassJT = tf.concat(
-        rows.map((row) =>
-          solveLinearSystem(
-            massMatrix,
-            tf.tensor2d(row.map((entry) => [entry])),
+    const rowCount = rows.length;
+    if (rowCount > this.sortedFrames.length) {
+      throw new Error(
+        `Scene is over-determined: ${rowCount} constraint rows against ` +
+          `${this.sortedFrames.length} coordinates. Some of these constraints ` +
+          'cannot hold at the same time.',
+      );
+    }
+    let correction;
+    try {
+      correction = tf.tidy(() => {
+        // Inside the tidy: `solveLinearSystem` throws on a rank-deficient system,
+        // which a taut chain reaches, and a tensor created out here would outlive
+        // the throw.
+        const massMatrix = this.getMassMatrix(stateMap);
+        const jMat = tf.tensor2d(rows);
+        // `g⁻¹Jᵀ`, column by column, rather than forming the inverse.
+        const invMassJT = tf.concat(
+          rows.map((row) =>
+            solveLinearSystem(
+              massMatrix,
+              tf.tensor2d(row.map((entry) => [entry])),
+            ),
           ),
-        ),
-        1,
+          1,
+        );
+        const lambda = solveLinearSystem(
+          jMat.matMul(invMassJT),
+          tf.tensor2d(residual.map((entry) => [entry])),
+        );
+        return [...invMassJT.matMul(lambda).dataSync()];
+      });
+    } catch (error) {
+      throw new Error(
+        'No initial-velocity correction is determined for this scene. Either ' +
+          'the constraint rows are not independent -- two constraints saying ' +
+          'the same thing about one pair of frames, or a rig posed at a ' +
+          'kinematic singularity -- or the scene is authored at a length ' +
+          'scale this cannot resolve. The mass matrix mixes a prismatic ' +
+          "coordinate's mass with a revolute one's mass-times-length-squared, " +
+          'so its condition number grows with the square of the scale, and ' +
+          'tfjs computes in float32: the usable band is roughly 1e-3 to 3e2 ' +
+          'times the scale the scene is written at. Rescaling the scene is ' +
+          `the fix for that one. (${error.message.split('\n')[0]})`,
       );
-      const lambda = solveLinearSystem(
-        jMat.matMul(invMassJT),
-        tf.tensor2d(residual.map((entry) => [entry])),
-      );
-      return [...invMassJT.matMul(lambda).dataSync()];
-    });
-    massMatrix.dispose();
+    }
     return qd.map((entry, index) => entry - correction[index]);
   }
 
@@ -524,23 +585,22 @@ export default class Scene {
     const stateMap = new Map(
       this.sortedFrames.map((frame) => [frame.id, getInitialState(frame)]),
     );
-    // A constraint added with `allowInitialViolation` says the scene is
-    // inconsistent on purpose, and that has to cover the velocity half as well
-    // -- otherwise `Ċ₀ ≠ 0` is unreachable, and the *linear* half of
-    // `C(t) = C₀ + Ċ₀t` becomes unobservable in the same change that made the
-    // constant half easier to test.
-    const intentional = this.constraints.some(
-      (constraint) => constraint.allowInitialViolation,
+    // A constraint added with `allowInitialViolation` says *that constraint* is
+    // violated on purpose, so it is dropped from the projection rather than
+    // switching the projection off. A flag reaching sideways into constraints it
+    // was never passed to would be a scene-global effect wearing a per-call
+    // argument's clothes.
+    //
+    // Dropping it rather than ignoring it is what keeps a non-zero initial
+    // constraint velocity reachable, and with it the linear half of
+    // `C(t) = C0 + Cdot0 * t`.
+    const enforced = this.constraints.filter(
+      (constraint) => !constraint.allowInitialViolation,
     );
-    if (!project || intentional || !this.constraints.length) {
+    if (!project || !enforced.length) {
       return stateMap;
     }
-    // Both solvers seed from here, so projecting once at the source is what
-    // keeps them from disagreeing about what "the initial state" means.
-    // `project: false` is for the queries above, which have to be answerable
-    // about a scene whose constraints are not resolved yet -- and which the
-    // projection itself calls, so leaving it on would not terminate.
-    const projected = this._getProjectedVelocities(stateMap);
+    const projected = this._getProjectedVelocities(stateMap, enforced);
     return new Map(
       this.sortedFrames.map((frame, index) => [
         frame.id,
@@ -549,16 +609,20 @@ export default class Scene {
     );
   }
 
-  toJsonObj({includeDecals = false} = {}) {
+  toJsonObj({ includeDecals = false } = {}) {
     const obj = {
-      frames: this.frames.map((frame) => frame.toJsonObj({includeDecals: includeDecals})),
+      frames: this.frames.map((frame) =>
+        frame.toJsonObj({ includeDecals: includeDecals }),
+      ),
       gravity: this.gravity,
-    }
+    };
     if (this.constraints.length) {
-      obj.constraints = this.constraints.map((constraint) => constraint.toJsonObj())
+      obj.constraints = this.constraints.map((constraint) =>
+        constraint.toJsonObj(),
+      );
     }
     if (includeDecals) {
-      obj.decals = this.decals.map((decal) => decal.toJsonObj())
+      obj.decals = this.decals.map((decal) => decal.toJsonObj());
     }
     return obj;
   }

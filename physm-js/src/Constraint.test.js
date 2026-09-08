@@ -619,6 +619,121 @@ describe('Scene build', () => {
     ).toThrow(/would never actually meet/);
   });
 
+  test('the projection is scale-free across many orders of magnitude', () => {
+    // The claim the metric formulation is *for*: one physical rig, expressed at
+    // wildly different numeric length scales, gets the same correction as a
+    // fraction of what was authored.
+    //
+    // This needs its own test rather than a column in the sweep above, because
+    // the failure it guards lives at the extremes. An absolute early-return
+    // threshold does not misbehave at scale 1; it skips the projection entirely
+    // once the Jacobian entries fall far enough, and then silently hands the
+    // violation back.
+    const ratioAt = (scale) => {
+      const authored = 0.8;
+      const scene = new Scene({
+        frames: [
+          new TrackFrame({
+            id: 'slider',
+            initialState: [0, 0],
+            weights: [new Weight(10)],
+          }),
+          new RotationalFrame({
+            id: 'pole',
+            position: [8 * scale, 0],
+            initialState: [1.1, authored],
+            weights: [new Weight(3, { position: [5 * scale, 0] })],
+          }),
+        ],
+      }).addConstraint(
+        new DistanceConstraint({
+          frame1: 'slider',
+          frame2: 'pole',
+          position1: [0, 0],
+          position2: [5 * scale, 0],
+        }),
+      );
+      return scene.getInitialStateMap().get('pole')[1] / authored;
+    };
+
+    const reference = ratioAt(1);
+    // Genuinely corrected at the reference scale, so the comparisons below are
+    // not all agreeing on "unchanged".
+    expect(reference).toBeGreaterThan(0.01);
+    expect(reference).toBeLessThan(0.99);
+    // ...and identical to six figures across five and a half orders of
+    // magnitude. The band is not unbounded, and the bound is real rather than a
+    // tolerance: `g` mixes a prismatic coordinate's mass with a revolute one's
+    // mass-times-length-squared, so its condition number grows like the square
+    // of the scale, and tfjs computes in float32. Outside this band the solve
+    // fails loudly, which is the behaviour worth having -- it used to skip the
+    // projection and hand the violation back in silence.
+    [3e2, 1e2, 1, 1e-2, 1e-3].forEach((scale) =>
+      expect(ratioAt(scale)).toBeCloseTo(reference, 6),
+    );
+  });
+
+  test('the correction is the metric projection, not the Euclidean one', () => {
+    // The falsifying test for this PR's central claim, and the only one that
+    // runs the projector rather than its early return.
+    //
+    // Both candidates land on `J q̇ = 0`, so no assertion about the residual can
+    // tell them apart. What separates them is *direction*: the metric version
+    // moves along `g⁻¹Jᵀ` -- a generalized force, which is what the solver
+    // applies every step -- and the Euclidean one moves along `Jᵀ`. So `g·Δq̇`
+    // is parallel to `Jᵀ` and `Δq̇` itself is not.
+    //
+    // A slider and a pendulum, no shared ancestor, so neither Jacobian column
+    // is structurally zero and the two directions genuinely differ.
+    const scene = new Scene({
+      frames: [
+        new TrackFrame({
+          id: 'slider',
+          initialState: [0, 0],
+          weights: [new Weight(10)],
+        }),
+        new RotationalFrame({
+          id: 'pole',
+          position: [8, 0],
+          initialState: [1.1, 4],
+          weights: [new Weight(3, { position: [5, 0] })],
+        }),
+      ],
+    }).addConstraint(
+      new DistanceConstraint({
+        frame1: 'slider',
+        frame2: 'pole',
+        position1: [0, 0],
+        position2: [5, 0],
+      }),
+    );
+
+    const before = scene.getInitialStateMap({ project: false });
+    const after = scene.getInitialStateMap();
+    const delta = scene.sortedFrames.map(
+      (frame) => after.get(frame.id)[1] - before.get(frame.id)[1],
+    );
+    expect(Math.hypot(...delta)).toBeGreaterThan(0.1); // it actually ran
+
+    const ctx = scene.getConfigKinematics(before);
+    const [jacobian] = scene.constraints[0].jacobianRows(ctx);
+    scene.disposeConfigKinematics(ctx);
+    const massMatrix = scene.getMassMatrix(before);
+    const massDelta = tf.tidy(() => [
+      ...massMatrix
+        .matMul(tf.tensor2d(delta.map((entry) => [entry])))
+        .dataSync(),
+    ]);
+    massMatrix.dispose();
+
+    // `g·Δq̇ ∥ Jᵀ`: the ratios agree across coordinates.
+    const ratios = massDelta.map((entry, index) => entry / jacobian[index]);
+    expect(ratios[0]).toBeCloseTo(ratios[1], 3);
+    // ...while `Δq̇ ∥ Jᵀ` -- what the Euclidean version would give -- does not.
+    const euclidean = delta.map((entry, index) => entry / jacobian[index]);
+    expect(euclidean[0]).not.toBeCloseTo(euclidean[1], 1);
+  });
+
   test('any geometry builds: no arrangement is required of the author', () => {
     // The property an interactive scene builder needs. A person dragging two
     // chains together cannot be asked to place them coincident to float32
@@ -646,7 +761,11 @@ describe('Scene build', () => {
                 id: side < 0 ? 'pole1' : 'pole2',
                 initialState: [
                   side < 0 ? poleAngle : Math.PI - poleAngle,
-                  0,
+                  // Non-zero, and not mirrored, so it violates the constraint:
+                  // with every velocity at zero the residual is identically
+                  // zero, the early return fires, and the grid would sweep the
+                  // position half only.
+                  side < 0 ? 0.7 : 0,
                 ],
                 position: [side < 0 ? 0 : spacing * scale, 0],
                 weights: [
@@ -667,13 +786,36 @@ describe('Scene build', () => {
         ),
       ).not.toThrow(); // would have thrown for all but the contrived cases
 
-      // Built is not enough -- it has to be built *consistent*.
-      const ctx = scene.getConfigKinematics(scene.getInitialStateMap());
-      scene.constraints[0].value(ctx).forEach((entry) => {
+      // Built is not enough -- it has to be built *consistent*, in both
+      // position and velocity.
+      const stateMap = scene.getInitialStateMap();
+      const ctx = scene.getConfigKinematics(stateMap);
+      const constraint = scene.constraints[0];
+      constraint.value(ctx).forEach((entry) => {
         // Relative to the scale the scene works at, for the same float32
         // reason the tolerance itself is relative.
         expect(Math.abs(entry) / scale).toBeLessThan(1e-3);
       });
+      // Cdot = J qd, which the projection has to have driven to zero. Measured
+      // against the residual it *started* with, which is the only denominator
+      // that stays meaningful: normalising by the projected terms themselves
+      // would be 0/0 in disguise, since driving them to zero is the whole job.
+      const authored = scene.getInitialStateMap({ project: false });
+      const residualOf = (map) =>
+        Math.max(
+          ...constraint
+            .jacobianRows(ctx)
+            .map((row) =>
+              Math.abs(
+                row.reduce(
+                  (total, entry, index) =>
+                    total + entry * map.get(scene.sortedFrames[index].id)[1],
+                  0,
+                ),
+              ),
+            ),
+        );
+      expect(residualOf(stateMap)).toBeLessThan(residualOf(authored) * 1e-5);
       scene.disposeConfigKinematics(ctx);
     });
   });
@@ -733,9 +875,13 @@ describe('Scene build', () => {
       }),
     );
     // Mirrored poles turning at the same rate keep their tips the same
-    // distance apart, so this is in `J`'s null space *without* being invisible
-    // to `J` -- which is what makes it a fixed point of the projection rather
-    // than a coordinate the projection never reaches.
+    // distance apart. Note what this does and does not pin: a null-space
+    // velocity has zero residual *by construction*, so it takes the early
+    // return and never enters the projection at all. What is pinned is that
+    // `J`'s pole columns are non-zero and that the residual cancels on a
+    // velocity the constraint can see -- which the cart version below cannot
+    // show, its column being structurally zero. The projector itself is pinned
+    // by the metric test further down, on an *inconsistent* velocity.
     scene.frameMap.get('pole1').initialState = [POLE_ANGLE, 2];
     scene.frameMap.get('pole2').initialState = [Math.PI - POLE_ANGLE, 2];
     const projected = scene.getInitialStateMap();

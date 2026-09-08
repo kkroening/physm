@@ -274,6 +274,20 @@ constraint would silently hold the wrong separation and never converge toward th
 > the kinetic energy of the correction — Gauss's principle of least constraint — and an energy does
 > not care what anybody authored lengths in.
 >
+> **Over a band, not unboundedly.** Measured, the correction is identical to six figures across
+> about five and a half orders of magnitude of length scale, and outside that the solve *fails*
+> rather than degrading quietly. The bound is real rather than a tolerance: $`g`$ mixes a prismatic
+> coordinate's mass with a revolute one's mass × length², so its condition number grows like the
+> square of the scale, and `physm-js` computes in float32. Rescaling the scene is the fix.
+>
+> **And a coincidence constraint welds two points wherever they land.** Solving `position2` means
+> the attachment can sit some way from anything the author drew — in the demo it is about 14% of a
+> segment past the end of the last drawn link. That is the contract, not an accident: the constraint
+> is about two *points*, and where the geometry is drawn is the renderer's business. It is the price
+> of never refusing a scene, and for an interactive builder it is the right side of that trade —
+> though a builder will want to *say* when the gap it absorbed is large, since a rig that
+> simulates correctly while looking wrong is its own kind of confusing.
+>
 > **And only there**, for the reason two paragraphs up: `physm-rs` frames do not carry an initial
 > state at all — they never parse `initialState`, and the wasm boundary receives $`(q, \dot q)`$ on
 > every call. There is no pose on that side to check a constraint against, and inventing one would
