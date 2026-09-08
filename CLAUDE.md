@@ -9,6 +9,7 @@ written down separately from the code.
 | [`physm-js`](physm-js/) | The JavaScript solver, and the React app that draws it. |
 | [`physm-py`](physm-py/) | The original 2019 prototype. Historical; not maintained. |
 | [`docs`](docs/) | [`algorithm.md`](docs/algorithm.md) — the equations of motion, mapped onto the code. [`constraints.md`](docs/constraints.md) — the loop-closure design. |
+| [`docs/issues`](docs/issues/) | The issue tracker: one Markdown file per issue. Regenerate its index with `scripts/render_issues`. |
 
 ## Invariants
 
@@ -115,7 +116,31 @@ cd physm-rs && cargo fmt
 ```
 
 CI runs on pull requests, and on pushes to `master`, when `physm-js/`,
-`physm-rs/` or the workflow itself changes — a PR touching only `docs/` produces
-no run at all, which is worth knowing before treating a green tick as coverage.
-`physm-rs` is `cargo fmt --check` plus `cargo test`; `physm-js` is lint,
-typecheck, test and build.
+`physm-rs/`, `docs/issues/`, `scripts/` or the workflow itself changes — a PR
+touching only `docs/algorithm.md` or `docs/constraints.md` produces no run at
+all, which is worth knowing before treating a green tick as coverage of a change
+to the mathematics. `physm-rs` is `cargo fmt --check` plus `cargo test`;
+`physm-js` is lint, typecheck, test and build; `issues` checks that the tracker's
+generated index matches its issue files.
+
+## Issues
+
+The tracker is [`docs/issues/`](docs/issues/) — one Markdown file per issue,
+numbered `NNNN.md`, with a generated index at
+[`docs/issues/README.md`](docs/issues/README.md). Conventions and how to write a
+good one: the [shared issue tracker guide][guide].
+
+Two things about it are easy to get wrong:
+
+- **The index is generated. Never hand-edit it**, including when it conflicts on
+  a rebase — run `scripts/render_issues` and stage the result. A hand-merged
+  index silently disagrees with what the generator would produce.
+- **Flip an issue's status in the PR that changes it**, not a follow-up, so
+  `master` is correct the moment that PR merges. The house merge style is
+  squash-and-merge, so there is no clean window to fix it up afterwards.
+
+`scripts/render_issues` is [vendored boilerplate][vendored] — shared across
+Kroeplex repos and edited upstream, not here.
+
+[guide]: https://github.com/kroeplex/dev-docs/blob/main/docs/issue-tracking.md
+[vendored]: https://github.com/kroeplex/dev-docs/blob/main/boilerplate/scripts/render_issues
