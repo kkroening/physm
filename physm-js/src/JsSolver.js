@@ -324,6 +324,90 @@ export default class JsSolver extends Solver {
     return tf.tensor2d(array, [numFrames, 1]);
   }
 
+  _getConfigKinematics(stateMap = required('stateMap')) {
+    /**
+     * The configuration-only sweeps: everything a constraint's `value` and
+     * `jacobianRows` read, as a function of `q` alone. Evaluating those at a
+     * trial configuration — one no solve was run at — is what makes position
+     * projection implementable later, so the seam is kept explicit rather than
+     * inlined. See `docs/constraints.md` §7.
+     *
+     * The returned context carries no velocity-dependent maps, so `bias`
+     * throws on it. Dispose it with `_disposeConstraintCtx`.
+     */
+    const posMatMap = this._getPosMatMap(stateMap);
+    const invPosMatMap = this._getInvPosMatMap(posMatMap);
+    const velMatMap = this._getVelMatMap(posMatMap, invPosMatMap, stateMap);
+    tf.dispose([...invPosMatMap.values()]);
+    return {
+      sortedFrames: this.scene.sortedFrames,
+      frameIdPathMap: this.scene.frameIdPathMap,
+      posMatMap,
+      velMatMap,
+    };
+  }
+
+  _disposeConstraintCtx(ctx = required('ctx')) {
+    tf.dispose([...ctx.posMatMap.values(), ...ctx.velMatMap.values()]);
+  }
+
+  _augmentWithConstraints(
+    aMat = required('aMat'),
+    bVec = required('bVec'),
+    ctx = required('ctx'),
+  ) {
+    /**
+     * Grow the `n`-by-`n` system into the `(n + m)`-by-`(n + m)` KKT
+     * saddle-point system, where `m` is the total constraint row count:
+     *
+     *     [ g  Jᵀ ] [ q̈ ]   [   f   ]
+     *     [ J  0  ] [ λ ] = [ -J̇q̇ ]
+     *
+     * The block is symmetric but *indefinite*, which is why `solveLinearSystem`
+     * being QR-based rather than a Cholesky matters. See `docs/constraints.md`.
+     */
+    const numFrames = this.scene.sortedFrames.length;
+    const size =
+      numFrames +
+      this.scene.constraints.reduce(
+        (total, constraint) => total + constraint.rowCount,
+        0,
+      );
+    const aArray = aMat.arraySync();
+    const bArray = bVec.arraySync();
+    const array = Array.from({ length: size }, (_unused, rowIndex) =>
+      Array.from({ length: size }, (_unused2, colIndex) =>
+        rowIndex < numFrames && colIndex < numFrames
+          ? aArray[rowIndex][colIndex]
+          : 0,
+      ),
+    );
+    const vector = Array.from({ length: size }, (_unused, rowIndex) =>
+      rowIndex < numFrames ? bArray[rowIndex][0] : 0,
+    );
+    let row = numFrames;
+    for (let constraint of this.scene.constraints) {
+      const jacobianRows = constraint.jacobianRows(ctx);
+      const bias = constraint.bias(ctx);
+      for (let index = 0; index < jacobianRows.length; index++) {
+        jacobianRows[index].forEach((entry, colIndex) => {
+          array[row][colIndex] = entry;
+          array[colIndex][row] = entry;
+        });
+        vector[row] = -bias[index];
+        row++;
+      }
+    }
+    tf.dispose([aMat, bVec]);
+    return [
+      tf.tensor2d(array),
+      tf.tensor2d(
+        vector.map((entry) => [entry]),
+        [size, 1],
+      ),
+    ];
+  }
+
   _getSystemOfEquations(
     stateMap = required('stateMap'),
     externalForceMap = required('externalForceMap'),
@@ -351,8 +435,8 @@ export default class JsSolver extends Solver {
     //     ms.map((m) => [...m.dataSync()]),
     //   ),
     // );
-    const aMat = this._getCoefficientMatrix(velMatMap, weightPosMap);
-    const bVec = this._getForceVector(
+    let aMat = this._getCoefficientMatrix(velMatMap, weightPosMap);
+    let bVec = this._getForceVector(
       velMatMap,
       velSumMatMap,
       accelSumMatMap,
@@ -360,6 +444,16 @@ export default class JsSolver extends Solver {
       stateMap,
       externalForceMap,
     );
+    if (this.scene.constraints.length) {
+      [aMat, bVec] = this._augmentWithConstraints(aMat, bVec, {
+        sortedFrames: this.scene.sortedFrames,
+        frameIdPathMap: this.scene.frameIdPathMap,
+        posMatMap,
+        velMatMap,
+        velSumMatMap,
+        accelSumMatMap,
+      });
+    }
     tf.dispose([
       ...posMatMap.values(),
       ...invPosMatMap.values(),
@@ -377,7 +471,12 @@ export default class JsSolver extends Solver {
     externalForceMap = required('externalForceMap'),
   ) {
     const [aMat, bVec] = this._getSystemOfEquations(stateMap, externalForceMap);
-    const qddArray = solveLinearSystem(aMat, bVec, { asTensor: false });
+    // The tail of the solution vector holds the Lagrange multipliers `λ`, which
+    // the integrator has no use for; only the leading `q̈` is returned.
+    const qddArray = solveLinearSystem(aMat, bVec, { asTensor: false }).slice(
+      0,
+      this.scene.sortedFrames.length,
+    );
     //console.log('A:', aMat.dataSync(), 'B:', bVec.dataSync());
     tf.dispose([aMat, bVec]);
     return qddArray;

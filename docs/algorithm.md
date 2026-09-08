@@ -11,6 +11,11 @@ supporting modules in full, with [`physm-py/notes.txt`](../physm-py/notes.txt)
 (Nov–Dec 2019) for the provenance of the naming. The `physm-py` and `physm-js`
 implementations compute the same thing.
 
+Relations the tree cannot express — a rope whose two ends ride on different branches — are
+**not** frames. They enter as Lagrange-multiplier rows on an augmented system, which leaves
+every identity below untouched; [`constraints.md`](constraints.md) is the design, and
+[§5](#when-the-scene-closes-a-loop-the-augmented-system) is where they meet the assembly.
+
 ## Contents
 
 1. [Two vocabularies](#1-two-vocabularies)
@@ -284,6 +289,60 @@ ancestors — rather than testing all $n^2$ pairs, so the comparability test dis
 of being made cheaper, and both triangles are written as they are computed. There is no
 `fill_lower_triangle_with_upper_triangle` pass any more, and symmetry holds by construction.
 
+### When the scene closes a loop: the augmented system
+
+A scene may carry **constraints** — scalar functions $`C(q)`$ that must stay zero, expressing
+relations the tree cannot. Differentiating twice gives $`J\ddot q = -\dot J\dot q`$ with
+$`J = \partial C/\partial q`$, and adjoining that to $`g\ddot q = f`$ with a multiplier
+$`\lambda`$ per row produces the **KKT saddle-point system** `get_system_of_equations`
+assembles when `constraints` is non-empty:
+
+```math
+\begin{bmatrix} g & J^{\mathsf T} \\ J & 0 \end{bmatrix}
+\begin{bmatrix} \ddot q \\ \lambda \end{bmatrix}
+\;=\;
+\begin{bmatrix} f \\ -\dot J\dot q \end{bmatrix}
+```
+
+Three things follow, and each is load-bearing:
+
+- **$J$ needs no kinematics beyond §4.** Write $`d = x_P - x_Q`$ for the separation of two
+  attached points, carried by frames $a$ and $b$. Then
+
+  ```math
+  J_d \;\equiv\; \frac{\partial d}{\partial q},
+  \qquad
+  (J_d)_i \;=\; [\,i \preceq a\,]\,V_i x_P \;-\; [\,i \preceq b\,]\,V_i x_Q,
+  \qquad
+  \dot J_d\,\dot q \;=\; A_a x_P - A_b x_Q
+  ```
+
+  — the same $`V_i`$ from sweep 2 and $`A_i`$ from sweep 4, non-zero only on the union of the
+  two root paths. Nothing new is computed; a constraint *reads* the sweeps.
+
+  $`J_d`$ is **not** $J$, and keeping them apart matters. Each constraint type builds its own
+  $J$ and $`\dot J\dot q`$ out of $`J_d`$, and they differ: $`C = d`$ gives $`J = J_d`$ and
+  $`\dot J\dot q = \dot J_d\dot q`$, but $`C = \tfrac12(\lVert d\rVert^2 - L^2)`$ gives
+  $`J = d^{\mathsf T}J_d`$ and $`\dot J\dot q = \lVert\dot d\rVert^2 + d^{\mathsf T}\dot J_d\dot q`$.
+  Conflating the two drops that $`\lVert\dot d\rVert^2`$, which is a silent error: it leaves
+  the augmented system's own second block row satisfied, so only the *physical* $`\ddot C`$
+  gives it away.
+- **A shared ancestor sees only the separation.** Both indicators fire for a common ancestor
+  $i$, so its column collapses to $`V_i(x_P - x_Q) = V_i d`$ — independent of where the two
+  points are, and a function of the gap alone. For a *prismatic* ancestor $`V_i`$ has no
+  rotational part, so $`V_i d = 0`$ **exactly**: a rope slung between two arms of one cart
+  exerts no net generalized force on the cart. For a *revolute* one it does not vanish, and
+  should not — there the two equal-and-opposite constraint forces act at different points and
+  leave a couple.
+- **The block is symmetric but *indefinite*.** The zero block guarantees negative eigenvalues,
+  so Cholesky is not merely slower here — it does not apply. The QR of
+  [§7](#a-singular-matrix-with-an-unwrap-behind-it--robustness) does.
+
+The system is $`(n + m)`$-square for $m$ total constraint rows; `solve` returns the leading
+$`\ddot q`$ and discards $`\lambda`$, which the integrator has no use for. With no
+constraints the augmentation is skipped entirely and the $n$-square system above is what gets
+solved, unchanged.
+
 ---
 
 ## 6. Integration
@@ -309,7 +368,7 @@ Everything above describes the algorithm and stays true regardless of how it is
 coded. This section is the volatile one: it describes the Rust implementation as it
 stands at this commit, and is expected to go out of date as the code changes.
 
-### It is a forest, not a DAG — *structural*
+### It is a forest, not a DAG — *resolved, by staying one*
 
 `children: Vec<Box<dyn Frame>>` is unique ownership, so no node can have two parents. The
 `index_path_map` and `path_contains` machinery *looks* DAG-ready, but `get_index_path_map`
@@ -329,16 +388,26 @@ with two parents has no single product of exponentials, so there is no $`M_j`$ f
 $`\mathrm{Ad}`$ to act on — §§2–5 do not survive that.
 
 The other route keeps the tree a tree and admits the extra relations as **Lagrange-multiplier
-rows on an augmented system**. `physm-py` in this repo already does it: `NaiveSolver._solve`
+rows on an augmented system**. `physm-py` in this repo got there first: `NaiveSolver._solve`
 sizes its matrix `nframes + nconstraints`, assembles the frame block by the same
 comparability relation the Rust uses, appends the constraint rows, and discards the multipliers
 on the way out — with `Spring` and `Constraint` as first-class scene nodes. That is what the
 2019 notes' springs and constraints were heading toward, and it leaves everything above
 intact.
 
-That route is designed out in [`constraints.md`](constraints.md), including why the constraint
-Jacobian needs no kinematics beyond the sweeps in §4. **None of it is implemented** — this
-section still describes the code as it stands.
+**That is the route taken**, designed in [`constraints.md`](constraints.md) and now implemented
+in both `physm-rs` and `physm-js`; the assembly is
+[§5](#when-the-scene-closes-a-loop-the-augmented-system). So the heading above is a statement
+of intent rather than a shortfall: the frames stay a forest *because* the DAG's loops are
+better expressed as constraints, and a frame with two parents is authoring sugar that desugars
+into a coincidence constraint between the two candidate poses.
+
+What has not been built is **stabilization**. The formulation is index-1: it holds $`\ddot C`$
+at zero, so $`C(t) = C_0 + \dot C_0 t`$ exactly, and any inconsistency in the initial
+conditions is a gap that never closes — while floating-point error accumulates linearly on top
+of it. Baumgarte feedback, post-step projection and the GGL formulation are all compatible with
+what is there, and [`constraints.md` §7](constraints.md#7-drift-and-how-it-gets-fixed-later)
+compares them; today a scene has to start consistent and stay short.
 
 ### The assembly used to be quadratic in the wrong thing — *resolved*
 
@@ -419,6 +488,15 @@ pendulum passes through that on every swing.
 
 Cholesky is generically about half the work of the QR in use, but neither factorization makes
 `coefficient_matrix.qr().solve(&force_vector).unwrap()` a reasonable thing to leave there.
+
+**Constraints add a third way in, and close off the Cholesky option entirely.** The augmented
+block of [§5](#when-the-scene-closes-a-loop-the-augmented-system) is non-singular when $g$ is
+positive definite *and* $J$ has full row rank, so a scene loses the second condition whenever
+its loop reaches a configuration where the constraint stops resisting anything: a chain pulled
+straight, or two arms and the link between them gone collinear. The demo scene starts on a
+circular arc precisely to sit away from that. Being able to *reach* it is a property of the
+scene's geometry, not of the solver, and the honest fix is the same as above — report the rank
+deficiency rather than unwrap through it.
 
 *(The other `unwrap` in the file, in `get_inv_pos_mats`, genuinely cannot fire: every
 `pos_mat` is a product of $`SE(2)`$ elements and so has determinant 1.)*

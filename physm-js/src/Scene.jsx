@@ -51,6 +51,22 @@ export default class Scene {
     });
   }
 
+  addConstraint(constraint = required('constraint')) {
+    /**
+     * Add a loop-closure constraint, mirroring `Scene::add_constraint` in
+     * physm-rs. Chainable, and callable after construction because the
+     * constructor's derived tables -- the sort order, the parent map, the root
+     * paths -- are functions of the frames alone.
+     *
+     * That is a description of today, not an invariant to preserve. The
+     * scene-build consistency step in `docs/constraints.md` §7 has to project
+     * `q̇₀` onto `J q̇ = 0`, which means reading the constraint list at build
+     * time; whoever adds it should expect to change this.
+     */
+    this.constraints.push(constraint);
+    return this;
+  }
+
   getDomElement(
     stateMap = required('stateMap'),
     xformMatrix = tf.eye(3),
@@ -85,6 +101,9 @@ export default class Scene {
     const obj = {
       frames: this.frames.map((frame) => frame.toJsonObj({includeDecals: includeDecals})),
       gravity: this.gravity,
+    }
+    if (this.constraints.length) {
+      obj.constraints = this.constraints.map((constraint) => constraint.toJsonObj())
     }
     if (includeDecals) {
       obj.decals = this.decals.map((decal) => decal.toJsonObj())
