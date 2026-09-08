@@ -221,9 +221,19 @@ jobs:
       # two, between #4 and here. Re-measure before quoting it.
       #
       # Ratchet it down as the debt is paid, which the TypeScript port does a file
-      # at a time: `master` linted at 46, of which `daglet` was 3.
+      # at a time: `master` linted at 46, of which `daglet` was 3. Re-measured
+      # here at 13 -- the port and the render split cleared most of it, and
+      # dropping `varsIgnorePattern` from the TypeScript rule made the remainder
+      # visible rather than exempt.
       - name: Lint
-        run: npm run lint -- --max-warnings 43
+        run: npm run lint -- --max-warnings 13
+
+      # `.prettierrc` was committed and enforced by nothing, so the tree drifted
+      # out of its own style: fifteen files were unformatted by the time anyone
+      # ran it. A committed convention nothing checks is the worst of the three
+      # states -- it reads as a rule and behaves as a suggestion.
+      - name: Format
+        run: npm run format:check
 
       # Vite strips types with esbuild and never checks them, so without this the
       # annotations are decorative.

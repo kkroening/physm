@@ -44,10 +44,12 @@ export default [
     rules: {
       // The base rule cannot see type-only usage; the TypeScript-aware one can.
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_' },
-      ],
+      // No `varsIgnorePattern` here, unlike the base rule above. That pattern
+      // exempts every capitalised binding -- which is every type, class and
+      // component in the codebase -- so under it an unused import of one is
+      // invisible, and `noUnusedLocals` is off too. It earns its keep only for
+      // the base rule, which cannot see a binding used in JSX; this one can.
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
   }),
 

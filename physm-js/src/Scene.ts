@@ -2,7 +2,6 @@ import * as daglet from './daglet';
 import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import { CONSISTENCY_RELATIVE_TOLERANCE } from './Constraint';
-import { ZERO_STATE } from './State';
 import { SingularMatrixError } from './solveLinearSystem';
 import { factor, fromRows, solveFactored } from './solveLinearSystem';
 import type Constraint from './Constraint';
