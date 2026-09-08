@@ -1,6 +1,7 @@
-import BoxDecal from './BoxDecal';
-import CircleDecal from './CircleDecal';
-import CoincidenceConstraint from './CoincidenceConstraint';
+import Box from './Box';
+import Anchor from './Anchor';
+import Circle from './Circle';
+import Coincidence from './Coincidence';
 import CoreBoxDecal from './../BoxDecal';
 import CoreCircleDecal from './../CircleDecal';
 import CoreRotationalFrame from './../RotationalFrame';
@@ -15,6 +16,8 @@ import { CoincidenceConstraint as CoreCoincidenceConstraint } from './../Constra
 import { DEFAULT_GRAVITY } from './../Scene';
 import { StrictMode } from 'react';
 import { render } from '@testing-library/react';
+import { useRef } from 'react';
+import type { AnchorPoint } from './sceneNodes';
 import type { ReactElement, ReactNode } from 'react';
 
 /**
@@ -54,7 +57,7 @@ describe('Scene (authoring)', () => {
         initialState={[1, 0.5]}
         resistance={5}
       >
-        <BoxDecal width={4} height={2} lineWidth={0.2} color="tomato" />
+        <Box width={4} height={2} lineWidth={0.2} color="tomato" />
         <Weight mass={250} position={[0.5, 0]} drag={1.5} />
         <RotationalFrame
           id="pole"
@@ -62,7 +65,7 @@ describe('Scene (authoring)', () => {
           initialState={[0.6, -0.2]}
           resistance={1.25}
         >
-          <CircleDecal position={[3, 0]} radius={0.3} color="seagreen" />
+          <Circle position={[3, 0]} radius={0.3} color="seagreen" />
           <Weight mass={7} position={[3, 0]} drag={6} />
         </RotationalFrame>
       </TrackFrame>,
@@ -183,11 +186,7 @@ describe('Scene (authoring)', () => {
         <RotationalFrame id="right" position={[2, 0]} initialState={[0, 0]}>
           <Weight mass={1} position={[1, 0]} />
         </RotationalFrame>
-        <CoincidenceConstraint
-          frame1="left"
-          frame2="right"
-          position1={[1, 0]}
-        />
+        <Coincidence frame1="left" frame2="right" position1={[1, 0]} />
       </>,
     );
 
@@ -247,8 +246,8 @@ describe('Scene (authoring)', () => {
       <svg>
         <Scene onSceneChange={(built) => (scene = built)}>
           <RotationalFrame id="first" resistance={resistance}>
-            <BoxDecal width={1} color="red" />
-            <BoxDecal width={2} color="blue" />
+            <Box width={1} color="red" />
+            <Box width={2} color="blue" />
           </RotationalFrame>
           <RotationalFrame id="second" />
           <RotationalFrame id="third" />
@@ -282,8 +281,8 @@ describe('Scene (authoring)', () => {
       <svg>
         <Scene onSceneChange={(built) => (scene = built)}>
           <RotationalFrame id="a">
-            <BoxDecal width={width} color="red" />
-            <BoxDecal width={2} color="blue" />
+            <Box width={width} color="red" />
+            <Box width={2} color="blue" />
           </RotationalFrame>
         </Scene>
       </svg>
@@ -363,11 +362,7 @@ describe('Scene (authoring)', () => {
               <Weight mass={1} position={[1, 0]} />
             </RotationalFrame>
           ) : null}
-          <CoincidenceConstraint
-            frame1="left"
-            frame2="right"
-            position1={[1, 0]}
-          />
+          <Coincidence frame1="left" frame2="right" position1={[1, 0]} />
         </Scene>
       </svg>
     );
@@ -390,6 +385,103 @@ describe('Scene (authoring)', () => {
         </svg>,
       ),
     ).toThrow(/must be inside a frame/);
+  });
+
+  test('an anchor wires a constraint to a frame nobody named', () => {
+    // The case the string-id form cannot express. `Chain` generates its frames
+    // and names none of them, so an author outside it has no id to write --
+    // which is the problem the JSX authoring exists to remove, reappearing one
+    // level up. The chain marks its own tip instead.
+    function Chain({
+      depth,
+      children,
+    }: {
+      depth: number;
+      children?: ReactNode;
+    }): ReactElement {
+      return depth === 0 ? (
+        <RotationalFrame position={[1, 0]}>{children}</RotationalFrame>
+      ) : (
+        <RotationalFrame position={[1, 0]}>
+          <Chain depth={depth - 1}>{children}</Chain>
+        </RotationalFrame>
+      );
+    }
+
+    function Rig(): ReactElement {
+      const left = useRef<AnchorPoint>(null);
+      const right = useRef<AnchorPoint>(null);
+
+      return (
+        <>
+          <TrackFrame id="cart">
+            <Chain depth={2}>
+              <Anchor ref={left} position={[1, 0]} />
+            </Chain>
+            <Chain depth={2}>
+              <Anchor ref={right} position={[1, 0]} />
+            </Chain>
+          </TrackFrame>
+          <Coincidence frame1={left} frame2={right} />
+        </>
+      );
+    }
+
+    const scene = assemble(<Rig />);
+
+    expect(scene.constraints).toHaveLength(1);
+
+    // The constraint names two generated ids, neither of which appears in the
+    // JSX above -- which is the whole point.
+    const solved = scene.constraints[0]!;
+    expect(solved.frameId1).not.toBe(solved.frameId2);
+    for (const frameId of [solved.frameId1, solved.frameId2]) {
+      expect(scene.frameMap.has(frameId)).toBe(true);
+      expect(frameId).not.toBe('cart');
+    }
+
+    // And it closes: `position2` is solved from the assembled pose, so the two
+    // tips coincide exactly however the chains happen to be placed.
+    expect(
+      scene.getSeparation(
+        solved.frameId1,
+        [1, 0],
+        solved.frameId2,
+        (solved as CoreCoincidenceConstraint).localPosition2,
+      ).distance,
+    ).toBeCloseTo(0, 9);
+  });
+
+  test('a constraint naming an anchor that never reports is dropped, not thrown', () => {
+    // A ref passed to nothing. The registry is transiently inconsistent by
+    // design, so an unreported anchor has to read as "wait" rather than as an
+    // error -- and a throw from assembly would take the tree down.
+    function Rig(): ReactElement {
+      const nowhere = useRef<AnchorPoint>(null);
+
+      return (
+        <>
+          <RotationalFrame id="a" />
+          <Coincidence frame1="a" frame2={nowhere} />
+        </>
+      );
+    }
+
+    const scene = assemble(<Rig />);
+
+    expect(scene.constraints).toHaveLength(0);
+  });
+
+  test('an Anchor outside any frame is refused', () => {
+    // It marks a point *on a frame*, and there is no frame at the root of a
+    // scene for it to mark.
+    function Rig(): ReactElement {
+      const stray = useRef<AnchorPoint>(null);
+
+      return <Anchor ref={stray} />;
+    }
+
+    expect(() => assemble(<Rig />)).toThrow(/must be inside a frame/);
   });
 
   test('gravity reaches the assembled scene, and defaults when omitted', () => {

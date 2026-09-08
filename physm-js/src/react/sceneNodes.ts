@@ -2,7 +2,9 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type Constraint from './../Constraint';
 import type Decal from './../Decal';
 import type Frame from './../Frame';
+import type { FrameId } from './../Frame';
 import type Weight from './../Weight';
+import type { PositionLike } from './../Scene';
 
 /**
  * What a registered component contributes to a scene.
@@ -10,14 +12,43 @@ import type Weight from './../Weight';
  * A frame is the only one with children, so it is the only one whose builder
  * is handed any: the rest are leaves that turn their props into an object.
  */
+/**
+ * A named point on a frame, as an `<Anchor>` reports it.
+ *
+ * The unit a constraint is wired from when the frames are generated rather than
+ * written: a `RopeChain` names none of the frames it produces, so nothing
+ * outside it can say `frame1="chainL4"`. An anchor is a point *the chain itself*
+ * marks, handed out by ref.
+ */
+export interface AnchorPoint {
+  readonly frameId: FrameId;
+  readonly position: PositionLike;
+}
+
+/** What an `<Anchor>` hands back through its ref. */
+export type AnchorHandle = { readonly current: AnchorPoint | null };
+
 export type SceneNode =
   | {
       readonly slot: 'frame';
       readonly build: (children: FrameChildren) => Frame;
     }
+  | { readonly slot: 'anchor'; readonly build: () => AnchorPoint }
   | { readonly slot: 'decal'; readonly build: () => Decal }
   | { readonly slot: 'weight'; readonly build: () => Weight }
-  | { readonly slot: 'constraint'; readonly build: () => Constraint };
+  | {
+      readonly slot: 'constraint';
+      /**
+       * `null` when an anchor it names has not reported yet.
+       *
+       * Registrations arrive one effect at a time, so a constraint can be
+       * assembled before the `<Anchor>` it points at has handed out its point.
+       * Returning `null` says "not yet", which `Scene` treats the same way it
+       * treats a frame that is mid-unmount: wait, and report if it never
+       * resolves.
+       */
+      readonly build: () => Constraint | null;
+    };
 
 /** What a frame's builder receives, grouped by what each child registered as. */
 export interface FrameChildren {
@@ -198,6 +229,11 @@ export function buildChildren(
         break;
       case 'frame':
         children.frames.push(node.build(buildChildren(entries, key)));
+        break;
+      case 'anchor':
+        // Registered only so that mounting one bumps the version and forces a
+        // reassembly. The point itself travels by ref, because a constraint
+        // reads it during assembly rather than during render -- see `Anchor`.
         break;
       case 'constraint':
         // Constraints belong to the scene, not to a frame: they name two

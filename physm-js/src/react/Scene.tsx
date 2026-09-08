@@ -58,6 +58,7 @@ export default function Scene({
 }: SceneProps): ReactElement {
   const { registry, version } = useSceneRegistry();
   const unresolvedRef = useRef<Constraint[]>([]);
+  const unresolvedAnchorsRef = useRef(0);
 
   const scene = useMemo(() => {
     const { decals, weights, frames } = buildChildren(registry.entries, null);
@@ -79,6 +80,7 @@ export default function Scene({
     }
 
     const unresolved: Constraint[] = [];
+    let unresolvedAnchors = 0;
     const built = new CoreScene({
       decals,
       frames,
@@ -102,7 +104,14 @@ export default function Scene({
       // The cost is that a genuine typo in `frame1` becomes a missing
       // constraint rather than a loud error. `unresolvedConstraints` below is
       // how that surfaces once nothing is moving.
+      // `null` is the same "wait" answer one step earlier: an `<Anchor>` this
+      // constraint names has not handed out its point yet.
       const constraint = node.build();
+      if (!constraint) {
+        unresolvedAnchors += 1;
+        continue;
+      }
+
       if (
         built.frameMap.has(constraint.frameId1) &&
         built.frameMap.has(constraint.frameId2)
@@ -114,6 +123,7 @@ export default function Scene({
     }
 
     unresolvedRef.current = unresolved;
+    unresolvedAnchorsRef.current = unresolvedAnchors;
 
     return built;
     // `version` is the dependency that matters: the map is mutated in place,
@@ -150,6 +160,15 @@ export default function Scene({
       console.warn(
         `physm: constraint between '${constraint.frameId1}' and ` +
           `'${constraint.frameId2}' was dropped: the scene has no such frame.`,
+      );
+    }
+
+    if (unresolvedAnchorsRef.current) {
+      console.warn(
+        `physm: ${unresolvedAnchorsRef.current} constraint(s) were dropped ` +
+          'because an <Anchor> they name never reported. An anchor reports ' +
+          'when it mounts, so this usually means the ref was never passed to ' +
+          'one.',
       );
     }
   }, [scene]);

@@ -1,4 +1,5 @@
 import CoreTrackFrame from './../TrackFrame';
+import FrameIdContext from './FrameIdContext';
 import { ParentKeyContext, useSceneNode } from './sceneNodes';
 import { useId } from 'react';
 import type { FrameId } from './../Frame';
@@ -57,7 +58,9 @@ export default function TrackFrame({
 
   return (
     <ParentKeyContext.Provider value={key}>
-      {children}
+      <FrameIdContext.Provider value={id ?? key}>
+        {children}
+      </FrameIdContext.Provider>
     </ParentKeyContext.Provider>
   );
 }

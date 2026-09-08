@@ -3,10 +3,10 @@ import { useId } from 'react';
 import { useSceneNode } from './sceneNodes';
 import type { CircleDecalOptions } from './../CircleDecal';
 
-export type CircleDecalProps = CircleDecalOptions;
+export type CircleProps = CircleDecalOptions;
 
 /** A circle drawn in the enclosing frame's coordinates. */
-export default function CircleDecal(props: CircleDecalProps): null {
+export default function Circle(props: CircleProps): null {
   useSceneNode(
     useId(),
     { slot: 'decal', build: () => new CoreCircleDecal(props) },
