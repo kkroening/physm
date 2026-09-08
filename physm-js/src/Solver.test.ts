@@ -5,6 +5,8 @@ import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { DistanceConstraint } from './Constraint';
+import type Frame from './Frame';
+import type { FrameId, StateMap } from './Frame';
 
 /**
  * The tree scene: no loop closures, so both solvers assemble a plain `n`-by-`n`
@@ -93,10 +95,22 @@ function getRopeScene() {
   );
 }
 
+/** One integration step, as seen by a cross-validation's own extra checks. */
+interface StepCheck {
+  frameId: FrameId;
+  newQ: number;
+  newQd: number;
+  curStateMap: StateMap;
+  timeIndex: number;
+}
+
 function describeCrossValidation(
-  sceneName,
-  getScene,
-  { checkStep = () => {}, tolerance = 0.2 } = {},
+  sceneName: string,
+  getScene: () => Scene,
+  {
+    checkStep = (_step: StepCheck): void => {},
+    tolerance = 0.2,
+  }: { checkStep?: (step: StepCheck) => void; tolerance?: number } = {},
 ) {
   describe(`Solver subclass cross-validation: ${sceneName}`, () => {
     const scene = getScene();
@@ -171,7 +185,7 @@ function describeCrossValidation(
           const stateMap1 = stateMaps1[timeIndex];
           const stateMap2 = stateMaps2[timeIndex];
           expect(Object.keys(stateMap1)).toEqual(Object.keys(stateMap2));
-          scene.sortedFrames.forEach((frame) => {
+          scene.sortedFrames.forEach((frame: Frame) => {
             const [q1, qd1] = stateMap1.get(frame.id)!;
             const [q2, qd2] = stateMap2.get(frame.id)!;
             expect(Math.abs(q2 - q1)).toBeLessThan(tolerance);

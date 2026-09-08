@@ -12,5 +12,11 @@
   "compilerOptions": {
     "noUncheckedIndexedAccess": false
   },
+
+  // `exclude` is inherited through `extends`, and the base excludes exactly the
+  // files this project exists to check -- so without clearing it, `include`
+  // below matches nothing and this pass silently re-checks the sources a second
+  // time, more weakly. It cannot fail where the first pass passed.
+  "exclude": [],
   "include": ["src/**/*.test.ts", "src/**/*.test.tsx", "src"]
 }

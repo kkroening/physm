@@ -4,6 +4,8 @@ import { faker } from '@faker-js/faker';
 import Frame from './Frame';
 import React from 'react';
 import RotationalFrame from './RotationalFrame';
+// `react-test-renderer` ships no types and `@types/react-test-renderer` is
+// deprecated for React 19; the shim in `src/types/` declares what is used here.
 import renderer from 'react-test-renderer';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
@@ -56,7 +58,7 @@ describe('Scene queries', () => {
     // a `RotationalFrame` offset from a `TrackFrame` displaced by 7, so an
     // implementation that returned its argument would fail here.
     const scene = build();
-    scene.frameMap.get('child').initialState = [0.9, 0];
+    scene.frameMap.get('child')!.initialState = [0.9, 0];
     const local = [1.5, -2.25];
     const world = scene.getWorldPosition('child', local);
     expect(world[0]).not.toBeCloseTo(local[0], 2);

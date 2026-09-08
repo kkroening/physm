@@ -5,12 +5,24 @@ import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint, DistanceConstraint } from './Constraint';
+import type { FrameId, StateMap } from './Frame';
+import type { State } from './State';
 
 // A branched rig: two poles rising from one cart, so the two attachment points
 // have root paths that share a prefix (`cart`) and then diverge. Anything that
 // confuses a frame's position along a path with its index into the system —
 // physm-py's 2019 constraint code did exactly that — produces the right answer
 // on a straight chain and the wrong one here.
+/** A frame this fixture just built; a miss means the fixture is wrong. */
+function frameOf(scene: Scene, frameId: FrameId) {
+  const frame = scene.frameMap.get(frameId);
+  if (!frame) {
+    throw new Error(`Fixture has no frame ${frameId}`);
+  }
+
+  return frame;
+}
+
 const POLE_ANGLE = 0.6;
 const POLE_LENGTH = 10;
 const POLE_SPACING = 20;
@@ -48,6 +60,9 @@ function getBranchedScene({ seed = 0, spacing = POLE_SPACING } = {}) {
 const constraintKinds = [
   {
     name: 'DistanceConstraint',
+    // One row against three degrees of freedom leaves two free, so the rig
+    // swings and RK4 truncation is what moves `C`.
+    movesFromRest: true,
     spacing: POLE_SPACING,
     createConstraint: () =>
       new DistanceConstraint({
@@ -60,6 +75,12 @@ const constraintKinds = [
   },
   {
     name: 'CoincidenceConstraint',
+    // The poles are mirror images -- `POLE_ANGLE` and `π - POLE_ANGLE` about a
+    // cart free to slide -- so with the tips pinned to each other and nothing
+    // moving, the gravitational torques cancel and the rig sits at an
+    // equilibrium. Released from rest it does not move at all, which is worth
+    // knowing before reading a drift number off it.
+    movesFromRest: false,
     // Moving the pivots together by exactly the tip gap makes the two tips
     // meet, so the loop closes without the rig having to be pre-strained.
     spacing: POLE_SPACING - TIP_GAP,
@@ -73,12 +94,19 @@ const constraintKinds = [
   },
 ];
 
+type ConstraintKind = (typeof constraintKinds)[number];
+
 function getConstrainedSolver({
   kind,
   seed = 0,
   rungeKutta = false,
   spacingOffset = 0,
-} = {}) {
+}: {
+  kind: ConstraintKind;
+  seed?: number;
+  rungeKutta?: boolean;
+  spacingOffset?: number;
+}) {
   // A non-zero `spacingOffset` moves the poles apart without telling the
   // constraint, which is how a scene gets a deliberate `C₀ ≠ 0`.
   const scene = getBranchedScene({
@@ -103,25 +131,27 @@ describe('Constraint', () => {
       const constraint = solver.scene.constraints[0];
       const stateMap = solver.scene.getInitialStateMap();
 
-      const valueAt = (map) => {
+      const valueAt = (map: StateMap): number[] => {
         const ctx = solver._getConfigKinematics(map);
         const value = constraint.value(ctx);
-        solver._disposeConstraintCtx(ctx);
         return value;
       };
 
       const ctx = solver._getConfigKinematics(stateMap);
       const analytic = constraint.jacobianRows(ctx);
-      solver._disposeConstraintCtx(ctx);
       expect(analytic).toHaveLength(constraint.rowCount);
 
-      // `h` is large for a finite difference because tfjs computes in float32;
-      // smaller steps are dominated by cancellation rather than truncation.
-      const h = 1e-2;
+      // Under float32 this step had to be `1e-2`, and the comparison below
+      // held to two decimals: anything smaller was dominated by cancellation
+      // rather than truncation, so the check could not be tightened. Float64
+      // takes both four orders further -- `1e-6` still passes at six decimals,
+      // so `1e-5` is comfortably inside the usable range rather than at its
+      // edge.
+      const h = 1e-5;
       solver.scene.sortedFrames.forEach((frame, colIndex) => {
-        const bump = (sign) =>
+        const bump = (sign: number): StateMap =>
           new Map(
-            [...stateMap].map(([frameId, [q, qd]]) => [
+            [...stateMap].map(([frameId, [q, qd]]): [FrameId, State] => [
               frameId,
               [frameId === frame.id ? q + sign * h : q, qd],
             ]),
@@ -130,7 +160,7 @@ describe('Constraint', () => {
         const minus = valueAt(bump(-1));
         for (let row = 0; row < constraint.rowCount; row++) {
           const finiteDifference = (plus[row] - minus[row]) / (2 * h);
-          expect(finiteDifference).toBeCloseTo(analytic[row][colIndex], 2);
+          expect(finiteDifference).toBeCloseTo(analytic[row][colIndex], 6);
         }
       });
     });
@@ -155,10 +185,9 @@ describe('Constraint', () => {
         const qddArray = solver._solve(stateMap, new Map());
 
         // Ċ(q, q̇) = J(q) · q̇, from `jacobianRows` only.
-        const cDotAt = (map) => {
+        const cDotAt = (map: StateMap): number[] => {
           const ctx = solver._getConfigKinematics(map);
           const rows = constraint.jacobianRows(ctx);
-          solver._disposeConstraintCtx(ctx);
           return rows.map((row) =>
             row.reduce(
               (total, entry, index) =>
@@ -169,10 +198,11 @@ describe('Constraint', () => {
         };
 
         const h = 1e-3;
-        const step = (sign) =>
+        const step = (sign: number): StateMap =>
           new Map(
-            frames.map((frame, index) => {
+            frames.map((frame, index): [FrameId, State] => {
               const [q, qd] = stateMap.get(frame.id)!;
+
               return [
                 frame.id,
                 [q + sign * h * qd, qd + sign * h * qddArray[index]],
@@ -225,45 +255,113 @@ describe('Constraint', () => {
       // is one of the three stabilizers `docs/constraints.md` §7 lists, so
       // that is a plausible future implementation rather than a strawman.
       //
-      // The *order* of convergence is not asserted here, because at float32 it
-      // is not observable. Measured over an 8x range of step sizes, the drift
-      // does not move:
+      // Float64 resolves the truncation error, so the *order* is asserted
+      // rather than just a bound. Measured over a 16x range of step sizes,
+      // integrating two seconds from rest:
       //
-      //     steps    120       240       480       960
-      //     distance 1.024e-5  1.024e-5  1.029e-5  1.217e-5
-      //     coincid. 9.537e-7  9.537e-7  9.537e-7  9.537e-7
+      //     steps       120       240       480       960       1920
+      //     distance    3.526e-6  2.200e-7  1.371e-8  8.547e-10 5.378e-11
+      //     ratio                 16.03     16.05     16.04     15.89
       //
-      // -- and 9.537e-7 is exactly one float32 ulp (2⁻²⁰). RK4 truncation sits
-      // entirely below the representation floor, so refining the step buys
-      // nothing and eventually costs a little, as roundoff accumulates over
-      // more of it. `test_constraint_drift_is_conserved` in
-      // `physm-rs/src/solver.rs` is where the order gets asserted; f64 has the
-      // resolution for it, and the ratio there is 246x per 4x refinement.
+      // Sixteen-fold per halving is fourth order, which is RK4's. Under
+      // float32 this was invisible -- drift sat flat at one ulp, 9.537e-7,
+      // because truncation was below the representation floor -- and the table
+      // that used to be here recorded exactly that, so refining the step
+      // appeared to buy nothing. It buys four orders per 16x.
       //
-      // What this test pins is the floor itself, an order of magnitude clear.
-      const solver = getConstrainedSolver({
-        kind,
-        rungeKutta: true,
-        spacingOffset: 1.5,
-      });
-      const constraint = solver.scene.constraints[0];
-      const readC = () => {
-        const ctx = solver._getConfigKinematics(solver.getStateMap());
-        const value = constraint.value(ctx);
-        solver._disposeConstraintCtx(ctx);
-        return value;
+      // `CoincidenceConstraint` has no such curve: its rig is an equilibrium
+      // (see `movesFromRest`), so released from rest it does not move and drift
+      // stays at 1.776e-15 for every step size. There is no trajectory to have
+      // an order, and the assertion below says so instead of pretending.
+      // Two seconds of trajectory, at one step size and then at half of it.
+      const drift = (steps: number): number => {
+        const solver = getConstrainedSolver({
+          kind,
+          rungeKutta: true,
+          spacingOffset: 1.5,
+        });
+        const constraint = solver.scene.constraints[0];
+        const readC = (): number[] =>
+          constraint.value(
+            solver._getConfigKinematics(solver.getStateMap()),
+          ) as number[];
+        const initial = readC();
+
+        // `C₀ ≠ 0` is the premise: conservation is what is under test, and a
+        // start already at zero would pass against a stabilizer that snapped.
+        expect(Math.max(...initial.map(Math.abs))).toBeGreaterThan(1);
+        let worst = 0;
+        for (let step = 0; step < steps; step++) {
+          solver.tick(2 / steps);
+          readC().forEach((value, row) => {
+            worst = Math.max(worst, Math.abs(value - initial[row]));
+          });
+        }
+
+        return worst;
       };
 
-      const initial = readC();
-      expect(Math.max(...initial.map(Math.abs))).toBeGreaterThan(1);
-      let worst = 0;
-      for (let step = 0; step < 120; step++) {
-        solver.tick(1 / 60);
-        readC().forEach((value, row) => {
-          worst = Math.max(worst, Math.abs(value - initial[row]));
-        });
+      const coarse = drift(120);
+      const fine = drift(240);
+      if (kind.movesFromRest) {
+        // Fourth order: 16x per halving, measured at 16.03-16.05 across the
+        // sweep above. The window is wide enough not to be brittle and narrow
+        // enough to fail second order (4x) or a stabilizer that pins `C`.
+        expect(coarse / fine).toBeGreaterThan(12);
+        expect(coarse / fine).toBeLessThan(20);
+      } else {
+        // An equilibrium rig: nothing moves, so drift is roundoff at any step
+        // size. Asserting the floor is the only honest thing available here.
+        expect(coarse).toBeLessThan(1e-12);
+        expect(fine).toBeLessThan(1e-12);
       }
-      expect(worst).toBeLessThan(1e-4);
+    });
+
+    test(`${kind.name}: drift is exactly linear in time when Ċ₀ ≠ 0`, () => {
+      // The sharper half of the index-1 claim. Holding `C̈ = 0` makes
+      // `C(t) = C₀ + Ċ₀t` an *exact* solution, not an approximation -- so
+      // starting with a velocity the constraint does not admit, the drift after
+      // a fixed span depends on the span alone and not on how many steps were
+      // taken to cross it. RK4 integrates a linear function of time exactly.
+      //
+      // Measured across a 16x range of step sizes, two seconds from `seed: 1`:
+      // 6.2027e+1 for `DistanceConstraint` and 1.2422e+1 for
+      // `CoincidenceConstraint`, identical at every step count to five figures.
+      //
+      // This is the property that distinguishes index-1 from a stabilized
+      // formulation, and it is the one a Baumgarte or projection term would
+      // break -- both pull `C` back toward zero, making the drift depend on how
+      // many steps did the pulling. The test above cannot see that, because a
+      // conserved `C` and a corrected `C` are both small.
+      const drift = (steps: number): number => {
+        const solver = getConstrainedSolver({
+          kind,
+          rungeKutta: true,
+          spacingOffset: 1.5,
+          seed: 1,
+        });
+        const constraint = solver.scene.constraints[0];
+        const readC = (): number[] =>
+          constraint.value(
+            solver._getConfigKinematics(solver.getStateMap()),
+          ) as number[];
+        const initial = readC();
+        for (let step = 0; step < steps; step++) {
+          solver.tick(2 / steps);
+        }
+
+        return Math.max(
+          ...readC().map((value, row) => Math.abs(value - initial[row])),
+        );
+      };
+
+      const coarse = drift(120);
+      const fine = drift(1920);
+
+      // Large enough that a conserved-`C` implementation could not produce it,
+      // so the assertion below is about linearity rather than about zero.
+      expect(coarse).toBeGreaterThan(1);
+      expect(fine / coarse).toBeCloseTo(1, 4);
     });
 
     test(`${kind.name}: bias refuses a configuration-only context`, () => {
@@ -275,7 +373,6 @@ describe('Constraint', () => {
       expect(() => solver.scene.constraints[0].bias(ctx)).toThrow(
         /trial configuration/,
       );
-      solver._disposeConstraintCtx(ctx);
     });
 
     test(`${kind.name}: round-trips through toJsonObj`, () => {
@@ -343,7 +440,7 @@ describe('Constraint', () => {
     const constraint = scene.constraints[0];
     const ctx = solver._getConfigKinematics(scene.getInitialStateMap());
     const rows = constraint.jacobianRows(ctx);
-    const columnOf = (frameId) => {
+    const columnOf = (frameId: FrameId) => {
       const index = scene.sortedFrames.findIndex(
         (frame) => frame.id === frameId,
       );
@@ -352,7 +449,7 @@ describe('Constraint', () => {
 
     // Computed straight from the sweep, independently of the constraint.
     const expected = (() => {
-      const at = (frameId) =>
+      const at = (frameId: FrameId) =>
         mat3.apply(
           ctx.velMatMap.get('boom')!,
           mat3.apply(ctx.posMatMap.get(frameId)!, constraint.position1),
@@ -374,7 +471,6 @@ describe('Constraint', () => {
     // ...while the prismatic ancestor above it still cancels exactly.
     columnOf('cart').forEach((entry) => expect(entry).toBeCloseTo(0, 6));
 
-    solver._disposeConstraintCtx(ctx);
   });
 
   test('an unconstrained scene still assembles the plain n-by-n system', () => {
@@ -451,7 +547,7 @@ describe('Scene build', () => {
 
   test('getWorldPosition answers about a state other than the initial one', () => {
     const scene = getRopeScene();
-    const stateMap = new Map([['pole1', [0, 0]]]);
+    const stateMap: StateMap = new Map([['pole1', [0, 0]]]);
     // `cart` and `pole2` are absent from the map and read at rest, which is
     // what makes this answerable while a scene is still being assembled.
     expect(scene.getWorldPosition('pole1', tip, { stateMap })).toEqual([
@@ -485,7 +581,6 @@ describe('Scene build', () => {
     // ...and the result starts consistent, which is the point of measuring it.
     const ctx = scene.getConfigKinematics(scene.getInitialStateMap());
     expect(Math.abs(scene.constraints[0].value(ctx)[0])).toBeLessThan(1e-4);
-    scene.disposeConfigKinematics(ctx);
   });
 
   test('the same scene at a different pose measures a different gap', () => {
@@ -560,7 +655,6 @@ describe('Scene build', () => {
     constraint
       .value(ctx)
       .forEach((entry) => expect(Math.abs(entry)).toBeLessThan(1e-4));
-    scene.disposeConfigKinematics(ctx);
   });
 
   test('the solved attachment tracks the pose it was solved against', () => {
@@ -568,7 +662,7 @@ describe('Scene build', () => {
     // property an interactive scene builder needs: the same constraint
     // authored against a differently-posed scene lands somewhere else, and is
     // correct in both.
-    const attachmentAt = (poleAngle) =>
+    const attachmentAt = (poleAngle: number) =>
       getRopeScene({ poleAngle }).addConstraint(
         new CoincidenceConstraint({
           frame1: 'pole1',
@@ -582,7 +676,7 @@ describe('Scene build', () => {
     expect(narrow[0]).not.toBeCloseTo(wide[0], 2);
     // Both still close their own loop exactly -- that is the invariant, not
     // the number.
-    [0.6, 0.9, 1.3].forEach((poleAngle) => {
+    [0.6, 0.9, 1.3].forEach((poleAngle: number) => {
       const scene = getRopeScene({ poleAngle }).addConstraint(
         new CoincidenceConstraint({
           frame1: 'pole1',
@@ -594,7 +688,6 @@ describe('Scene build', () => {
       scene.constraints[0]
         .value(ctx)
         .forEach((entry) => expect(Math.abs(entry)).toBeLessThan(1e-4));
-      scene.disposeConfigKinematics(ctx);
     });
   });
 
@@ -622,7 +715,7 @@ describe('Scene build', () => {
     // threshold does not misbehave at scale 1; it skips the projection entirely
     // once the Jacobian entries fall far enough, and then silently hands the
     // violation back.
-    const ratioAt = (scale) => {
+    const ratioAt = (scale: number) => {
       const authored = 0.8;
       const scene = new Scene({
         frames: [
@@ -663,7 +756,7 @@ describe('Scene build', () => {
     // mass-times-length-squared, so its condition number grows like the square
     // of the scale, and float64 runs out eventually too. Outside it the solve
     // fails loudly, which is the behaviour worth having.
-    [1e5, 1e3, 1, 1e-3, 1e-5].forEach((scale) =>
+    [1e5, 1e3, 1, 1e-3, 1e-5].forEach((scale: number) =>
       expect(ratioAt(scale)).toBeCloseTo(reference, 8),
     );
   });
@@ -712,7 +805,6 @@ describe('Scene build', () => {
 
     const ctx = scene.getConfigKinematics(before);
     const [jacobian] = scene.constraints[0].jacobianRows(ctx);
-    scene.disposeConfigKinematics(ctx);
     const massMatrix = scene.getMassMatrix(before);
     const massDelta = massMatrix.map((row) =>
       row.reduce((total, entry, index) => total + entry * delta[index], 0),
@@ -728,7 +820,7 @@ describe('Scene build', () => {
 
   test('any geometry builds: no arrangement is required of the author', () => {
     // The property an interactive scene builder needs. A person dragging two
-    // chains together cannot be asked to place them coincident to float32
+    // chains together cannot be asked to place them coincident to machine
     // precision, and a generated scene has nobody to ask -- so the constraint
     // has to accept whatever pose it is handed.
     //
@@ -784,8 +876,10 @@ describe('Scene build', () => {
       const ctx = scene.getConfigKinematics(stateMap);
       const constraint = scene.constraints[0];
       constraint.value(ctx).forEach((entry) => {
-        // Relative to the scale the scene works at, for the same float32
-        // reason the tolerance itself is relative.
+        // Relative to the scale the scene works at, for the same reason the
+        // tolerance itself is relative: floating point carries significant
+        // figures, not absolute steps, so an absolute bound would be a
+        // different demand at each scale.
         expect(Math.abs(entry) / scale).toBeLessThan(1e-3);
       });
       // Cdot = J qd, which the projection has to have driven to zero. Measured
@@ -793,7 +887,7 @@ describe('Scene build', () => {
       // that stays meaningful: normalising by the projected terms themselves
       // would be 0/0 in disguise, since driving them to zero is the whole job.
       const authored = scene.getInitialStateMap({ project: false });
-      const residualOf = (map) =>
+      const residualOf = (map: StateMap) =>
         Math.max(
           ...constraint
             .jacobianRows(ctx)
@@ -808,7 +902,6 @@ describe('Scene build', () => {
             ),
         );
       expect(residualOf(stateMap)).toBeLessThan(residualOf(authored) * 1e-5);
-      scene.disposeConfigKinematics(ctx);
     });
   });
 
@@ -830,12 +923,11 @@ describe('Scene build', () => {
       }),
     );
     // Spin one pole and leave the other still: the rope would have to stretch.
-    scene.frameMap.get('pole1').initialState = [POLE_ANGLE, 2.5];
+    frameOf(scene, 'pole1').initialState = [POLE_ANGLE, 2.5];
 
-    const rateOfChange = (stateMap) => {
+    const rateOfChange = (stateMap: StateMap) => {
       const ctx = scene.getConfigKinematics(stateMap);
       const [row] = scene.constraints[0].jacobianRows(ctx);
-      scene.disposeConfigKinematics(ctx);
       return row.reduce(
         (total, entry, index) =>
           total + entry * stateMap.get(scene.sortedFrames[index].id)![1],
@@ -848,7 +940,7 @@ describe('Scene build', () => {
     ).toBeGreaterThan(1);
     const projected = scene.getInitialStateMap();
     // Relative: the residual floor scales with the Jacobian's own magnitude,
-    // for the same float32 reason the consistency tolerance is relative.
+    // for the same reason the consistency tolerance is relative.
     expect(Math.abs(rateOfChange(projected))).toBeLessThan(1e-4);
     // Least-norm, so the authored motion survives as far as the constraint
     // permits rather than being zeroed.
@@ -874,8 +966,8 @@ describe('Scene build', () => {
     // velocity the constraint can see -- which the cart version below cannot
     // show, its column being structurally zero. The projector itself is pinned
     // by the metric test further down, on an *inconsistent* velocity.
-    scene.frameMap.get('pole1').initialState = [POLE_ANGLE, 2];
-    scene.frameMap.get('pole2').initialState = [Math.PI - POLE_ANGLE, 2];
+    frameOf(scene, 'pole1').initialState = [POLE_ANGLE, 2];
+    frameOf(scene, 'pole2').initialState = [Math.PI - POLE_ANGLE, 2];
     const projected = scene.getInitialStateMap();
     expect(projected.get('pole1')![1]).toBeCloseTo(2, 5);
     expect(projected.get('pole2')![1]).toBeCloseTo(2, 5);
@@ -896,7 +988,6 @@ describe('Scene build', () => {
     );
     const ctx = scene.getConfigKinematics(scene.getInitialStateMap());
     const [row] = scene.constraints[0].jacobianRows(ctx);
-    scene.disposeConfigKinematics(ctx);
     const cartIndex = scene.sortedFrames.findIndex(
       (frame) => frame.id === 'cart',
     );

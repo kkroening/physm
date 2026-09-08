@@ -2,7 +2,8 @@
 
 The browser front end for [physm](../): a 2D mechanical simulator that renders a scene of
 coordinate frames and point masses, and steps it with either of two interchangeable solvers —
-`JsSolver` (JavaScript, on tfjs tensors) or `RsSolver` (the Rust solver in
+`JsSolver` (JavaScript, on the float64 matrix module in [`src/Mat3.ts`](src/Mat3.ts)) or
+`RsSolver` (the Rust solver in
 [`../physm-rs`](../physm-rs), compiled to WebAssembly).
 
 ## Prerequisites
@@ -38,9 +39,9 @@ their own.
 | Directory | Target | Used by |
 | --- | --- | --- |
 | `../physm-rs/pkg` | `bundler` | the browser app, via `import('physm-rs')` in [`src/index.jsx`](src/index.jsx) |
-| `../physm-rs/nodepkg` | `nodejs` | the test suite, via a direct path import in [`src/Solver.test.js`](src/Solver.test.js) |
+| `../physm-rs/nodepkg` | `nodejs` | the test suite, via a direct path import in [`src/Solver.test.ts`](src/Solver.test.ts) |
 
-Both are generated from the same crate; neither is checked in. If `Solver.test.js` fails to
+Both are generated from the same crate; neither is checked in. If `Solver.test.ts` fails to
 resolve `../../physm-rs/nodepkg/physm_rs.js`, run `npm run wasm:node`.
 
 ## Scripts
@@ -48,7 +49,7 @@ resolve `../../physm-rs/nodepkg/physm_rs.js`, run `npm run wasm:node`.
 | Script | What it does |
 | --- | --- |
 | `npm run setup` | Both wasm builds, then `npm install`. Run this first. |
-| `npm run dev` | Rebuilds `pkg`, copies the tfjs wasm binaries, starts Vite |
+| `npm run dev` | Rebuilds `pkg`, starts Vite |
 | `npm run build` | Same, then a production build into `dist/` |
 | `npm run preview` | Serves the built `dist/` |
 | `npm test` | Rebuilds `nodepkg`, then runs Vitest once |
@@ -62,14 +63,15 @@ The `wasm` steps are wired to `dev`/`build`/`test` through npm's `pre*` hooks, s
 steps you have to remember — they are listed because knowing they exist makes the failures
 legible.
 
-tfjs runs on its CPU backend here. Its WebGL and WASM backends are both available but neither
-is enabled; enabling the WASM one would mean re-adding `@tensorflow/tfjs-backend-wasm` and
-serving its binaries from the site root, which does not compose with this package's relative
-`base`.
+`JsSolver` computes in float64, on plain arrays. It previously ran on TensorFlow.js tensors,
+which meant float32 and a manual disposal discipline; [`src/Mat3.ts`](src/Mat3.ts) and
+[`src/solveLinearSystem.ts`](src/solveLinearSystem.ts) replaced it. The visible gain is
+conditioning: the length-scale band over which a scene's initial-velocity projection is stable
+widened from about five and a half orders of magnitude to ten.
 
 ## Cross-validating the two solvers
 
-`src/Solver.test.js` runs `JsSolver` and `RsSolver` over the same scene and asserts they agree
+`src/Solver.test.ts` runs `JsSolver` and `RsSolver` over the same scene and asserts they agree
 step for step. It is worth knowing about beyond this package: it is an independent check on the
 Rust solver written against a separate implementation of the same equations, so
 `npm test` here exercises `physm-rs` in a way its own test suite cannot.

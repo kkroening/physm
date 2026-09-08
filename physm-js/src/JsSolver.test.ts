@@ -1,6 +1,7 @@
 import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import JsSolver from './JsSolver';
+import type { FrameId } from './Frame';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
@@ -48,10 +49,10 @@ describe('JsSolver', () => {
     ],
   });
 
-  const frameOf = (id) => scene.frameMap.get(id)!;
+  const frameOf = (id: FrameId) => scene.frameMap.get(id)!;
   const stateMap = scene.getInitialStateMap();
-  const q = (id) => stateMap.get(id)![0];
-  const qd = (id) => stateMap.get(id)![1];
+  const q = (id: FrameId) => stateMap.get(id)![0];
+  const qd = (id: FrameId) => stateMap.get(id)![1];
   const solver = new JsSolver(scene);
 
   const posMatMap = solver._getPosMatMap(stateMap);
@@ -62,7 +63,7 @@ describe('JsSolver', () => {
   const weightPosMap = solver._getWeightPosMap(posMatMap);
 
   /** `L_a L_b ...`, the product along a root path. */
-  const composePoses = (...ids) =>
+  const composePoses = (...ids: FrameId[]) =>
     ids
       .map((id) => frameOf(id).getLocalPosMatrix(q(id)))
       .reduce((product, local) => mat3.multiply(product, local));
@@ -101,7 +102,7 @@ describe('JsSolver', () => {
   test('the velocity matrix is the parent pose, the local rate, and the inverse', () => {
     // `V_i = M_p (∂L_i/∂q) M_i⁻¹`, which is what makes it *spatial* -- it acts
     // on a world point rather than a local one.
-    const expected = (id, parentIds) =>
+    const expected = (id: FrameId, parentIds: FrameId[]) =>
       mat3.multiply(
         mat3.multiply(
           parentIds.length ? composePoses(...parentIds) : mat3.IDENTITY,
@@ -123,7 +124,7 @@ describe('JsSolver', () => {
   });
 
   test('the acceleration matrix has the same shape, one derivative up', () => {
-    const expected = (id, parentIds) =>
+    const expected = (id: FrameId, parentIds: FrameId[]) =>
       mat3.multiply(
         mat3.multiply(
           parentIds.length ? composePoses(...parentIds) : mat3.IDENTITY,
@@ -145,7 +146,7 @@ describe('JsSolver', () => {
 
   test('the twist accumulates qd-weighted velocity matrices down the path', () => {
     // `S_i = Σ_{k ⪯ i} qd_k V_k`, summed over the inclusive ancestors.
-    const sumOver = (...ids) =>
+    const sumOver = (...ids: FrameId[]) =>
       ids
         .map((id) => mat3.scale(velMatMap.get(id)!, qd(id)))
         .reduce((total, term) => mat3.add(total, term));

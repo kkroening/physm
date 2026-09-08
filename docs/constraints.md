@@ -261,7 +261,7 @@ constraint would silently hold the wrong separation and never converge toward th
 > **The rejecting form was written first and was the wrong instinct** *(Karl, 2026-09-07)*. It
 > forces the author to solve the geometry and then grades their answer, which is backwards when the
 > answer is derivable — and it is unworkable for a scene nobody typed. An interactive builder
-> cannot ask someone dragging two chains together to place them coincident to float32 precision,
+> cannot ask someone dragging two chains together to place them coincident to machine precision,
 > and "move the frames until the points meet" is not advice a generator can act on.
 >
 > `Scene.getInitialStateMap` returns $`\dot q_0`$ projected, and both solvers seed from that one
@@ -274,11 +274,18 @@ constraint would silently hold the wrong separation and never converge toward th
 > the kinetic energy of the correction — Gauss's principle of least constraint — and an energy does
 > not care what anybody authored lengths in.
 >
-> **Over a band, not unboundedly.** Measured, the correction is identical to six figures across
-> about five and a half orders of magnitude of length scale, and outside that the solve *fails*
-> rather than degrading quietly. The bound is real rather than a tolerance: $`g`$ mixes a prismatic
-> coordinate's mass with a revolute one's mass × length², so its condition number grows like the
-> square of the scale, and `physm-js` computes in float32. Rescaling the scene is the fix.
+> **Over a band, not unboundedly.** Measured, the correction is identical to eight figures across
+> ten orders of magnitude of length scale — $`10^{-5}`$ to $`10^{5}`$ — and outside that the solve
+> *fails* rather than degrading quietly. The bound is real rather than a tolerance: $`g`$ mixes a
+> prismatic coordinate's mass with a revolute one's mass × length², so its condition number grows
+> like the square of the scale, and float64 runs out eventually too. Rescaling the scene is the fix.
+>
+> The band was five and a half orders — $`10^{-3}`$ to $`3 \times 10^{2}`$, to six figures — while
+> `physm-js` computed in float32 on TensorFlow.js tensors. Replacing that with a float64 matrix
+> module widened it by four and a half orders. It is worth being precise about *why* that is less
+> than the ratio of the two machine epsilons would suggest: what binds at the edges is the
+> consistency tolerance the solve is checked against, not the epsilon itself, so the gain is about
+> $`10^{6}`$ rather than the $`5.4 \times 10^{8}`$ a naive reading predicts.
 >
 > **And a coincidence constraint welds two points wherever they land.** Solving `position2` means
 > the attachment can sit some way from anything the author drew — in the demo it is about 14% of a
@@ -474,7 +481,7 @@ ones in [§9](#9-prior-art-and-two-bugs-in-it).**
 4. **Drive a scene into each singular case** from [§8](#8-what-the-solver-has-to-tolerate), so the
    chosen behaviour is pinned rather than assumed.
 
-5. **Cross-validate the two implementations.** `physm-js`'s `Solver.test.js` steps `JsSolver` and
+5. **Cross-validate the two implementations.** `physm-js`'s `Solver.test.ts` steps `JsSolver` and
    `RsSolver` over the same scene and asserts agreement. *Catches transcription and indexing
    divergence between the two ports* — which is real, and is most of what goes wrong when the same
    design is written twice.

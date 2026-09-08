@@ -1,7 +1,7 @@
 import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import type { Mat3 } from './Mat3';
-import type { ReactElement } from 'react';
+import type { ReactElement, SVGProps } from 'react';
 import type { State } from './State';
 import type { Vec3 } from './Vec3';
 import Decal from './Decal';
@@ -91,7 +91,7 @@ export default class Frame {
     stateMap: StateMap,
     xformMatrix: Mat3,
     { key }: { key?: string | undefined } = {},
-  ): ReactElement {
+  ): ReactElement<SVGProps<SVGElement>> {
     const [q] = stateMap.get(this.id) ?? this.initialState;
     const childXform = mat3.multiply(xformMatrix, this.getLocalPosMatrix(q));
 

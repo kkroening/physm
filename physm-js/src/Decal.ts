@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, SVGProps } from 'react';
 import type { Mat3 } from './Mat3';
 import { NotImplementedError } from './utils';
 
@@ -18,7 +18,7 @@ export default abstract class Decal {
   abstract getDomElement(
     xformMatrix: Mat3,
     options?: DecalRenderOptions,
-  ): ReactElement;
+  ): ReactElement<SVGProps<SVGElement>>;
 
   toJsonObj(): unknown {
     throw new NotImplementedError('TODO: implement');

@@ -2,8 +2,11 @@ import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import CircleDecal from './CircleDecal';
 import Frame from './Frame';
+import TrackFrame from './TrackFrame';
 import Weight from './Weight';
+import type { ReactElement, SVGProps } from 'react';
 import type { StateMap } from './Frame';
+import { ZERO_STATE } from './State';
 
 describe('Frame', () => {
   test('defaults to the origin, at rest, with nothing attached', () => {
@@ -50,14 +53,35 @@ describe('Frame', () => {
   });
 
   test('a frame absent from the state map renders at its own initialState', () => {
-    // Not at coordinate zero: the two differ, and reading the wrong one
-    // silently discards an authored pose.
-    const frame = new Frame({ id: 'root', initialState: [7, 0] });
+    // A `TrackFrame`, not a base `Frame`: the base ignores `q` entirely, so
+    // both the fallback and a wrongly-zeroed read would render identically and
+    // the assertion could not fail. Here `q` slides the frame along its axis,
+    // which puts the answer in the rendered geometry.
+    const frame = new TrackFrame({
+      id: 'root',
+      initialState: [7, 0],
+      decals: [new CircleDecal({ radius: 1 })],
+    });
 
-    expect(() =>
-      frame.getDomElement(new Map() as StateMap, mat3.IDENTITY),
-    ).not.toThrow();
-    expect(frame.initialState).toEqual([7, 0]);
+    const cx = (stateMap: StateMap): number => {
+      const element = frame.getDomElement(stateMap, mat3.IDENTITY);
+      const [decals] = element.props.children as [
+        ReactElement<SVGProps<SVGElement>>[],
+        unknown[],
+      ];
+
+      return decals[0]!.props.cx as number;
+    };
+
+    // Absent from the map -- reads `initialState`, so the decal sits at 7.
+    expect(cx(new Map())).toBeCloseTo(7);
+
+    // Present in the map -- the map wins, so it sits at 2 instead.
+    expect(cx(new Map([['root', [2, 0]]]) as StateMap)).toBeCloseTo(2);
+
+    // And `ZERO_STATE` is not what an absent entry falls back to: were it, the
+    // first assertion above would read 0 rather than 7.
+    expect(cx(new Map([['root', ZERO_STATE]]) as StateMap)).toBeCloseTo(0);
   });
 
   test('serializes its shape, and its decals only when asked', () => {

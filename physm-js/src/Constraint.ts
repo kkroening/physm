@@ -57,9 +57,9 @@ export function consistencyTolerance(scale = 0): number {
 }
 
 /** A map lookup that fails loudly rather than yielding `undefined`. */
-function mapGet(map: Map<FrameId, Mat3>, frameId: FrameId): Mat3 {
+function mapGet<V>(map: Map<FrameId, V>, frameId: FrameId): V {
   const value = map.get(frameId);
-  if (!value) {
+  if (value === undefined) {
     throw new Error(`No entry for frame ${frameId}`);
   }
 
@@ -79,12 +79,9 @@ function accumulateRootPath(
   point: Vec3,
   sign: number,
 ): void {
-  for (const pathFrameId of ctx.frameIdPathMap.get(frameId) ?? []) {
+  for (const pathFrameId of mapGet(ctx.frameIdPathMap, frameId)) {
     const velocity = mat3.apply(mapGet(ctx.velMatMap, pathFrameId), point);
-    const row = rows.get(pathFrameId);
-    if (!row) {
-      continue;
-    }
+    const row = mapGet(rows, pathFrameId);
 
     row[0] += sign * velocity[0];
     row[1] += sign * velocity[1];
@@ -393,7 +390,7 @@ export class DistanceConstraint extends Constraint {
     const columns = this._separationJacobian(ctx, xP, xQ);
     return [
       ctx.sortedFrames.map((frame) => {
-        const column = columns.get(frame.id) ?? [0, 0];
+        const column = mapGet(columns, frame.id);
 
         return d[0] * column[0] + d[1] * column[1];
       }),
@@ -467,7 +464,7 @@ export class CoincidenceConstraint extends Constraint {
 
     return [0, 1].map((axis) =>
       ctx.sortedFrames.map((frame) => {
-        const column = columns.get(frame.id) ?? [0, 0];
+        const column = mapGet(columns, frame.id);
 
         return axis === 0 ? column[0] : column[1];
       }),

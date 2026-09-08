@@ -3,7 +3,7 @@ import * as vec3 from './Vec3';
 import Decal from './Decal';
 import type { DecalRenderOptions } from './Decal';
 import type { Mat3 } from './Mat3';
-import type { ReactElement } from 'react';
+import type { ReactElement, SVGProps } from 'react';
 import type { Vec3 } from './Vec3';
 
 /** The four corners of a unit square, centred on the origin. */
@@ -101,7 +101,7 @@ export default class BoxDecal extends Decal {
   override getDomElement(
     xformMatrix: Mat3,
     { key }: DecalRenderOptions = {},
-  ): ReactElement {
+  ): ReactElement<SVGProps<SVGElement>> {
     const scale = mat3.scaleFactor(xformMatrix);
     const corners = this.corners.map((corner) =>
       mat3.apply(xformMatrix, corner),

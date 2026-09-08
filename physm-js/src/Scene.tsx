@@ -11,7 +11,7 @@ import type { ConstraintCtx } from './Constraint';
 import type { FrameId, StateMap } from './Frame';
 import type { Mat3 } from './Mat3';
 import type { Vec3 } from './Vec3';
-import type { ReactElement } from 'react';
+import type { ReactElement, SVGProps } from 'react';
 import type { State } from './State';
 import { required } from './utils';
 
@@ -31,9 +31,33 @@ function mapGet<K, V>(map: Map<K, V>, key: K, what: string): V {
   return value;
 }
 
+/**
+ * An index into an array this class sized itself.
+ *
+ * The array counterpart of `mapGet`, and there for the same reason: every such
+ * index is in range by construction, so a miss is a bug here rather than bad
+ * input. A `?? 0` in its place would turn that bug into a plausible-looking
+ * wrong number, which is the one outcome worth ruling out in a solver.
+ */
+function at<T>(array: readonly T[], index: number, what: string): T {
+  const value = array[index];
+  if (value === undefined) {
+    throw new Error(`No ${what} at index ${index}`);
+  }
+
+  return value;
+}
+
 /** The dot product of two equal-length rows. */
 function dotRows(a: readonly number[], b: readonly number[]): number {
-  return a.reduce((total, entry, index) => total + entry * (b[index] ?? 0), 0);
+  if (a.length !== b.length) {
+    throw new Error(`Row length mismatch: ${a.length} vs ${b.length}`);
+  }
+
+  return a.reduce(
+    (total, entry, index) => total + entry * at(b, index, 'row entry'),
+    0,
+  );
 }
 
 export const DEFAULT_GRAVITY = 10;
@@ -137,8 +161,6 @@ export default class Scene {
      * than throwing, which is what makes this answerable about a scene that is
      * still being assembled — and which makes a partial map agree with an
      * omitted one, since omitting it is the same as mentioning nothing.
-     *
-     * The caller owns the returned tensors and must dispose them.
      */
     stateMap = stateMap || this.getInitialStateMap({ project: false });
     const posMatMap = new Map();
@@ -202,9 +224,9 @@ export default class Scene {
 
   getSeparation(
     frameId1: FrameId,
-    position1: number | readonly number[] | Vec3,
-    frameId2: FrameId,
-    position2: number | readonly number[] | Vec3,
+    position1: number | readonly number[] | Vec3 = vec3.ORIGIN,
+    frameId2: FrameId = required('frameId2'),
+    position2: number | readonly number[] | Vec3 = vec3.ORIGIN,
     { stateMap = null, posMatMap = null }: PoseQueryOptions = {},
   ): { vector: readonly [number, number]; distance: number } {
     /**
@@ -301,8 +323,10 @@ export default class Scene {
       const q = this.getWorldPosition(frameId2, constraint.localPosition2, {
         posMatMap: shared,
       });
-      // The tolerance scales with how far from the origin the scene works,
-      // since that is what sets float32's resolution here.
+      // The tolerance scales with how far from the origin the scene works.
+      // Floating point resolves a fixed number of significant figures, not a
+      // fixed absolute step, so a gap that is negligible for a scene spanning
+      // thousands is a real separation for one spanning fractions.
       const scale = Math.max(...p.map(Math.abs), ...q.map(Math.abs), 1);
       constraint.resolveGeometry(Math.hypot(p[0] - q[0], p[1] - q[1]), scale);
     }
@@ -312,10 +336,10 @@ export default class Scene {
   }
 
   getDomElement(
-    stateMap = required('stateMap'),
-    xformMatrix = mat3.IDENTITY,
-    { key = undefined } = {},
-  ) {
+    stateMap: StateMap,
+    xformMatrix: Mat3 = mat3.IDENTITY,
+    { key }: { key?: string } = {},
+  ): ReactElement<SVGProps<SVGElement>> {
     return (
       <g className="scene" key={key}>
         {this.decals.map((decal, index) =>
@@ -330,13 +354,19 @@ export default class Scene {
 
   getInvPosMatrixMap(posMatMap: Map<FrameId, Mat3>): Map<FrameId, Mat3> {
     /**
-     * The global->local ("inverse") transformation of every frame. The caller
-     * owns the returned tensors.
+     * The global->local ("inverse") transformation of every frame.
+     *
+     * `invertRigid`, not the general `invert`: every pose matrix is a product
+     * of `C_k exp(q^k zeta_k)` and so is rigid by construction. The general
+     * path has to decide whether a determinant is meaningfully non-zero, and
+     * a rigid transform carrying a large translation is the input it finds
+     * hardest -- while the rigid path transposes the rotation block and is
+     * exact for any translation at all.
      */
     return new Map(
       [...posMatMap].map(([frameId, posMat]) => [
         frameId,
-        mat3.invert(posMat),
+        mat3.invertRigid(posMat),
       ]),
     );
   }
@@ -380,7 +410,6 @@ export default class Scene {
      * is what makes position projection implementable later.
      *
      * The result carries no velocity-dependent maps, so `bias` throws on it.
-     * Dispose it with `disposeConfigKinematics`.
      */
     const posMatMap = this.getPosMatrixMap(stateMap);
     const invPosMatMap = this.getInvPosMatrixMap(posMatMap);
@@ -393,13 +422,9 @@ export default class Scene {
     };
   }
 
-  disposeConfigKinematics(_ctx: ConstraintCtx): void {
-  }
-
   getWeightPosMap(posMatMap: Map<FrameId, Mat3>): Map<FrameId, Vec3[]> {
     /**
      * Every point mass in world coordinates, grouped by the frame carrying it.
-     * The caller owns the returned tensors.
      */
     return new Map(
       this.sortedFrames.map((frame) => [
@@ -412,7 +437,11 @@ export default class Scene {
   }
 
   isFrameDescendent(descendentId: FrameId, ancestorId: FrameId): boolean {
-    return (this.frameIdPathMap.get(descendentId) ?? []).indexOf(ancestorId) !== -1;
+    return (
+      mapGet(this.frameIdPathMap, descendentId, 'frame path').indexOf(
+        ancestorId,
+      ) !== -1
+    );
   }
 
   getMassMatrixEntry(
@@ -451,13 +480,14 @@ export default class Scene {
         continue;
       }
       frame.weights.forEach((weight, index) => {
-        const pos = mapGet(weightPosMap, frame.id, 'weight positions')[index];
+        const pos = at(
+          mapGet(weightPosMap, frame.id, 'weight positions'),
+          index,
+          'weight position',
+        );
         result +=
           weight.mass *
-          vec3.dot(
-            mat3.apply(velMat2, pos ?? vec3.ORIGIN),
-            mat3.apply(velMat1, pos ?? vec3.ORIGIN),
-          );
+          vec3.dot(mat3.apply(velMat2, pos), mat3.apply(velMat1, pos));
       });
     }
     return result;
@@ -520,12 +550,9 @@ export default class Scene {
       (frame) => (stateMap.get(frame.id) || frame.initialState)[1],
     );
     const ctx = this.getConfigKinematics(stateMap);
-    let rows;
-    try {
-      rows = constraints.flatMap((constraint) => constraint.jacobianRows(ctx));
-    } finally {
-      this.disposeConfigKinematics(ctx);
-    }
+    const rows = constraints.flatMap((constraint) =>
+      constraint.jacobianRows(ctx),
+    );
     const residual = rows.map((row) => dotRows(row, qd));
     // `J q` is a sum of signed terms, so what makes a residual meaningful is
     // how much cancellation produced it -- not how big it is. An absolute
@@ -600,13 +627,15 @@ export default class Scene {
           'kinematic singularity -- or the scene is authored at a length ' +
           'scale this cannot resolve. The mass matrix mixes a prismatic ' +
           "coordinate's mass with a revolute one's mass-times-length-squared, " +
-          'so its condition number grows with the square of the scale, and ' +
-          'tfjs computes in float32: the usable band is roughly 1e-3 to 3e2 ' +
-          'times the scale the scene is written at. Rescaling the scene is ' +
-          `the fix for that one. (${String(error)})`,
+          'so its condition number grows with the square of the scale. In ' +
+          'float64 the usable band runs roughly 1e-5 to 1e5 times the scale ' +
+          'the scene is written at -- ten orders, measured. Rescaling the ' +
+          `scene is the fix for that one. (${String(error)})`,
       );
     }
-    return qd.map((entry, index) => entry - (correction[index] ?? 0));
+    return qd.map(
+      (entry, index) => entry - at(correction, index, 'velocity correction'),
+    );
   }
 
   getInitialStateMap({

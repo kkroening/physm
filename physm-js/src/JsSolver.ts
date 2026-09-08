@@ -21,6 +21,32 @@ function mapGet<K, V>(map: Map<K, V>, key: K, what: string): V {
   return value;
 }
 
+/** The array counterpart of `mapGet`; an out-of-range index is likewise a bug. */
+function at<T>(array: readonly T[], index: number): T {
+  const value = array[index];
+  if (value === undefined) {
+    throw new Error(`No entry at index ${index}`);
+  }
+
+  return value;
+}
+
+/**
+ * A row of the KKT matrix being assembled.
+ *
+ * Separate from `at` only for the message: a missing row means the matrix was
+ * sized wrong, and writing into a discarded `[]` -- as this did -- drops the
+ * entry and leaves a silently under-constrained solve.
+ */
+function atRow(array: number[][], index: number): number[] {
+  const row = array[index];
+  if (row === undefined) {
+    throw new Error(`KKT matrix has no row ${index}`);
+  }
+
+  return row;
+}
+
 export default class JsSolver extends Solver {
   readonly rungeKutta: boolean;
   stateMap: StateMap;
@@ -271,10 +297,6 @@ export default class JsSolver extends Solver {
     return this.scene.getConfigKinematics(stateMap);
   }
 
-  _disposeConstraintCtx(ctx: ConstraintCtx): void {
-    this.scene.disposeConfigKinematics(ctx);
-  }
-
   _augmentWithConstraints(
     massMatrix: number[][],
     forceVector: number[],
@@ -317,10 +339,10 @@ export default class JsSolver extends Solver {
         jacobianRow.forEach((entry, colIndex) => {
           // Written into both triangles as it goes, so symmetry holds by
           // construction rather than by a fill-in pass.
-          (array[row] ?? [])[colIndex] = entry;
-          (array[colIndex] ?? [])[row] = entry;
+          atRow(array, row)[colIndex] = entry;
+          atRow(array, colIndex)[row] = entry;
         });
-        vector[row] = -(bias[index] ?? 0);
+        vector[row] = -at(bias, index);
         row++;
       });
     }

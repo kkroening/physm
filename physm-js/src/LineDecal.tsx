@@ -3,7 +3,7 @@ import * as vec3 from './Vec3';
 import Decal from './Decal';
 import type { DecalRenderOptions } from './Decal';
 import type { Mat3 } from './Mat3';
-import type { ReactElement } from 'react';
+import type { ReactElement, SVGProps } from 'react';
 import type { Vec3 } from './Vec3';
 
 export interface LineDecalOptions {
@@ -45,7 +45,7 @@ export default class LineDecal extends Decal {
   override getDomElement(
     xformMatrix: Mat3,
     { key }: DecalRenderOptions = {},
-  ): ReactElement {
+  ): ReactElement<SVGProps<SVGElement>> {
     const start = mat3.apply(xformMatrix, this.startPos);
     const end = mat3.apply(xformMatrix, this.endPos);
 
