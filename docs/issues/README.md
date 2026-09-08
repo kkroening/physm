@@ -7,6 +7,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0010](0010.md) | Make a dead export a build signal rather than an eyeball finding | Enhancement | Open |
 | [0009](0009.md) | Centre the demo's view on the plot rather than on a hardcoded point | Bug | Resolved |
 | [0008](0008.md) | Delete `testutils.ts`, which nothing imports and the lint config misnames | Bug | Resolved |
 | [0007](0007.md) | Settle whether authoring components should share names with the classes they wrap | RFC | Open |

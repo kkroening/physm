@@ -60,9 +60,10 @@ export default [
   }),
 
   {
-    // `setupTests.js` is named explicitly because it is not a test file itself:
-    // vite loads it through `setupFiles`, and it calls `vi`-adjacent globals.
-    // The glob covers everything else.
+    // `setupTests.js` is named explicitly because the glob does not reach it:
+    // it is not a test file, and vite loads it through `setupFiles`. It uses no
+    // vitest globals today -- the entry is pre-emptive, so that the first `vi`
+    // or `expect` added to it does not arrive as a `no-undef` nobody expects.
     files: ['**/*.test.{js,jsx,ts,tsx}', 'src/setupTests.js'],
     languageOptions: { globals: { ...globals.vitest } },
   },
