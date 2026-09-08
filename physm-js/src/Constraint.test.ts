@@ -82,11 +82,12 @@ function getBranchedScene({
 const constraintKinds = [
   {
     name: 'DistanceConstraint',
-    // The measured drift at 120 steps, with a little room. Per-kind rather
-    // than shared, because the two differ by 18x and one literal covering both
-    // means the looser branch is barely constrained -- see below.
-    driftBound: 1e-5,
     spacing: POLE_SPACING,
+
+    // 4.650e-6, measured at 120 steps on the elbow rig at `spacing + 1.5`.
+    // Per-kind rather than shared: the two kinds differ by 18x, and one
+    // literal covering both leaves the smaller barely constrained.
+    driftBound: 1e-5,
     createConstraint: (frameId1: FrameId = 'pole1') =>
       new DistanceConstraint({
         frame1: frameId1,
@@ -109,8 +110,10 @@ const constraintKinds = [
     // makes drift a measurable quantity rather than a structural zero.
     // Moving the pivots together by exactly the tip gap makes the two tips
     // meet, so the loop closes without the rig having to be pre-strained.
-    driftBound: 5e-7,
     spacing: POLE_SPACING - TIP_GAP,
+
+    // 2.594e-7, measured at 120 steps on the elbow rig at `spacing + 1.5`.
+    driftBound: 5e-7,
     createConstraint: (frameId1: FrameId = 'pole1') =>
       new CoincidenceConstraint({
         frame1: frameId1,

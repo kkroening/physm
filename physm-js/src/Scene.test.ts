@@ -95,10 +95,18 @@ describe('Scene queries', () => {
     // It is the bug the overload pair replaced: a defaulted `frameId2` made the
     // parameter optional to the compiler, leaving a runtime sentinel as the
     // only thing requiring it.
+    //
+    // The runtime throw is named rather than merely allowed, because it is
+    // *incidental*: with one argument `frameId2` binds to `undefined`, and the
+    // complaint comes from the id-validation loop finding no such frame -- not
+    // from any arity check. Spelling that out is what stops a later tidy-up of
+    // that loop from failing here for a reason nobody can place. The call
+    // cannot simply be left unasserted: it throws, and an uncaught throw fails
+    // the test whatever the directive above says.
     const scene = build();
 
     // @ts-expect-error -- one id is not a valid call
-    expect(() => scene.getSeparation('root')).toThrow();
+    expect(() => scene.getSeparation('root')).toThrow(/No such frame/);
   });
 
   test('getLocalPosition inverts getWorldPosition', () => {
