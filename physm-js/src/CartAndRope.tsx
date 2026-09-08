@@ -25,7 +25,7 @@ export const CART_FRAME_ID = 'cart';
 
 const CART_MASS = 250;
 const CART_RESISTANCE = 5;
-const CART_WIDTH = 4;
+const CART_WIDTH = 2;
 
 // The poles are rigid parts of the cart rather than jointed frames, because a
 // pole hinged at its base is an inverted pendulum: whatever it starts at, it
@@ -35,11 +35,30 @@ const POLE_HEIGHT = 1;
 const POLE_MASS = 30;
 const POLE_BASE_OFFSET = CART_WIDTH / 3;
 
-const SEGMENT_COUNT = 5;
-const SEGMENT_LENGTH = 1.4;
-const SEGMENT_MASS = 2;
-const SEGMENT_DRAG = 6;
-const SEGMENT_RESISTANCE = 1.5;
+/**
+ * The rig's tunable shape.
+ *
+ * Exported so its tests assert against *these* rather than against copies of
+ * them: the numbers here are meant to be played with, and a test that restates
+ * them fails the moment somebody does -- which is exactly what happened the
+ * first time one was retuned.
+ */
+export const RIG = {
+  segmentCount: 5,
+  segmentLength: 1.4,
+  segmentMass: 2,
+  segmentDrag: 6,
+  segmentResistance: 1.5,
+  cartMass: CART_MASS,
+  poleMass: POLE_MASS,
+  cartResistance: CART_RESISTANCE,
+} as const;
+
+const SEGMENT_COUNT = RIG.segmentCount;
+const SEGMENT_LENGTH = RIG.segmentLength;
+const SEGMENT_MASS = RIG.segmentMass;
+const SEGMENT_DRAG = RIG.segmentDrag;
+const SEGMENT_RESISTANCE = RIG.segmentResistance;
 
 // Each chain starts on a circular arc -- every segment turns by the same amount
 // -- running from steeply-downward at the pole to horizontal where the two meet.
@@ -48,6 +67,9 @@ const SEGMENT_RESISTANCE = 1.5;
 // every segment is collinear and the constraint Jacobian loses rank.
 const SWEEP = 1.15;
 const TURN = SWEEP / (SEGMENT_COUNT - 1);
+
+/** The arc, exported for the same reason as `RIG`. */
+export const ARC = { sweep: SWEEP, turn: TURN } as const;
 
 // Round numbers, chosen to look right. They are *not* required to make the two
 // chains meet, and they don't: at this spacing the left chain's end lands some
@@ -58,11 +80,46 @@ const TURN = SWEEP / (SEGMENT_COUNT - 1);
 // be dragged around. Nothing here has to be recomputed when the segment count,
 // the sag angle or the pole height changes.
 const POLE_TIPS = [-1, 1].map((side): readonly [number, number] => [
-  side * 5,
+  side * 5.4,
   -POLE_HEIGHT,
 ]);
 
 const TIP = [SEGMENT_LENGTH, 0] as const;
+
+// The pendulum hung from the rope's midpoint: a rigid rod on a free swivel,
+// with a ball on the end.
+const ROD_LENGTH = 8;
+const BALL_RADIUS = 0.65;
+const BALL_MASS = 15;
+
+// Enough to bleed a spin off eventually, little enough that it still swings.
+const SWIVEL_RESISTANCE = 0.4;
+
+/**
+ * A rigid rod with a ball on it, swivelling about the point it is hung from.
+ *
+ * One frame, not two: the rod is rigid, so rod and ball share a coordinate and
+ * the whole thing is a single revolute joint. Drawing it takes a line and a
+ * circle; the physics takes one `<Weight>` at the far end.
+ *
+ * `initialState` is a starting angle, not a constraint: it swings from there.
+ * `-π/2` happens to point it straight down at `t = 0`, because each chain is
+ * laid on an arc that ends *horizontal* where the two meet -- but nothing
+ * depends on that, and retuning `SWEEP` or `SEGMENT_COUNT` may tilt it.
+ */
+function Pendulum(): ReactElement {
+  return (
+    <RotationalFrame
+      position={TIP}
+      initialState={[-Math.PI / 2, 0]}
+      resistance={SWIVEL_RESISTANCE}
+    >
+      <Line endPos={[ROD_LENGTH, 0]} lineWidth={0.22} />
+      <Circle position={[ROD_LENGTH, 0]} radius={BALL_RADIUS} />
+      <Weight mass={BALL_MASS} position={[ROD_LENGTH, 0]} />
+    </RotationalFrame>
+  );
+}
 
 interface RopeSegmentProps {
   position: readonly [number, number];
@@ -82,8 +139,8 @@ function RopeSegment({
       initialState={[angle, 0]}
       resistance={SEGMENT_RESISTANCE}
     >
-      <Line endPos={TIP} lineWidth={0.18} />
-      <Circle position={TIP} radius={0.16} />
+      <Line endPos={TIP} lineWidth={0.1} />
+      <Circle position={TIP} radius={0.1} />
       <Weight mass={SEGMENT_MASS} position={TIP} drag={SEGMENT_DRAG} />
       {children}
     </RotationalFrame>
@@ -182,7 +239,7 @@ export default function CartAndRope(): ReactElement {
             key={`pole${index}`}
             startPos={[index === 0 ? -POLE_BASE_OFFSET : POLE_BASE_OFFSET, 0]}
             endPos={tip}
-            lineWidth={0.35}
+            lineWidth={0.15}
           />
         ))}
         {POLE_TIPS.map((tip, index) => (
@@ -194,6 +251,15 @@ export default function CartAndRope(): ReactElement {
 
         <RopeChain anchor={POLE_TIPS[0]!}>
           <Anchor ref={leftTip} position={TIP} />
+
+          {/*
+           * Hung from the left chain's tip, which *is* the rope's midpoint:
+           * the constraint below welds it to the right chain's, so the two are
+           * one point and it does not matter which of them carries the load.
+           * `RopeChain` passes its children to the tip, so this needs to know
+           * nothing about where in the chain it ends up.
+           */}
+          <Pendulum />
         </RopeChain>
         <RopeChain anchor={POLE_TIPS[1]!} mirror>
           {/* No position: this is the attachment the constraint solves for. */}
