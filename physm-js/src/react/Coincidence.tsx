@@ -1,0 +1,63 @@
+import resolveAnchor from './resolveAnchor';
+import { CoincidenceConstraint } from './../Constraint';
+import { useId } from 'react';
+import { useSceneNode } from './sceneNodes';
+import type { ConstraintEnd } from './resolveAnchor';
+import type { PositionLike } from './../Scene';
+
+export interface CoincidenceProps {
+  frame1: ConstraintEnd;
+  frame2: ConstraintEnd;
+  position1?: PositionLike;
+  position2?: PositionLike | null;
+}
+
+/**
+ * Two frame-relative points welded together.
+ *
+ * Either end may be a frame's id or an `<Anchor>` ref, and the anchor form is
+ * the one that composes: a generated subtree names none of its frames, so a
+ * chain marks its own tip and hands the mark out rather than the author
+ * predicting an id.
+ *
+ * Belongs beside the frames rather than inside either one it names -- the two
+ * can be in different subtrees. Nesting one inside a frame is tolerated and
+ * means the same thing.
+ *
+ * An omitted `position2` is solved from the assembled pose, so the loop closes
+ * at whatever geometry the scene places. See `docs/constraints.md`.
+ */
+export default function Coincidence({
+  frame1,
+  frame2,
+  position1,
+  position2,
+}: CoincidenceProps): null {
+  useSceneNode(
+    useId(),
+    {
+      slot: 'constraint',
+      describe: () =>
+        `a <Coincidence> between ` +
+        `${typeof frame1 === 'string' ? `'${frame1}'` : 'an anchor'} and ` +
+        `${typeof frame2 === 'string' ? `'${frame2}'` : 'an anchor'}`,
+      build: () => {
+        const end1 = resolveAnchor(frame1, position1);
+        const end2 = resolveAnchor(frame2, position2 ?? undefined);
+        if (!end1 || !end2) {
+          return null;
+        }
+
+        return new CoincidenceConstraint({
+          frame1: end1.frameId,
+          frame2: end2.frameId,
+          ...(end1.position === undefined ? {} : { position1: end1.position }),
+          ...(end2.position === undefined ? {} : { position2: end2.position }),
+        });
+      },
+    },
+    [frame1, frame2, JSON.stringify(position1), JSON.stringify(position2)],
+  );
+
+  return null;
+}

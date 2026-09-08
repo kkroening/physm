@@ -10,7 +10,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 | [0010](0010.md) | Make a dead export a build signal rather than an eyeball finding | Enhancement | Open |
 | [0009](0009.md) | Centre the demo's view on the plot rather than on a hardcoded point | Bug | Resolved |
 | [0008](0008.md) | Delete `testutils.ts`, which nothing imports and the lint config misnames | Bug | Resolved |
-| [0007](0007.md) | Settle whether authoring components should share names with the classes they wrap | RFC | Open |
+| [0007](0007.md) | Settle whether authoring components should share names with the classes they wrap | RFC | Resolved |
 | [0006](0006.md) | Let a JSX rig be assembled without mounting a renderer | RFC | Open |
 | [0005](0005.md) | Give JSX siblings their tree order, which effect registration cannot | RFC | Open |
 | [0004](0004.md) | Place a solid box's rect from its corners rather than assuming a y-flipping view transform | Bug | Resolved |

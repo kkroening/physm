@@ -23,14 +23,28 @@ to draw a circle lives in the renderer rather than on `CircleDecal`.
 *Authoring.* A rig can be written as JSX instead of assembled by hand:
 
 ```jsx
-<Scene gravity={10}>
-  <TrackFrame id="cart" resistance={5}>
-    <BoxDecal width={4} height={2} />
-    <Weight mass={250} />
-    <RopeChain segments={5} />
-  </TrackFrame>
-  <CoincidenceConstraint frame1="chainL4" frame2="chainR4" position1={[1.4, 0]} />
-</Scene>
+function Rig() {
+  const leftTip = useRef(null);
+  const rightTip = useRef(null);
+
+  return (
+    <Scene gravity={10}>
+      <TrackFrame id="cart" resistance={5}>
+        <Box width={4} height={2} />
+        <Weight mass={250} />
+
+        <RopeChain segments={5}>
+          <Anchor ref={leftTip} position={[1.4, 0]} />
+        </RopeChain>
+        <RopeChain segments={5} mirror>
+          <Anchor ref={rightTip} position={[1.4, 0]} />
+        </RopeChain>
+      </TrackFrame>
+
+      <Coincidence frame1={leftTip} frame2={rightTip} />
+    </Scene>
+  );
+}
 ```
 
 The authoring components render nothing; they register what they describe, and

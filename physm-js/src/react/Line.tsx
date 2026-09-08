@@ -3,10 +3,10 @@ import { useId } from 'react';
 import { useSceneNode } from './sceneNodes';
 import type { LineDecalOptions } from './../LineDecal';
 
-export type LineDecalProps = LineDecalOptions;
+export type LineProps = LineDecalOptions;
 
 /** A line drawn in the enclosing frame's coordinates. */
-export default function LineDecal(props: LineDecalProps): null {
+export default function Line(props: LineProps): null {
   useSceneNode(
     useId(),
     { slot: 'decal', build: () => new CoreLineDecal(props) },

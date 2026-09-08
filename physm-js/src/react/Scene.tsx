@@ -30,7 +30,7 @@ export interface SceneProps {
  * ```jsx
  * <Scene gravity={10}>
  *   <TrackFrame id="cart">
- *     <BoxDecal width={4} height={2} />
+ *     <Box width={4} height={2} />
  *     <Weight mass={250} />
  *   </TrackFrame>
  * </Scene>
@@ -58,6 +58,7 @@ export default function Scene({
 }: SceneProps): ReactElement {
   const { registry, version } = useSceneRegistry();
   const unresolvedRef = useRef<Constraint[]>([]);
+  const unresolvedAnchorsRef = useRef<string[]>([]);
 
   const scene = useMemo(() => {
     const { decals, weights, frames } = buildChildren(registry.entries, null);
@@ -65,7 +66,7 @@ export default function Scene({
     // A scene carries no mass of its own, so there is nowhere for a root
     // `<Weight>` to go. Silently dropping it would remove mass from a rig,
     // which changes the answer rather than the picture -- and `<Weight>` and
-    // `<BoxDecal>` are siblings inside a frame, so mistaking one for the other
+    // `<Box>` are siblings inside a frame, so mistaking one for the other
     // is an easy thing to do from the JSX alone.
     if (weights.length) {
       throw new Error(
@@ -75,10 +76,17 @@ export default function Scene({
     }
 
     if (!frames.length && !decals.length) {
+      // Cleared on this path too. The warnings below read these refs, so an
+      // early return that left them alone would re-report the *previous*
+      // assembly's failures against a scene that no longer has any.
+      unresolvedRef.current = [];
+      unresolvedAnchorsRef.current = [];
+
       return null;
     }
 
     const unresolved: Constraint[] = [];
+    const unresolvedAnchors: string[] = [];
     const built = new CoreScene({
       decals,
       frames,
@@ -102,7 +110,14 @@ export default function Scene({
       // The cost is that a genuine typo in `frame1` becomes a missing
       // constraint rather than a loud error. `unresolvedConstraints` below is
       // how that surfaces once nothing is moving.
+      // `null` is the same "wait" answer one step earlier: an `<Anchor>` this
+      // constraint names has not handed out its point yet.
       const constraint = node.build();
+      if (!constraint) {
+        unresolvedAnchors.push(node.describe?.() ?? 'a constraint');
+        continue;
+      }
+
       if (
         built.frameMap.has(constraint.frameId1) &&
         built.frameMap.has(constraint.frameId2)
@@ -114,6 +129,7 @@ export default function Scene({
     }
 
     unresolvedRef.current = unresolved;
+    unresolvedAnchorsRef.current = unresolvedAnchors;
 
     return built;
     // `version` is the dependency that matters: the map is mutated in place,
@@ -150,6 +166,14 @@ export default function Scene({
       console.warn(
         `physm: constraint between '${constraint.frameId1}' and ` +
           `'${constraint.frameId2}' was dropped: the scene has no such frame.`,
+      );
+    }
+
+    for (const description of unresolvedAnchorsRef.current) {
+      console.warn(
+        `physm: ${description} was dropped: an <Anchor> it names has not ` +
+          'reported. Either the ref was never passed to one, or the anchor ' +
+          'has unmounted while the constraint outlived it.',
       );
     }
   }, [scene]);
