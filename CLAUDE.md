@@ -6,7 +6,7 @@ written down separately from the code.
 | Directory | What it is |
 | --- | --- |
 | [`physm-rs`](physm-rs/) | The Rust solver, compiled to wasm. The fast path. |
-| [`physm-js`](physm-js/) | The JavaScript solver, and the React app that draws it. Rendering lives in [`src/react`](physm-js/src/react/) — the only part that imports React. |
+| [`physm-js`](physm-js/) | The JavaScript solver, and the React app that draws it. [`src/react`](physm-js/src/react/) is the React binding: drawing a scene, and authoring one as JSX. |
 | [`physm-py`](physm-py/) | The original 2019 prototype. Historical; not maintained. |
 | [`docs`](docs/) | [`algorithm.md`](docs/algorithm.md) — the equations of motion, mapped onto the code. [`constraints.md`](docs/constraints.md) — the loop-closure design. |
 | [`docs/issues`](docs/issues/) | The issue tracker: one Markdown file per issue. Regenerate its index with `scripts/render_issues`. |
@@ -40,6 +40,13 @@ That is the boundary, and it is stated as one rather than as a directory-wide
 grep — `git grep react physm-js/src` has hits outside `src/react/` and always
 will, because the app is a React app. What must not come back is a `Scene`,
 `Frame` or `Decal` that cannot exist without a renderer.
+
+The binding has an *authoring* half as well as a drawing one — `Scene`,
+`TrackFrame`, `BoxDecal` and so on, which describe a rig as JSX. Those wrap the
+core classes and do not replace them: the constructors stay the API, and a
+component is a way of calling one. A scene assembled from JSX and the same
+scene assembled by hand are required to be equal, and there is a test that
+says so.
 
 `DecalView` switches on a union of the decal classes to decide what element a
 shape becomes.
