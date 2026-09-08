@@ -115,7 +115,7 @@ const chainTip = [chainSegmentLength, 0];
 // That is the difference between a rig that has to be derived and one that can
 // be dragged around. Nothing here has to be recomputed when the segment count,
 // the sag angle or the pole height changes.
-const poleTips = [-1, 1].map((side) => [side * 5.5, -poleHeight]);
+const poleTips = [-1, 1].map((side) => [side * 5, -poleHeight]);
 
 const cart = new TrackFrame({
   id: 'cart',

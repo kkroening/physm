@@ -13,7 +13,19 @@
  * square of the scale.
  */
 
-/** How small a pivot may be, relative to the largest, before `R` is singular. */
+/**
+ * How small a pivot may be, relative to the largest, before `R` counts as
+ * singular.
+ *
+ * This is a **policy** about how ill-conditioned a scene may be before the
+ * solver declines, not a floating-point detail — measured, refusal begins
+ * between condition numbers of `1e12` and `1e13`, where float64 still returns
+ * two or three correct digits. Declining beats returning them.
+ *
+ * It deliberately moves from the `1e-6` that `utils.js` used, which was chosen
+ * against float32 and is a million times tighter than float64 warrants.
+ * `pinsTheSingularityCeiling` in the tests holds both sides of it.
+ */
 const SINGULAR_RELATIVE_TOLERANCE = 1e-12;
 
 export class SingularMatrixError extends Error {
@@ -33,18 +45,32 @@ export class DimensionError extends Error {
 /**
  * A square matrix, flat and row-major.
  *
- * Mutable and `Float64Array`-backed because the factorization works in place;
- * unlike `Mat3`, the size is not known ahead of time, so the indices are
- * computed and the accessors below exist to keep that in one place.
+ * `Float64Array`-backed and **mutable**, because factorization reduces it in
+ * place. Unlike `Mat3` the size is not known ahead of time, so the indices are
+ * computed and the accessors below keep that in one place.
  */
 export interface SquareMatrix {
   readonly size: number;
-  readonly values: Float64Array;
+  values: Float64Array;
 }
 
-/** Element `(row, col)`. */
+/**
+ * Element `(row, col)`.
+ *
+ * Throws rather than defaulting on an out-of-range read. Every index in this
+ * file is provably in range, so this is unreachable — which is exactly why it
+ * should be loud: substituting `0` would turn an indexing mistake into a legal
+ * matrix entry and a plausible wrong answer.
+ */
 function at(matrix: SquareMatrix, row: number, col: number): number {
-  return matrix.values[row * matrix.size + col] ?? 0;
+  const value = matrix.values[row * matrix.size + col];
+  if (value === undefined) {
+    throw new RangeError(
+      `(${row}, ${col}) is outside a ${matrix.size}-square matrix`,
+    );
+  }
+
+  return value;
 }
 
 function setAt(
@@ -54,6 +80,16 @@ function setAt(
   value: number,
 ): void {
   matrix.values[row * matrix.size + col] = value;
+}
+
+/** An element of a `Float64Array` that is provably in range. */
+function entry(values: Float64Array, index: number): number {
+  const value = values[index];
+  if (value === undefined) {
+    throw new RangeError(`${index} is outside a ${values.length}-element array`);
+  }
+
+  return value;
 }
 
 /** A square matrix from nested rows, which is how the assemblers build one. */
@@ -68,8 +104,8 @@ export function fromRows(rows: readonly (readonly number[])[]): SquareMatrix {
           `entries against ${size} rows`,
       );
     }
-    row.forEach((entry, colIndex) => {
-      values[rowIndex * size + colIndex] = entry;
+    row.forEach((value, colIndex) => {
+      values[rowIndex * size + colIndex] = value;
     });
   });
 
@@ -77,69 +113,114 @@ export function fromRows(rows: readonly (readonly number[])[]): SquareMatrix {
 }
 
 /**
- * Reflect columns `k` onward of `matrix`, and `vector`, about the Householder
- * plane that zeroes column `k` below the diagonal.
+ * `A = QR`, with `Q` kept as the reflectors that build it rather than assembled.
  *
- * Returns the reflector's squared norm, or zero when the column is already
- * clear and no reflection is needed.
+ * Separating this from the solve is what makes several right-hand sides against
+ * one matrix correct *and* cheap: one `O(n³)` factorization serves all of them,
+ * where re-factorizing per solve would both cost `n` times as much and — since
+ * factorization is destructive — silently return `R⁻¹b` on every call after the
+ * first. `Scene`'s initial-velocity projection solves once per constraint row
+ * against a single mass matrix, so this is the common case rather than an edge.
  */
-function reflectColumn(
-  matrix: SquareMatrix,
-  vector: Float64Array,
-  k: number,
-): number {
+export interface Factorization {
+  readonly upper: SquareMatrix;
+  readonly reflectors: readonly Float64Array[];
+}
+
+/**
+ * Reflect columns `k` onward of `matrix` about the Householder plane that clears
+ * column `k` below the diagonal, returning the reflector.
+ *
+ * A zero-length reflector means the column is already zero from the diagonal
+ * down — not merely clear below it — so there is nothing to reflect and `R` will
+ * be singular at this pivot.
+ */
+function reflectColumn(matrix: SquareMatrix, k: number): Float64Array {
   const { size } = matrix;
+  const reflector = new Float64Array(size);
 
   let normSq = 0;
   for (let row = k; row < size; row++) {
     normSq += at(matrix, row, k) ** 2;
   }
   if (normSq === 0) {
-    return 0;
+    return reflector;
   }
 
   // Away from the diagonal entry rather than toward it, so the subtraction that
-  // builds `reflector` never cancels.
-  const norm = Math.sqrt(normSq);
-  const alpha = at(matrix, k, k) > 0 ? -norm : norm;
+  // builds the reflector never cancels. Worth seven orders of magnitude on a
+  // column the diagonal dominates; `reflects away from the pivot` pins it.
+  const alpha = at(matrix, k, k) > 0 ? -Math.sqrt(normSq) : Math.sqrt(normSq);
 
-  const reflector = new Float64Array(size);
   for (let row = k; row < size; row++) {
     reflector[row] = at(matrix, row, k);
   }
-  reflector[k] = (reflector[k] ?? 0) - alpha;
+  reflector[k] = entry(reflector, k) - alpha;
 
-  let reflectorNormSq = 0;
-  for (let row = k; row < size; row++) {
-    reflectorNormSq += (reflector[row] ?? 0) ** 2;
-  }
-  if (reflectorNormSq === 0) {
-    return 0;
-  }
-
+  const reflectorNormSq = reflectorNormSquared(reflector, k);
   for (let col = k; col < size; col++) {
     let projection = 0;
     for (let row = k; row < size; row++) {
-      projection += (reflector[row] ?? 0) * at(matrix, row, col);
+      projection += entry(reflector, row) * at(matrix, row, col);
     }
 
     const factor = (2 * projection) / reflectorNormSq;
     for (let row = k; row < size; row++) {
-      setAt(matrix, row, col, at(matrix, row, col) - factor * (reflector[row] ?? 0));
+      setAt(
+        matrix,
+        row,
+        col,
+        at(matrix, row, col) - factor * entry(reflector, row),
+      );
     }
   }
 
-  let vectorProjection = 0;
-  for (let row = k; row < size; row++) {
-    vectorProjection += (reflector[row] ?? 0) * (vector[row] ?? 0);
+  return reflector;
+}
+
+function reflectorNormSquared(reflector: Float64Array, from: number): number {
+  let normSq = 0;
+  for (let row = from; row < reflector.length; row++) {
+    normSq += entry(reflector, row) ** 2;
   }
 
-  const vectorFactor = (2 * vectorProjection) / reflectorNormSq;
-  for (let row = k; row < size; row++) {
-    vector[row] = (vector[row] ?? 0) - vectorFactor * (reflector[row] ?? 0);
+  return normSq;
+}
+
+/** Apply one stored reflection to a right-hand side, in place. */
+function reflectVector(
+  vector: Float64Array,
+  reflector: Float64Array,
+  from: number,
+): void {
+  const normSq = reflectorNormSquared(reflector, from);
+  if (normSq === 0) {
+    return;
   }
 
-  return reflectorNormSq;
+  let projection = 0;
+  for (let row = from; row < vector.length; row++) {
+    projection += entry(reflector, row) * entry(vector, row);
+  }
+
+  const factor = (2 * projection) / normSq;
+  for (let row = from; row < vector.length; row++) {
+    vector[row] = entry(vector, row) - factor * entry(reflector, row);
+  }
+}
+
+/**
+ * Factor `A` into `QR`.
+ *
+ * `matrix` is **consumed**: it is reduced to `R` in place and retained by the
+ * returned factorization. Pass one the caller has finished with.
+ */
+export function factor(matrix: SquareMatrix): Factorization {
+  const reflectors = Array.from({ length: matrix.size }, (_unused, k) =>
+    reflectColumn(matrix, k),
+  );
+
+  return { upper: matrix, reflectors };
 }
 
 /** The largest absolute value on the diagonal, which sets the singularity scale. */
@@ -153,7 +234,7 @@ function largestPivot(matrix: SquareMatrix): number {
 }
 
 /**
- * Back-substitute through an upper-triangular `matrix`.
+ * Back-substitute through the upper-triangular `matrix`.
  *
  * The singularity test is **relative** to the largest pivot. An absolute
  * threshold would reject a well-conditioned system for being authored in
@@ -178,33 +259,44 @@ function backSubstitute(matrix: SquareMatrix, vector: Float64Array): number[] {
       sum += at(matrix, row, col) * (solution[col] ?? 0);
     }
 
-    solution[row] = ((vector[row] ?? 0) - sum) / pivot;
+    solution[row] = (entry(vector, row) - sum) / pivot;
   }
 
   return solution;
 }
 
 /**
- * Solve `A x = b`.
+ * Solve `A x = b` against an existing factorization.
  *
- * `A` is consumed: it is reduced to `R` in place, so pass a matrix the caller
- * has finished with, or `fromRows` a fresh one.
+ * Non-destructive in both arguments, so one factorization serves any number of
+ * right-hand sides.
+ */
+export function solveFactored(
+  factorization: Factorization,
+  vector: readonly number[],
+): number[] {
+  const { upper, reflectors } = factorization;
+  if (vector.length !== upper.size) {
+    throw new DimensionError(
+      `Expected a right-hand side of ${upper.size} entries; got ${vector.length}`,
+    );
+  }
+
+  const reduced = Float64Array.from(vector);
+  reflectors.forEach((reflector, k) => reflectVector(reduced, reflector, k));
+
+  return backSubstitute(upper, reduced);
+}
+
+/**
+ * Solve `A x = b` for a single right-hand side.
+ *
+ * `matrix` is consumed, since this factors it. Use `factor` plus `solveFactored`
+ * for several right-hand sides against one matrix.
  */
 export function solveLinearSystem(
   matrix: SquareMatrix,
   vector: readonly number[],
 ): number[] {
-  if (vector.length !== matrix.size) {
-    throw new DimensionError(
-      `Expected a right-hand side of ${matrix.size} entries; got ` +
-        `${vector.length}`,
-    );
-  }
-
-  const reduced = Float64Array.from(vector);
-  for (let k = 0; k < matrix.size; k++) {
-    reflectColumn(matrix, reduced, k);
-  }
-
-  return backSubstitute(matrix, reduced);
+  return solveFactored(factor(matrix), vector);
 }

@@ -17,6 +17,9 @@ import type { Vec3 } from './Vec3';
  * `physm-js` used TensorFlow.js for this, which meant float32 and manual
  * disposal. Both are gone; this is plain float64 with no lifetimes to manage.
  */
+/** How small a determinant may be, relative to the entries, before it is zero. */
+const SINGULAR_RELATIVE_TOLERANCE = 1e-12;
+
 export type Mat3 = readonly [
   number,
   number,
@@ -152,7 +155,11 @@ export function determinant(m: Mat3): number {
  * is always in SE(2) and the general 3×3 inverse is wasted work -- which is
  * what `algorithm.md` §7 flags about `get_inv_pos_mats` taking one.
  *
- * The bottom row is assumed to be `[0, 0, 1]`; `invert` handles the general case.
+ * **The precondition is that the upper-left 2×2 is a rotation** -- no scaling,
+ * shear or reflection -- with a bottom row of `[0, 0, 1]`. The bottom row alone
+ * is nowhere near enough: `translation(3, -4) * scaling(2, 2)` satisfies it and
+ * comes back four times too large, silently, because `Rᵀ` is the inverse of `R`
+ * only when `R` is orthogonal. Use `invert` for anything else.
  */
 export function invertRigid(m: Mat3): Mat3 {
   const [r00, r01, tx, r10, r11, ty] = m;
@@ -173,8 +180,19 @@ export function invertRigid(m: Mat3): Mat3 {
 /** The general inverse, for a matrix that is not known to be rigid. */
 export function invert(m: Mat3): Mat3 {
   const det = determinant(m);
-  if (det === 0) {
-    throw new Error(`Matrix is singular; cannot invert ${JSON.stringify(m)}`);
+
+  // Relative to the entries, not `=== 0`. A determinant scales as the cube of
+  // the matrix, so an absolute test says more about the units a scene was
+  // authored in than about invertibility -- `diag(1e-7, 1e-7, 1e-7)` has a
+  // determinant of `1e-21` and inverts perfectly, while a genuinely rank-2
+  // matrix of order-1 entries can reach `1e-17` and must not. Same argument
+  // `solveLinearSystem` makes for its pivot test.
+  const scale = Math.max(...m.map(Math.abs));
+  if (Math.abs(det) <= SINGULAR_RELATIVE_TOLERANCE * scale ** 3) {
+    throw new Error(
+      `Matrix is singular; cannot invert ${JSON.stringify(m)} ` +
+        `(determinant ${det} against an entry scale of ${scale})`,
+    );
   }
 
   const inverseDet = 1 / det;
@@ -195,11 +213,20 @@ export function invert(m: Mat3): Mat3 {
 }
 
 /**
- * Whether two matrices agree to within `tolerance`, entry by entry.
+ * Whether two matrices agree to within a **relative** tolerance.
+ *
+ * Relative because an absolute one inherits the scale-dependence this module
+ * exists to remove: at `1e-9` it calls two `1e6`-scale matrices differing in
+ * the twelfth digit unequal, and two `1e-10`-scale matrices equal even when one
+ * is the other's reflection.
  *
  * Differenced rather than indexed in parallel, so that no index is computed and
  * the module stays free of non-null assertions.
  */
-export function equals(a: Mat3, b: Mat3, tolerance = 1e-9): boolean {
-  return subtract(a, b).every((entry) => Math.abs(entry) <= tolerance);
+export function equals(a: Mat3, b: Mat3, relativeTolerance = 1e-9): boolean {
+  const scale = Math.max(...a.map(Math.abs), ...b.map(Math.abs), 1);
+
+  return subtract(a, b).every(
+    (difference) => Math.abs(difference) <= relativeTolerance * scale,
+  );
 }

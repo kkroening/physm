@@ -131,6 +131,21 @@ describe('Mat3', () => {
     expect(() => mat3.invert(mat3.scaling(1, 0))).toThrow(/singular/i);
   });
 
+  test('scaling scales x by its first argument, not its second', () => {
+    // `scaling(2, 3)` with the arguments swapped is invisible to every test that
+    // only uses it as an opaque sample matrix.
+    expect(mat3.apply(mat3.scaling(2, 3), vec3.point(1, 1))).toEqual([2, 3, 1]);
+  });
+
+  test('add and scale touch every entry, in the right one', () => {
+    const a: Mat3 = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const b: Mat3 = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+
+    expect(mat3.add(a, b)).toEqual([11, 22, 33, 44, 55, 66, 77, 88, 99]);
+    expect(mat3.scale(a, 2)).toEqual([2, 4, 6, 8, 10, 12, 14, 16, 18]);
+    expect(mat3.subtract(b, a)).toEqual([9, 18, 27, 36, 45, 54, 63, 72, 81]);
+  });
+
   test('trace and determinant match hand-computed values', () => {
     const m: Mat3 = [1, 2, 3, 4, 5, 6, 7, 8, 10];
 
