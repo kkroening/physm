@@ -184,7 +184,9 @@ function describeCrossValidation(
         for (let timeIndex = 0; timeIndex < stateMaps1.length; timeIndex++) {
           const stateMap1 = stateMaps1[timeIndex];
           const stateMap2 = stateMaps2[timeIndex];
-          expect(Object.keys(stateMap1)).toEqual(Object.keys(stateMap2));
+          // Not `Object.keys`, which is `[]` for any `Map` and made this pass
+          // against anything at all.
+          expect([...stateMap1.keys()]).toEqual([...stateMap2.keys()]);
           scene.sortedFrames.forEach((frame: Frame) => {
             const [q1, qd1] = stateMap1.get(frame.id)!;
             const [q2, qd2] = stateMap2.get(frame.id)!;

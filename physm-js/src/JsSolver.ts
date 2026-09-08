@@ -322,12 +322,12 @@ export default class JsSolver extends Solver {
     const array = Array.from({ length: size }, (unused, rowIndex) =>
       Array.from({ length: size }, (unused2, colIndex) =>
         rowIndex < numFrames && colIndex < numFrames
-          ? (massMatrix[rowIndex]?.[colIndex] ?? 0)
+          ? at(atRow(massMatrix, rowIndex), colIndex)
           : 0,
       ),
     );
     const vector = Array.from({ length: size }, (unused, rowIndex) =>
-      rowIndex < numFrames ? (forceVector[rowIndex] ?? 0) : 0,
+      rowIndex < numFrames ? at(forceVector, rowIndex) : 0,
     );
 
     let row = numFrames;
@@ -434,8 +434,8 @@ export default class JsSolver extends Solver {
       const [q, qd] = mapGet(stateMap, frame.id, 'state');
 
       newStateMap.set(frame.id, [
-        q + (velocities[index] ?? 0) * deltaTime,
-        qd + (deltaQddArray[index] ?? 0) * deltaTime,
+        q + at(velocities, index) * deltaTime,
+        qd + at(deltaQddArray, index) * deltaTime,
       ]);
     });
 
@@ -477,18 +477,11 @@ export default class JsSolver extends Solver {
 
     const qds = this.scene.sortedFrames.map(
       (unused, i) =>
-        ((qds0[i] ?? 0) +
-          2 * (qds1[i] ?? 0) +
-          2 * (qds2[i] ?? 0) +
-          (qds3[i] ?? 0)) /
-        6,
+        (at(qds0, i) + 2 * at(qds1, i) + 2 * at(qds2, i) + at(qds3, i)) / 6,
     );
     const qdds = this.scene.sortedFrames.map(
       (unused, i) =>
-        ((qdds0[i] ?? 0) +
-          2 * (qdds1[i] ?? 0) +
-          2 * (qdds2[i] ?? 0) +
-          (qdds3[i] ?? 0)) /
+        (at(qdds0, i) + 2 * at(qdds1, i) + 2 * at(qdds2, i) + at(qdds3, i)) /
         6,
     );
 

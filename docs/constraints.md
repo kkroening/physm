@@ -276,16 +276,22 @@ constraint would silently hold the wrong separation and never converge toward th
 >
 > **Over a band, not unboundedly.** Measured, the correction is identical to eight figures across
 > ten orders of magnitude of length scale — $`10^{-5}`$ to $`10^{5}`$ — and outside that the solve
-> *fails* rather than degrading quietly. The bound is real rather than a tolerance: $`g`$ mixes a
-> prismatic coordinate's mass with a revolute one's mass × length², so its condition number grows
-> like the square of the scale, and float64 runs out eventually too. Rescaling the scene is the fix.
+> *fails* rather than degrading quietly. The band exists for a real reason rather than an arbitrary
+> cutoff: $`g`$ mixes a prismatic coordinate's mass with a revolute one's mass × length², so its
+> condition number grows like the square of the scale, and float64 runs out eventually too.
+> Rescaling the scene is the fix.
 >
 > The band was five and a half orders — $`10^{-3}`$ to $`3 \times 10^{2}`$, to six figures — while
 > `physm-js` computed in float32 on TensorFlow.js tensors. Replacing that with a float64 matrix
-> module widened it by four and a half orders. It is worth being precise about *why* that is less
-> than the ratio of the two machine epsilons would suggest: what binds at the edges is the
-> consistency tolerance the solve is checked against, not the epsilon itself, so the gain is about
-> $`10^{6}`$ rather than the $`5.4 \times 10^{8}`$ a naive reading predicts.
+> module widened it from $`3 \times 10^{5}`$ to $`10^{10}`$, a factor of about
+> $`3.3 \times 10^{4}`$ — against a ratio of $`5.4 \times 10^{8}`$ between the two machine
+> epsilons.
+>
+> The shortfall is not explained here. The plausible account is that what fails at the edges is a
+> *check* — the consistency tolerance, or the relative pivot test in `solveLinearSystem` — rather
+> than the arithmetic running out of significant figures, in which case the epsilon ratio was never
+> the right prediction. That has not been measured, so take the two band widths as the finding and
+> the explanation as a conjecture worth testing rather than a result.
 >
 > **And a coincidence constraint welds two points wherever they land.** Solving `position2` means
 > the attachment can sit some way from anything the author drew — in the demo it is about 14% of a

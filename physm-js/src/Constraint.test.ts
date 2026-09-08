@@ -27,12 +27,20 @@ const POLE_ANGLE = 0.6;
 const POLE_LENGTH = 10;
 const POLE_SPACING = 20;
 
+// The bend at the second segment, where a rig has one. Non-zero and not a right
+// angle, so the segment is neither collinear with its parent nor axis-aligned.
+const ELBOW_ANGLE = 0.4;
+
 // The gap between the two tips in the initial pose. Used as the rope's rest
 // length so that `C = 0` there, and as the coincidence rig's pivot spacing so
 // that the two tips meet.
 const TIP_GAP = POLE_SPACING - 2 * POLE_LENGTH * Math.cos(POLE_ANGLE);
 
-function getBranchedScene({ seed = 0, spacing = POLE_SPACING } = {}) {
+function getBranchedScene({
+  seed = 0,
+  spacing = POLE_SPACING,
+  elbow = false,
+}: { seed?: number; spacing?: number; elbow?: boolean } = {}) {
   return new Scene({
     frames: [
       new TrackFrame({
@@ -44,6 +52,19 @@ function getBranchedScene({ seed = 0, spacing = POLE_SPACING } = {}) {
             id: 'pole1',
             initialState: [POLE_ANGLE, 0.4 * seed],
             weights: [new Weight(4, { position: [POLE_LENGTH, 0] })],
+            // A second segment hinged at the first one's tip, so a constraint
+            // attached out at *its* tip sees three coordinates rather than two.
+            // Only some rigs want it -- see `elbow` on the kinds table.
+            frames: elbow
+              ? [
+                  new RotationalFrame({
+                    id: 'elbow',
+                    position: [POLE_LENGTH, 0],
+                    initialState: [ELBOW_ANGLE, 0.3 * seed],
+                    weights: [new Weight(3, { position: [POLE_LENGTH, 0] })],
+                  }),
+                ]
+              : [],
           }),
           new RotationalFrame({
             id: 'pole2',
@@ -60,13 +81,10 @@ function getBranchedScene({ seed = 0, spacing = POLE_SPACING } = {}) {
 const constraintKinds = [
   {
     name: 'DistanceConstraint',
-    // One row against three degrees of freedom leaves two free, so the rig
-    // swings and RK4 truncation is what moves `C`.
-    movesFromRest: true,
     spacing: POLE_SPACING,
-    createConstraint: () =>
+    createConstraint: (frameId1: FrameId = 'pole1') =>
       new DistanceConstraint({
-        frame1: 'pole1',
+        frame1: frameId1,
         frame2: 'pole2',
         position1: [POLE_LENGTH, 0],
         position2: [POLE_LENGTH, 0],
@@ -75,18 +93,20 @@ const constraintKinds = [
   },
   {
     name: 'CoincidenceConstraint',
-    // The poles are mirror images -- `POLE_ANGLE` and `π - POLE_ANGLE` about a
-    // cart free to slide -- so with the tips pinned to each other and nothing
-    // moving, the gravitational torques cancel and the rig sits at an
-    // equilibrium. Released from rest it does not move at all, which is worth
-    // knowing before reading a drift number off it.
-    movesFromRest: false,
+    // Two rows, so `C` has to be able to see more than two coordinates or it is
+    // pinned outright. On the plain rig it cannot: `C = tip₁ - tip₂` and both
+    // tips ride the cart, so the cart's coordinate cancels out of the
+    // difference and `C` is a function of the two pole angles alone. Two rows
+    // against two coordinates leaves `C` constant on the whole reachable
+    // manifold -- not conserved by the integrator, constant by construction,
+    // and no dynamics can move it. The elbow adds the third coordinate that
+    // makes drift a measurable quantity rather than a structural zero.
     // Moving the pivots together by exactly the tip gap makes the two tips
     // meet, so the loop closes without the rig having to be pre-strained.
     spacing: POLE_SPACING - TIP_GAP,
-    createConstraint: () =>
+    createConstraint: (frameId1: FrameId = 'pole1') =>
       new CoincidenceConstraint({
-        frame1: 'pole1',
+        frame1: frameId1,
         frame2: 'pole2',
         position1: [POLE_LENGTH, 0],
         position2: [POLE_LENGTH, 0],
@@ -101,18 +121,21 @@ function getConstrainedSolver({
   seed = 0,
   rungeKutta = false,
   spacingOffset = 0,
+  elbow = false,
 }: {
   kind: ConstraintKind;
   seed?: number;
   rungeKutta?: boolean;
   spacingOffset?: number;
+  elbow?: boolean;
 }) {
   // A non-zero `spacingOffset` moves the poles apart without telling the
   // constraint, which is how a scene gets a deliberate `C₀ ≠ 0`.
   const scene = getBranchedScene({
     seed,
     spacing: kind.spacing + spacingOffset,
-  }).addConstraint(kind.createConstraint(), {
+    elbow,
+  }).addConstraint(kind.createConstraint(elbow ? 'elbow' : 'pole1'), {
     // `spacingOffset` exists to violate the constraint at `t = 0`, which is
     // the whole point of the conservation test below; scene build rejects that
     // by default.
@@ -259,26 +282,43 @@ describe('Constraint', () => {
       // rather than just a bound. Measured over a 16x range of step sizes,
       // integrating two seconds from rest:
       //
-      //     steps       120       240       480       960       1920
-      //     distance    3.526e-6  2.200e-7  1.371e-8  8.547e-10 5.378e-11
-      //     ratio                 16.03     16.05     16.04     15.89
+      //     steps          120       240       480       960
+      //     distance       4.650e-6  2.869e-7  1.780e-8  1.109e-9
+      //     ratio                    16.20     16.12     16.06
+      //     coincidence    2.594e-7  1.599e-8  9.934e-10 6.211e-11
+      //     ratio                    16.22     16.10     15.99
       //
-      // Sixteen-fold per halving is fourth order, which is RK4's. Under
-      // float32 this was invisible -- drift sat flat at one ulp, 9.537e-7,
-      // because truncation was below the representation floor -- and the table
-      // that used to be here recorded exactly that, so refining the step
-      // appeared to buy nothing. It buys four orders per 16x.
+      // Sixteen-fold per halving is fourth order, which is RK4's. Under float32
+      // this was invisible -- drift sat flat at one ulp, 9.537e-7, because
+      // truncation was below the representation floor -- so the table that used
+      // to be here recorded a drift that did not move with the step, and
+      // concluded no order was observable. It is, and refining the step buys
+      // four orders per 16x.
       //
-      // `CoincidenceConstraint` has no such curve: its rig is an equilibrium
-      // (see `movesFromRest`), so released from rest it does not move and drift
-      // stays at 1.776e-15 for every step size. There is no trajectory to have
-      // an order, and the assertion below says so instead of pretending.
+      // `CoincidenceConstraint` needs the elbow rig to have a curve at all, and
+      // the reason is structural rather than numerical. `C = tip₁ - tip₂`, and
+      // on the plain rig both tips ride the cart, so the cart's coordinate
+      // cancels out of the difference and `C` is a function of the two pole
+      // angles alone. Two constraint rows against the two coordinates `C` can
+      // see pins both, leaving the cart's slide as the only freedom -- and `C`
+      // is blind to it. So `C` is constant on the entire reachable manifold:
+      // not conserved by the integrator, constant by construction, and no
+      // dynamics can move it. Tilting the track until the cart travels 12.9
+      // units leaves the drift at 1.776e-15 for every step size.
+      //
+      // A test that cannot fail is worse than no test, so rather than assert
+      // that floor, the rig gets a third coordinate: a second segment hinged at
+      // `pole1`'s tip, with the constraint attached out at *its* tip. `C` then
+      // spans three coordinates against two rows, the rig moves, and the order
+      // is measurable -- the sweep above.
+      //
       // Two seconds of trajectory, at one step size and then at half of it.
       const drift = (steps: number): number => {
         const solver = getConstrainedSolver({
           kind,
           rungeKutta: true,
           spacingOffset: 1.5,
+          elbow: true,
         });
         const constraint = solver.scene.constraints[0];
         const readC = (): number[] =>
@@ -303,18 +343,15 @@ describe('Constraint', () => {
 
       const coarse = drift(120);
       const fine = drift(240);
-      if (kind.movesFromRest) {
-        // Fourth order: 16x per halving, measured at 16.03-16.05 across the
-        // sweep above. The window is wide enough not to be brittle and narrow
-        // enough to fail second order (4x) or a stabilizer that pins `C`.
-        expect(coarse / fine).toBeGreaterThan(12);
-        expect(coarse / fine).toBeLessThan(20);
-      } else {
-        // An equilibrium rig: nothing moves, so drift is roundoff at any step
-        // size. Asserting the floor is the only honest thing available here.
-        expect(coarse).toBeLessThan(1e-12);
-        expect(fine).toBeLessThan(1e-12);
-      }
+
+      // Both things, because neither implies the other. The ratio fails second
+      // order (4x), a stabilizer that pins `C`, and a wrong bias term; the
+      // magnitude fails an implementation that is faithfully fourth order and
+      // drifting far too much -- a scale error in the constraint value moves
+      // both measurements together and leaves the ratio at 16.
+      expect(coarse / fine).toBeGreaterThan(12);
+      expect(coarse / fine).toBeLessThan(20);
+      expect(coarse).toBeLessThan(1e-5);
     });
 
     test(`${kind.name}: drift is exactly linear in time when Ċ₀ ≠ 0`, () => {
@@ -339,6 +376,7 @@ describe('Constraint', () => {
           rungeKutta: true,
           spacingOffset: 1.5,
           seed: 1,
+          elbow: true,
         });
         const constraint = solver.scene.constraints[0];
         const readC = (): number[] =>

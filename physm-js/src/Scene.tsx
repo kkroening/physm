@@ -3,6 +3,7 @@ import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import { CONSISTENCY_RELATIVE_TOLERANCE } from './Constraint';
 import { ZERO_STATE } from './State';
+import { SingularMatrixError } from './solveLinearSystem';
 import { factor, fromRows, solveFactored } from './solveLinearSystem';
 import type Constraint from './Constraint';
 import type Decal from './Decal';
@@ -13,7 +14,6 @@ import type { Mat3 } from './Mat3';
 import type { Vec3 } from './Vec3';
 import type { ReactElement, SVGProps } from 'react';
 import type { State } from './State';
-import { required } from './utils';
 
 /**
  * A lookup into a table this class derived itself.
@@ -73,6 +73,15 @@ export interface SceneOptions {
 export interface AddConstraintOptions {
   allowInitialViolation?: boolean;
   posMatMap?: Map<FrameId, Mat3> | null;
+}
+
+/** A point, as any of the shapes the query API accepts for one. */
+export type PositionLike = number | readonly number[] | Vec3;
+
+/** What `getSeparation` reports: the vector `d = x₁ − x₂`, and its length. */
+export interface Separation {
+  vector: readonly [number, number];
+  distance: number;
 }
 
 export interface PoseQueryOptions {
@@ -138,7 +147,7 @@ export default class Scene {
       ],
       getNodeKey: getFrameId,
       visitNode: (frame: Frame, parentPaths: readonly FrameId[][]) =>
-        parentPaths.length ? [...(parentPaths[0] ?? []), frame.id] : [frame.id],
+        parentPaths.length ? [...at(parentPaths, 0, 'parent path'), frame.id] : [frame.id],
     });
     // ...only now, with the derived tables built, is there a pose to solve
     // constraints against. One pose for the whole list: `addConstraint` moves
@@ -185,7 +194,7 @@ export default class Scene {
      * Where a frame-relative position lands in the world, as a plain `[x, y]`.
      *
      * Pass `posMatMap` to answer several of these against one pose without
-     * recomputing it; otherwise one is computed and disposed internally.
+     * recomputing it; otherwise one is computed for this call alone.
      */
     if (!this.frameMap.has(frameId)) {
       throw new Error(`No such frame in scene: ${frameId}`);
@@ -222,13 +231,26 @@ export default class Scene {
     );
   }
 
+  /** Frame origins to frame origins, the common case. */
   getSeparation(
     frameId1: FrameId,
-    position1: number | readonly number[] | Vec3 = vec3.ORIGIN,
-    frameId2: FrameId = required('frameId2'),
-    position2: number | readonly number[] | Vec3 = vec3.ORIGIN,
-    { stateMap = null, posMatMap = null }: PoseQueryOptions = {},
-  ): { vector: readonly [number, number]; distance: number } {
+    frameId2: FrameId,
+    options?: PoseQueryOptions,
+  ): Separation;
+
+  /** Named points on each frame. */
+  getSeparation(
+    frameId1: FrameId,
+    position1: PositionLike,
+    frameId2: FrameId,
+    position2?: PositionLike,
+    options?: PoseQueryOptions,
+  ): Separation;
+
+  getSeparation(
+    frameId1: FrameId,
+    ...rest: unknown[]
+  ): Separation {
     /**
      * The gap between two frame-relative positions: `{ vector, distance }`.
      *
@@ -237,19 +259,36 @@ export default class Scene {
      * opposite conventions under one word is worse than either, and `d` is the
      * one with things depending on it: it is what `jacobianRows` contracts
      * against, and it is `CoincidenceConstraint.value` verbatim.
+     *
+     * The two-id form is the ergonomic probe a scene builder wants — "how far
+     * apart are these two frames?" should not require naming two origins. It is
+     * an overload rather than a defaulted parameter because a default would
+     * make `frameId2` optional to the compiler, putting a required argument
+     * back behind a runtime check.
      */
-    // Both ids checked before anything is allocated: `getWorldPosition` throws
-    // for an unknown one, and a throw after the pose map exists would orphan it.
+    const twoIds = typeof rest[0] === 'string';
+    const [position1, frameId2, position2, options] = twoIds
+      ? [vec3.ORIGIN, rest[0] as FrameId, vec3.ORIGIN, rest[1]]
+      : [rest[0] as PositionLike, rest[1] as FrameId, rest[2] ?? vec3.ORIGIN, rest[3]];
+    const { stateMap = null, posMatMap = null } =
+      (options as PoseQueryOptions | undefined) ?? {};
+
+    // Both ids checked before anything is allocated, so an unknown one fails
+    // before any work is done rather than partway through it.
     for (const frameId of [frameId1, frameId2]) {
       if (!this.frameMap.has(frameId)) {
         throw new Error(`No such frame in scene: ${frameId}`);
       }
     }
-    const owned = posMatMap ? null : this.getPosMatrixMap(stateMap);
-    const shared = posMatMap || owned;
-    const p = this.getWorldPosition(frameId1, position1, { posMatMap: shared });
-    const q = this.getWorldPosition(frameId2, position2, { posMatMap: shared });
+    const shared = posMatMap ?? this.getPosMatrixMap(stateMap);
+    const p = this.getWorldPosition(frameId1, position1 as PositionLike, {
+      posMatMap: shared,
+    });
+    const q = this.getWorldPosition(frameId2, position2 as PositionLike, {
+      posMatMap: shared,
+    });
     const vector: readonly [number, number] = [p[0] - q[0], p[1] - q[1]];
+
     return { vector, distance: Math.hypot(...vector) };
   }
 
@@ -296,8 +335,7 @@ export default class Scene {
         );
       }
     }
-    const owned = posMatMap ? null : this.getPosMatrixMap();
-    const shared = posMatMap || owned;
+    const shared = posMatMap ?? this.getPosMatrixMap();
 
     if (constraint.inferPosition2) {
       // Solve for the attachment on frame 2 that puts it on frame 1's chosen
@@ -379,7 +417,7 @@ export default class Scene {
     /**
      * The velocity field of every frame in global coordinates: right-multiply
      * one by a global position to get the global velocity of that point, per
-     * unit of the frame's own coordinate. The caller owns the tensors.
+     * unit of the frame's own coordinate.
      */
     stateMap = stateMap || this.getInitialStateMap({ project: false });
     return new Map(
@@ -565,7 +603,7 @@ export default class Scene {
       ...rows.map((row) =>
         row.reduce(
           (total: number, entry: number, index: number) =>
-            total + Math.abs(entry * (qd[index] ?? 0)),
+            total + Math.abs(entry * at(qd, index, 'velocity')),
           0,
         ),
       ),
@@ -615,11 +653,23 @@ export default class Scene {
       correction = this.sortedFrames.map((unused, index) =>
         invMassJT.reduce(
           (total, column, row) =>
-            total + (column[index] ?? 0) * (lambda[row] ?? 0),
+            total +
+            at(column, index, 'inverse-mass column') *
+              at(lambda, row, 'multiplier'),
           0,
         ),
       );
     } catch (error) {
+      // Only the singular case gets re-diagnosed. The block also runs `dotRows`
+      // and the indexed accessors, whose throws mean the Jacobian was assembled
+      // wrong -- a bug here, with nothing to do with conditioning. Wrapping
+      // those in "rescale your scene" would send someone a long way in the
+      // wrong direction, and it is the one place this file would turn a loud
+      // failure back into a misleading one.
+      if (!(error instanceof SingularMatrixError)) {
+        throw error;
+      }
+
       throw new Error(
         'No initial-velocity correction is determined for this scene. Either ' +
           'the constraint rows are not independent -- two constraints saying ' +
@@ -671,7 +721,7 @@ export default class Scene {
     return new Map(
       this.sortedFrames.map((frame, index): [FrameId, State] => [
         frame.id,
-        [mapGet(stateMap, frame.id, 'state')[0], projected[index] ?? 0],
+        [mapGet(stateMap, frame.id, 'state')[0], at(projected, index, 'projected velocity')],
       ]),
     );
   }

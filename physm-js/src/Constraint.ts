@@ -185,7 +185,7 @@ export default class Constraint {
   }
 
   /**
-   * World positions of the two attachment points, as `[3, 1]` tensors.
+   * World positions of the two attachment points, as `Vec3`s.
    *
    * Every quantity below is expressed in terms of these rather than the local
    * attachment vectors: `V_i`, `S_i` and `A_i` are all *spatial* operators, so
@@ -380,7 +380,18 @@ export class DistanceConstraint extends Constraint {
 
   override value(ctx: ConstraintCtx): number[] {
     const d = this._separation(...this._worldPoints(ctx));
-    return [0.5 * (d[0] * d[0] + d[1] * d[1] - (this.length ?? 0) ** 2)];
+    if (this.length == null) {
+      // `resolveGeometry` fills this in at `addConstraint`, so a null here means
+      // the constraint is being evaluated before it joined a scene. Defaulting
+      // to zero would silently compute the wrong `C` -- half the squared
+      // separation, which looks like a constraint value and is not this one.
+      throw new Error(
+        'DistanceConstraint has no length yet: it is resolved when the ' +
+          'constraint is added to a scene',
+      );
+    }
+
+    return [0.5 * (d[0] * d[0] + d[1] * d[1] - this.length ** 2)];
   }
 
   override jacobianRows(ctx: ConstraintCtx): number[][] {

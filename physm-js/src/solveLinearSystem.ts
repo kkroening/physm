@@ -73,6 +73,16 @@ function at(matrix: SquareMatrix, row: number, col: number): number {
   return value;
 }
 
+/** The vector counterpart of `at`, and loud for the same reason. */
+function atEntry(vector: readonly number[], index: number): number {
+  const value = vector[index];
+  if (value === undefined) {
+    throw new RangeError(`${index} is outside a ${vector.length}-vector`);
+  }
+
+  return value;
+}
+
 function setAt(
   matrix: SquareMatrix,
   row: number,
@@ -256,7 +266,7 @@ function backSubstitute(matrix: SquareMatrix, vector: Float64Array): number[] {
 
     let sum = 0;
     for (let col = row + 1; col < size; col++) {
-      sum += at(matrix, row, col) * (solution[col] ?? 0);
+      sum += at(matrix, row, col) * atEntry(solution, col);
     }
 
     solution[row] = (entry(vector, row) - sum) / pivot;
