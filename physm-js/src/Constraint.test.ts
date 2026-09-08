@@ -5,6 +5,7 @@ import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint, DistanceConstraint } from './Constraint';
+import { DimensionError } from './solveLinearSystem';
 import type { FrameId, StateMap } from './Frame';
 import type { State } from './State';
 
@@ -82,6 +83,11 @@ const constraintKinds = [
   {
     name: 'DistanceConstraint',
     spacing: POLE_SPACING,
+
+    // 4.650e-6, measured at 120 steps on the elbow rig at `spacing + 1.5`.
+    // Per-kind rather than shared: the two kinds differ by 18x, and one
+    // literal covering both leaves the smaller barely constrained.
+    driftBound: 1e-5,
     createConstraint: (frameId1: FrameId = 'pole1') =>
       new DistanceConstraint({
         frame1: frameId1,
@@ -105,6 +111,9 @@ const constraintKinds = [
     // Moving the pivots together by exactly the tip gap makes the two tips
     // meet, so the loop closes without the rig having to be pre-strained.
     spacing: POLE_SPACING - TIP_GAP,
+
+    // 2.594e-7, measured at 120 steps on the elbow rig at `spacing + 1.5`.
+    driftBound: 5e-7,
     createConstraint: (frameId1: FrameId = 'pole1') =>
       new CoincidenceConstraint({
         frame1: frameId1,
@@ -364,9 +373,15 @@ describe('Constraint', () => {
       // magnitude fails an implementation that is faithfully fourth order and
       // drifting far too much -- a scale error in the constraint value moves
       // both measurements together and leaves the ratio at 16.
+      //
+      // The bound comes from the kinds table because the two kinds' drifts
+      // differ by 18x: 4.650e-6 and 2.594e-7. One shared literal sized for the
+      // larger left the smaller with 39x of slack -- looser than the float32
+      // bound this replaced for being loose, while reading as though it were
+      // tight.
       expect(coarse / fine).toBeGreaterThan(12);
       expect(coarse / fine).toBeLessThan(20);
-      expect(coarse).toBeLessThan(1e-5);
+      expect(coarse).toBeLessThan(kind.driftBound);
     });
 
     test(`${kind.name}: drift is exactly linear in time when Ċ₀ ≠ 0`, () => {
@@ -743,6 +758,51 @@ describe('Scene build', () => {
         .value(ctx)
         .forEach((entry) => expect(Math.abs(entry)).toBeLessThan(1e-4));
     });
+  });
+
+  test('a structural failure is not re-diagnosed as a scale problem', () => {
+    // `_getProjectedVelocities` wraps a `SingularMatrixError` in a long message
+    // about the scene's length scale, which is the right diagnosis for a
+    // genuinely ill-conditioned rig. It must not wrap anything else: the block
+    // also runs `dotRows` and the indexed accessors, whose throws mean the
+    // Jacobian was assembled wrong -- a bug with nothing to do with
+    // conditioning, and "rescale your scene" would send someone a long way in
+    // the wrong direction.
+    const scene = getBranchedScene().addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: [POLE_LENGTH, 0],
+        position2: [POLE_LENGTH, 0],
+      }),
+    );
+    frameOf(scene, 'pole1').initialState = [POLE_ANGLE, 2];
+
+    // A mass matrix one row short: the shape a wrongly-sized assembly has.
+    const truncated = scene.getMassMatrix(scene.getInitialStateMap());
+    scene.getMassMatrix = () => truncated.slice(1);
+
+    expect(() => scene.getInitialStateMap()).toThrow(DimensionError);
+    expect(() => scene.getInitialStateMap()).not.toThrow(/[Rr]escal/);
+  });
+
+  test('an unresolved length is refused, not treated as zero', () => {
+    // `resolveGeometry` fills `length` in at `addConstraint`, so a null one
+    // means the constraint is being evaluated before it joined a scene.
+    // Defaulting to zero would compute half the squared separation -- which
+    // looks like a constraint value, and is not this one.
+    const scene = getBranchedScene();
+    const constraint = new DistanceConstraint({
+      frame1: 'pole1',
+      frame2: 'pole2',
+      position1: [POLE_LENGTH, 0],
+      position2: [POLE_LENGTH, 0],
+    });
+
+    expect(constraint.length).toBeNull();
+    expect(() =>
+      constraint.value(scene.getConfigKinematics(scene.getInitialStateMap())),
+    ).toThrow(/no length yet/);
   });
 
   test('an explicit second attachment is still checked', () => {
