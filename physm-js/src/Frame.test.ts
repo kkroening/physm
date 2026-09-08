@@ -36,54 +36,6 @@ describe('Frame', () => {
     expect(frame.getLocalAccelMatrix(9)).toEqual(mat3.ZERO);
   });
 
-  test('renders its decals and children under one group', () => {
-    const child = new Frame({ id: 'child', decals: [new CircleDecal()] });
-    const frame = new Frame({
-      id: 'root',
-      decals: [new CircleDecal()],
-      frames: [child],
-    });
-
-    const element = frame.getDomElement(new Map() as StateMap, mat3.IDENTITY);
-    const [decals, children] = element.props.children as [unknown[], unknown[]];
-
-    expect(element.props.className).toBe('frame');
-    expect(decals).toHaveLength(1);
-    expect(children).toHaveLength(1);
-  });
-
-  test('a frame absent from the state map renders at its own initialState', () => {
-    // A `TrackFrame`, not a base `Frame`: the base ignores `q` entirely, so
-    // both the fallback and a wrongly-zeroed read would render identically and
-    // the assertion could not fail. Here `q` slides the frame along its axis,
-    // which puts the answer in the rendered geometry.
-    const frame = new TrackFrame({
-      id: 'root',
-      initialState: [7, 0],
-      decals: [new CircleDecal({ radius: 1 })],
-    });
-
-    const cx = (stateMap: StateMap): number => {
-      const element = frame.getDomElement(stateMap, mat3.IDENTITY);
-      const [decals] = element.props.children as [
-        ReactElement<SVGProps<SVGElement>>[],
-        unknown[],
-      ];
-
-      return decals[0]!.props.cx as number;
-    };
-
-    // Absent from the map -- reads `initialState`, so the decal sits at 7.
-    expect(cx(new Map())).toBeCloseTo(7);
-
-    // Present in the map -- the map wins, so it sits at 2 instead.
-    expect(cx(new Map([['root', [2, 0]]]) as StateMap)).toBeCloseTo(2);
-
-    // And `ZERO_STATE` is not what an absent entry falls back to: were it, the
-    // first assertion above would read 0 rather than 7.
-    expect(cx(new Map([['root', ZERO_STATE]]) as StateMap)).toBeCloseTo(0);
-  });
-
   test('serializes its shape, and its decals only when asked', () => {
     const frame = new Frame({
       id: 'root',

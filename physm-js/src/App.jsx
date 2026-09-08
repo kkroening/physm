@@ -9,6 +9,7 @@ import React from 'react';
 import RotationalFrame from './RotationalFrame';
 import RsSolver from './RsSolver';
 import Scene from './Scene';
+import SceneView from './react/SceneView';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint } from './Constraint';
@@ -443,7 +444,6 @@ function App({ rsWasmModule }) {
   const touchLocationDelta = useTouch(svgRef);
   const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
   const viewXformMatrix = getViewXformMatrix(translation, scale);
-  const sceneDomElement = scene.getDomElement(stateMap, viewXformMatrix);
   const solver = useRef(null);
 
   useEffect(() => {
@@ -501,7 +501,11 @@ function App({ rsWasmModule }) {
         }
         <div className="plot__main">
           <svg className="plot__svg" ref={svgRef}>
-            {sceneDomElement}
+            <SceneView
+              scene={scene}
+              stateMap={stateMap}
+              xformMatrix={viewXformMatrix}
+            />
           </svg>
         </div>
         <button onClick={togglePaused}>{paused ? 'Unpause' : 'Pause'}</button>

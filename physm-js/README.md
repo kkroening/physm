@@ -6,6 +6,18 @@ coordinate frames and point masses, and steps it with either of two interchangea
 `RsSolver` (the Rust solver in
 [`../physm-rs`](../physm-rs), compiled to WebAssembly).
 
+## Layout
+
+The scene graph and the solvers are plain TypeScript: a `Scene` can be built,
+stepped and queried with no renderer present, which is what makes it usable from
+a worker, a test, or Node.
+
+Drawing lives in **[`src/react`](src/react/)** — the only part of this package that
+imports React. [`SceneView`](src/react/SceneView.tsx) is the entry point: give it a
+scene, a state map and a view transform and it renders the SVG. Below it,
+[`DecalView`](src/react/DecalView.tsx) maps a decal's `kind` to an element, so
+knowing how to draw a circle lives in the renderer rather than on `CircleDecal`.
+
 ## Prerequisites
 
 | | |
