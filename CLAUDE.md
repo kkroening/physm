@@ -45,8 +45,10 @@ The binding has an *authoring* half as well as a drawing one — `Scene`,
 `TrackFrame`, `BoxDecal` and so on, which describe a rig as JSX. Those wrap the
 core classes and do not replace them: the constructors stay the API, and a
 component is a way of calling one. A scene assembled from JSX and the same
-scene assembled by hand are required to be equal, and there is a test that
-says so.
+scene assembled by hand are required to be equal, and there is a test that says
+so — comparing both the serialization *and* the decals directly, because
+`Scene.toJsonObj` omits decals by default and `Decal.toJsonObj` throws, so
+serialization alone is blind to a third of the surface.
 
 `DecalView` switches on a union of the decal classes to decide what element a
 shape becomes.

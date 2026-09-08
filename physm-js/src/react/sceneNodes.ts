@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type Constraint from './../Constraint';
 import type Decal from './../Decal';
 import type Frame from './../Frame';
@@ -30,6 +30,20 @@ export interface FrameChildren {
 interface Registration {
   readonly parentKey: string | null;
   readonly node: SceneNode;
+
+  /**
+   * Whether the component is still mounted.
+   *
+   * An unmounted node is flagged rather than deleted, because `Map.set` after
+   * `delete` re-inserts the key at the *end* of iteration order -- and a
+   * dependency change runs cleanup then setup, so deleting would move a node
+   * behind its siblings every time one of its props changed. Sibling order is
+   * decal paint order and frame coordinate order, so that is not cosmetic.
+   *
+   * Genuinely dead entries are reaped after assembly, once nothing is going to
+   * re-register them.
+   */
+  readonly live: boolean;
 }
 
 /**
@@ -64,14 +78,34 @@ export const ParentKeyContext = createContext<string | null>(null);
  * than a reference. Assembly puts the tree back together afterwards, and does
  * not care what order the pieces arrived in.
  *
+ * `key` is the caller's own `useId`, passed in rather than minted here so that
+ * a frame can use the same value for three things that must agree: its
+ * registration, the parent key it provides to its children, and the id it
+ * falls back to when the author gives none.
+ *
+ * `key` is the caller's own `useId`, passed in rather than minted here so that
+ * a frame can use one value for the three things that must agree: its
+ * registration, the parent key it hands its children, and the id it falls back
+ * to when the author gives none.
+ *
  * `deps` is the caller's own list, exactly as `useEffect` would take it: this
  * hook cannot know which of a component's props the node was built from.
+ *
+ * **Sibling order is first-registration order**, which is JSX order for a tree
+ * whose shape does not change: React runs sibling effects left to right. A
+ * node that mounts *later* than its siblings -- one behind a condition that
+ * flips -- appends rather than taking its JSX position, because nothing here
+ * knows where that position is. Composed components are why: a `RopeChain` in
+ * the middle of a frame's children contributes several frames, and no parent
+ * can index through it without rendering it. That is the case a custom
+ * reconciler resolves, and until then it is a documented limitation rather
+ * than a fixed one -- see `docs/issues/0005.md`.
  */
 export function useSceneNode(
+  key: string,
   node: SceneNode,
   deps: readonly unknown[],
-): string {
-  const key = useId();
+): void {
   const registry = useContext(RegistryContext);
   const parentKey = useContext(ParentKeyContext);
 
@@ -82,11 +116,16 @@ export function useSceneNode(
   }
 
   useEffect(() => {
-    registry.entries.set(key, { parentKey, node });
+    registry.entries.set(key, { parentKey, node, live: true });
     registry.bump();
 
     return () => {
-      registry.entries.delete(key);
+      // Flagged, not deleted -- see `Registration.live`. Keeping the key's slot
+      // is what makes a prop change leave sibling order alone.
+      const existing = registry.entries.get(key);
+      if (existing) {
+        registry.entries.set(key, { ...existing, live: false });
+      }
       registry.bump();
     };
     // `node` is deliberately absent: it is rebuilt on every render, so
@@ -94,8 +133,6 @@ export function useSceneNode(
     // was built from instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, registry, parentKey, ...deps]);
-
-  return key;
 }
 
 /**
@@ -118,6 +155,22 @@ export function useSceneRegistry(): {
 }
 
 /**
+ * Forget the components that have unmounted for good.
+ *
+ * Called after assembly rather than during cleanup, so that a node in the
+ * middle of a dependency change -- cleanup has run, setup has not -- keeps its
+ * position. Removing dead entries cannot change what the next assembly
+ * produces, so this deliberately does not bump.
+ */
+export function reapDeadEntries(entries: Map<string, Registration>): void {
+  for (const [key, { live }] of entries) {
+    if (!live) {
+      entries.delete(key);
+    }
+  }
+}
+
+/**
  * Build the frame tree under one parent, depth-first.
  *
  * Frames are built innermost-first because a `Frame`'s constructor takes its
@@ -131,8 +184,8 @@ export function buildChildren(
 ): FrameChildren {
   const children: FrameChildren = { decals: [], weights: [], frames: [] };
 
-  for (const [key, { parentKey: entryParent, node }] of entries) {
-    if (entryParent !== parentKey) {
+  for (const [key, { parentKey: entryParent, node, live }] of entries) {
+    if (!live || entryParent !== parentKey) {
       continue;
     }
 

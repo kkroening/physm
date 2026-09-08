@@ -34,7 +34,8 @@ to draw a circle lives in the renderer rather than on `CircleDecal`.
 ```
 
 The authoring components render nothing; they register what they describe, and
-`Scene` builds a real `Scene` from the registrations. A repeated structure is
+`Scene` builds a real `Scene` from the registrations, which is checked against
+the same rig assembled by hand. A repeated structure is
 then an ordinary React component — `RopeChain` built from `RopeSegment`s —
 rather than a loop that appends to an array. Assembly takes two renders, because
 a `Frame` takes its children as constructor arguments, so `Scene` reports the

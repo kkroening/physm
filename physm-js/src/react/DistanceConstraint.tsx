@@ -1,4 +1,5 @@
 import { DistanceConstraint as CoreDistanceConstraint } from './../Constraint';
+import { useId } from 'react';
 import { useSceneNode } from './sceneNodes';
 import type { DistanceConstraintOptions } from './../Constraint';
 
@@ -14,6 +15,7 @@ export default function DistanceConstraint(
   props: DistanceConstraintProps,
 ): null {
   useSceneNode(
+    useId(),
     { slot: 'constraint', build: () => new CoreDistanceConstraint(props) },
     [JSON.stringify(props)],
   );

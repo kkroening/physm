@@ -7,6 +7,9 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0007](0007.md) | Settle whether authoring components should share names with the classes they wrap | RFC | Open |
+| [0006](0006.md) | Let a JSX rig be assembled without mounting a renderer | RFC | Open |
+| [0005](0005.md) | Give JSX siblings their tree order, which effect registration cannot | RFC | Open |
 | [0004](0004.md) | Place a solid box's rect from its corners rather than assuming a y-flipping view transform | Bug | Open |
 | [0003](0003.md) | Decide whether `Decal.xform` or the renderer is the real transform API | RFC | Open |
 | [0002](0002.md) | Detect a scene that is fully pinned despite passing every structural check | RFC | Open |

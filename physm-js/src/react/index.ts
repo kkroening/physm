@@ -7,8 +7,11 @@
  * already-assembled scene. `Scene` does both: it collects what its children
  * registered, builds a `physm` scene from them, and renders it.
  *
- * Nothing in `physm-js/src` outside this directory imports React, so the
- * scene graph and the solvers remain usable with no renderer present.
+ * The scene graph and the solvers import nothing from here: a `Scene`, `Frame`
+ * or `Decal` builds, steps and serializes with no renderer present. The app
+ * shell (`App.jsx`, `index.jsx`) is a React app and imports React freely --
+ * the boundary is about what the core depends on, not about which files
+ * mention React.
  */
 export { default as Scene } from './Scene';
 export { default as SceneView } from './SceneView';
