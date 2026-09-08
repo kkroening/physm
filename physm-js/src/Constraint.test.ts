@@ -95,8 +95,9 @@ const constraintKinds = [
     name: 'CoincidenceConstraint',
     // Two rows, so `C` has to be able to see more than two coordinates or it is
     // pinned outright. On the plain rig it cannot: `C = tip₁ - tip₂` and both
-    // tips ride the cart, so the cart's coordinate cancels out of the
-    // difference and `C` is a function of the two pole angles alone. Two rows
+    // tips ride the cart, which is *prismatic*, so its coordinate cancels out
+    // of the difference and `C` is a function of the two pole angles alone. A
+    // revolute shared ancestor would cancel nothing. Two rows
     // against two coordinates leaves `C` constant on the whole reachable
     // manifold -- not conserved by the integrator, constant by construction,
     // and no dynamics can move it. The elbow adds the third coordinate that
@@ -200,8 +201,17 @@ describe('Constraint', () => {
       //
       // The velocities must be non-zero: `bias` is quadratic in q̇, so at rest
       // every defect in it is invisible.
+      //
+      // Which is why `spacingOffset` is set. Without it the scene builds with
+      // `allowInitialViolation: false`, so the initial velocities are projected
+      // onto `J q̇ = 0` -- and for `CoincidenceConstraint` on this rig that is
+      // two rows against the only two coordinates `C` can see, so the
+      // projection zeroes both pole velocities and takes `bias` down to 1e-31
+      // with them. A sign-flipped `bias` passed this test until the offset was
+      // added; the same structural degeneracy the conservation test needed the
+      // elbow for, one test over.
       [0.6, -1.1, 2.2].forEach((seed) => {
-        const solver = getConstrainedSolver({ kind, seed });
+        const solver = getConstrainedSolver({ kind, seed, spacingOffset: 1.5 });
         const constraint = solver.scene.constraints[0];
         const frames = solver.scene.sortedFrames;
         const stateMap = solver.scene.getInitialStateMap();
@@ -297,9 +307,12 @@ describe('Constraint', () => {
       //
       // `CoincidenceConstraint` needs the elbow rig to have a curve at all, and
       // the reason is structural rather than numerical. `C = tip₁ - tip₂`, and
-      // on the plain rig both tips ride the cart, so the cart's coordinate
-      // cancels out of the difference and `C` is a function of the two pole
-      // angles alone. Two constraint rows against the two coordinates `C` can
+      // on the plain rig both tips ride the cart, and the cart is *prismatic*,
+      // so its coordinate cancels out of the difference and `C` is a function
+      // of the two pole angles alone. The qualifier decides it: a revolute
+      // shared ancestor rotates `tip₁ - tip₂` with it, and drops out of
+      // nothing -- swapping the cart for one gives a fourth-order curve on the
+      // plain two-pole rig, with no elbow at all. Two constraint rows against the two coordinates `C` can
       // see pins both, leaving the cart's slide as the only freedom -- and `C`
       // is blind to it. So `C` is constant on the entire reachable manifold:
       // not conserved by the integrator, constant by construction, and no
@@ -307,8 +320,10 @@ describe('Constraint', () => {
       // units leaves the drift at 1.776e-15 for every step size.
       //
       // A test that cannot fail is worse than no test, so rather than assert
-      // that floor, the rig gets a third coordinate: a second segment hinged at
-      // `pole1`'s tip, with the constraint attached out at *its* tip. `C` then
+      // that floor, the rig gets a third coordinate *below* the shared prefix:
+      // a second segment hinged at `pole1`'s tip, with the constraint attached
+      // out at *its* tip. Another frame in the prefix would not do -- it would
+      // add a coordinate the difference still cancels. `C` then
       // spans three coordinates against two rows, the rig moves, and the order
       // is measurable -- the sweep above.
       //
@@ -361,9 +376,10 @@ describe('Constraint', () => {
       // a fixed span depends on the span alone and not on how many steps were
       // taken to cross it. RK4 integrates a linear function of time exactly.
       //
-      // Measured across a 16x range of step sizes, two seconds from `seed: 1`:
-      // 6.2027e+1 for `DistanceConstraint` and 1.2422e+1 for
-      // `CoincidenceConstraint`, identical at every step count to five figures.
+      // Measured across a 16x range of step sizes, two seconds from `seed: 1`
+      // on the elbow rig: 1.2064e+1 for `DistanceConstraint` and 2.4203e+1 for
+      // `CoincidenceConstraint`, identical at every step count to seven and
+      // nine significant figures respectively.
       //
       // This is the property that distinguishes index-1 from a stabilized
       // formulation, and it is the one a Baumgarte or projection term would
