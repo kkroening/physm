@@ -221,10 +221,14 @@ jobs:
       # two, between #4 and here. Re-measure before quoting it.
       #
       # Ratchet it down as the debt is paid, which the TypeScript port does a file
-      # at a time: `master` linted at 46, of which `daglet` was 3. Re-measured
-      # here at 13 -- the port and the render split cleared most of it, and
-      # dropping `varsIgnorePattern` from the TypeScript rule made the remainder
-      # visible rather than exempt.
+      # at a time: `master` linted at 46, of which `daglet` was 3.
+      #
+      # Re-measured here at 13, all of them pre-existing: 8 unused arguments in
+      # `JsSolver.ts` and 5 base-rule warnings the port did not reach. None is
+      # attributable to dropping `varsIgnorePattern` from the TypeScript rule --
+      # that surfaced exactly one hidden dead import, now removed. A second was
+      # already warning and had simply been riding this ceiling's slack, which
+      # is the mode the ratchet closes and the reason to keep the two apart.
       - name: Lint
         run: npm run lint -- --max-warnings 13
 

@@ -22,7 +22,10 @@ export default [
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowConstantExport: true },
+      ],
       // Restoring lint after five unlinted years surfaces ~45 unused imports that
       // predate this config. They warn rather than block, so `lint` reports a true
       // state instead of failing on debt it did not create; the react-hooks rules
@@ -49,12 +52,19 @@ export default [
       // component in the codebase -- so under it an unused import of one is
       // invisible, and `noUnusedLocals` is off too. It earns its keep only for
       // the base rule, which cannot see a binding used in JSX; this one can.
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_' },
+      ],
     },
   }),
 
   {
-    files: ['**/*.test.{js,jsx,ts,tsx}', 'src/setupTests.js', 'src/testutils.js'],
+    files: [
+      '**/*.test.{js,jsx,ts,tsx}',
+      'src/setupTests.js',
+      'src/testutils.js',
+    ],
     languageOptions: { globals: { ...globals.vitest } },
   },
 ];

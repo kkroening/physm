@@ -7,6 +7,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0008](0008.md) | Point the ESLint test-file block at `testutils.ts`, which it now misses | Bug | Open |
 | [0007](0007.md) | Settle whether authoring components should share names with the classes they wrap | RFC | Open |
 | [0006](0006.md) | Let a JSX rig be assembled without mounting a renderer | RFC | Open |
 | [0005](0005.md) | Give JSX siblings their tree order, which effect registration cannot | RFC | Open |
