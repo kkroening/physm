@@ -1,5 +1,4 @@
 import * as mat3 from './../Mat3';
-import * as vec3 from './../Vec3';
 import type BoxDecal from './../BoxDecal';
 import type CircleDecal from './../CircleDecal';
 import type Decal from './../Decal';
@@ -36,19 +35,28 @@ function BoxDecalView({
     mat3.apply(xformMatrix, corner),
   );
 
-  if (decal.solid) {
-    // The fourth corner is the upper-left one, which is where an SVG `rect`
-    // wants its origin.
-    const [x, y] = corners[3] ?? vec3.ORIGIN;
+  const points = corners.map(([x, y]) => `${x},${y}`).join(' ');
 
-    return (
-      <rect
-        x={x}
-        y={y}
-        width={decal.width * scale}
-        height={decal.height * scale}
-      />
-    );
+  if (decal.solid) {
+    // A `polygon` of the same four corners the outlined branch draws, rather
+    // than an axis-aligned `rect` sized `width` by `height`.
+    //
+    // The `rect` needed an origin corner, and took `corners[3]` -- which is the
+    // minimum-`y` corner only after a transform that inverts `y`. `App.jsx`
+    // builds its view as `scaling(scale, -scale)`, so the demo was always in
+    // that case and the bug stayed latent; under the identity the rect landed
+    // two units clear of the box. It also could not express a rotation, so a
+    // solid box with an `angle` rendered square to the axes while the outlined
+    // branch rotated correctly, and `scaleFactor` being `sqrt(|det|)` sized it
+    // wrongly under a non-uniform scale.
+    //
+    // Carrying the corners removes all three: there is no origin to choose, no
+    // axis-aligned assumption, and no separate scale to apply.
+    //
+    // No `fill`, matching the `rect` this replaces -- a solid box has always
+    // painted in the SVG default rather than in its own `color`, which is
+    // inconsistent with the outlined branch and is left alone here.
+    return <polygon points={points} />;
   }
 
   return (

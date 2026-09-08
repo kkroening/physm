@@ -108,12 +108,50 @@ describe('DecalView', () => {
     });
   });
 
-  test('draws a solid box as one rect', () => {
-    const rect = drawn(new BoxDecal({ width: 4, height: 2 }));
+  test('draws a solid box as one polygon of its corners', () => {
+    const polygon = drawn(new BoxDecal({ width: 4, height: 2 }));
 
-    expect(rect.tagName).toBe('rect');
-    expect(attr(rect, 'width')).toBeCloseTo(4, 9);
-    expect(attr(rect, 'height')).toBeCloseTo(2, 9);
+    expect(polygon.tagName).toBe('polygon');
+
+    // The corners themselves, not a width and a height: what is asserted is
+    // where the box *lands*, which is what the `rect` this replaced got wrong.
+    expect(polygon.getAttribute('points')).toBe('-2,-1 2,-1 2,1 -2,1');
+  });
+
+  test('a solid box lands where the box is, under any transform', () => {
+    // `corners[3]` is the minimum-`y` corner only after a `y`-inverting
+    // transform. `App.jsx` builds its view as `scaling(scale, -scale)`, so the
+    // demo has always been in the correct case and this stayed latent.
+    const solid = drawn(new BoxDecal({ width: 4, height: 2 }));
+    const xs = [...solid.querySelectorAll('*'), solid]
+      .flatMap((node) => (node.getAttribute('points') ?? '').split(/[\s,]+/))
+      .filter((value) => value !== '')
+      .map(Number);
+
+    // A centred 4x2 box under the identity spans x in [-2, 2], y in [-1, 1].
+    expect(Math.min(...xs.filter((_, i) => i % 2 === 0))).toBeCloseTo(-2, 9);
+    expect(Math.max(...xs.filter((_, i) => i % 2 === 0))).toBeCloseTo(2, 9);
+    expect(Math.min(...xs.filter((_, i) => i % 2 === 1))).toBeCloseTo(-1, 9);
+    expect(Math.max(...xs.filter((_, i) => i % 2 === 1))).toBeCloseTo(1, 9);
+  });
+
+  test('a solid box respects its angle', () => {
+    // An axis-aligned `rect` of `width` by `height` cannot express a rotation,
+    // so a rotated solid box used to render square to the axes while the
+    // outlined branch -- which draws the corners -- rotated correctly.
+    const solid = drawn(
+      new BoxDecal({ width: 4, height: 2, angle: Math.PI / 2 }),
+    );
+    const numbers = (solid.getAttribute('points') ?? '')
+      .split(/[\s,]+/)
+      .filter((value) => value !== '')
+      .map(Number);
+    const xs = numbers.filter((_, i) => i % 2 === 0);
+    const ys = numbers.filter((_, i) => i % 2 === 1);
+
+    // Turned a quarter turn, the 4-wide side is now the vertical one.
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(2, 6);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(4, 6);
   });
 
   test('draws an outlined box as one line per edge', () => {
