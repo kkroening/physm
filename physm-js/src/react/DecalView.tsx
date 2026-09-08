@@ -38,24 +38,14 @@ function BoxDecalView({
   const points = corners.map(([x, y]) => `${x},${y}`).join(' ');
 
   if (decal.solid) {
-    // A `polygon` of the same four corners the outlined branch draws, rather
-    // than an axis-aligned `rect` sized `width` by `height`.
+    // The same four corners the outlined branch draws. They already carry the
+    // full view transform, so this is exact under rotation, reflection and a
+    // non-uniform scale alike -- none of which an axis-aligned `rect` sized
+    // `width` by `height` times `scaleFactor` can express.
     //
-    // The `rect` needed an origin corner, and took `corners[3]` -- which is the
-    // minimum-`y` corner only after a transform that inverts `y`. `App.jsx`
-    // builds its view as `scaling(scale, -scale)`, so the demo was always in
-    // that case and the bug stayed latent; under the identity the rect landed
-    // two units clear of the box. It also could not express a rotation, so a
-    // solid box with an `angle` rendered square to the axes while the outlined
-    // branch rotated correctly, and `scaleFactor` being `sqrt(|det|)` sized it
-    // wrongly under a non-uniform scale.
-    //
-    // Carrying the corners removes all three: there is no origin to choose, no
-    // axis-aligned assumption, and no separate scale to apply.
-    //
-    // No `fill`, matching the `rect` this replaces -- a solid box has always
-    // painted in the SVG default rather than in its own `color`, which is
-    // inconsistent with the outlined branch and is left alone here.
+    // No `fill`: a solid box paints in the SVG default rather than in its own
+    // `color`, which is inconsistent with the outlined branch and deliberate.
+    // See `docs/issues/0004.md`.
     return <polygon points={points} />;
   }
 

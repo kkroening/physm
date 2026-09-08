@@ -116,23 +116,31 @@ describe('DecalView', () => {
     // The corners themselves, not a width and a height: what is asserted is
     // where the box *lands*, which is what the `rect` this replaced got wrong.
     expect(polygon.getAttribute('points')).toBe('-2,-1 2,-1 2,1 -2,1');
+
+    // No class and no fill: a solid box paints in the SVG default, unlike the
+    // outlined branch, which uses `color`. Deliberate, and asserted so that
+    // reversing it is a failing test rather than a silent change to the
+    // demo's appearance -- see `docs/issues/0004.md`.
+    expect(paintOf(polygon)).toMatchObject({ class: null, fill: null });
   });
 
-  test('a solid box lands where the box is, under any transform', () => {
-    // `corners[3]` is the minimum-`y` corner only after a `y`-inverting
-    // transform. `App.jsx` builds its view as `scaling(scale, -scale)`, so the
-    // demo has always been in the correct case and this stayed latent.
-    const solid = drawn(new BoxDecal({ width: 4, height: 2 }));
-    const xs = [...solid.querySelectorAll('*'), solid]
-      .flatMap((node) => (node.getAttribute('points') ?? '').split(/[\s,]+/))
-      .filter((value) => value !== '')
-      .map(Number);
+  test('a solid box lands where the box is, under a reflected, non-uniform view', () => {
+    // Both halves in one matrix, because they are separate defects.
+    //
+    // `corners[3]` was the minimum-`y` corner only after a `y`-inverting
+    // transform -- which is what `App.jsx`'s `scaling(scale, -scale)` is, so
+    // the demo was always in the correct case and this stayed latent. And
+    // `scaleFactor` is `sqrt(|det|)`, one number for both axes, so a
+    // non-uniform view sized the old `rect` wrongly regardless of placement.
+    //
+    // Under a *uniform* reflection this assertion would have passed against
+    // the old code, which is exactly the latency being described.
+    const polygon = drawn(
+      new BoxDecal({ width: 4, height: 2 }),
+      mat3.scaling(2, -5),
+    );
 
-    // A centred 4x2 box under the identity spans x in [-2, 2], y in [-1, 1].
-    expect(Math.min(...xs.filter((_, i) => i % 2 === 0))).toBeCloseTo(-2, 9);
-    expect(Math.max(...xs.filter((_, i) => i % 2 === 0))).toBeCloseTo(2, 9);
-    expect(Math.min(...xs.filter((_, i) => i % 2 === 1))).toBeCloseTo(-1, 9);
-    expect(Math.max(...xs.filter((_, i) => i % 2 === 1))).toBeCloseTo(1, 9);
+    expect(polygon.getAttribute('points')).toBe('-4,5 4,5 4,-5 -4,-5');
   });
 
   test('a solid box respects its angle', () => {
@@ -152,6 +160,20 @@ describe('DecalView', () => {
     // Turned a quarter turn, the 4-wide side is now the vertical one.
     expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(2, 6);
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(4, 6);
+
+    // Which way it turned, not just by how much. A bounding box is invariant
+    // under the sign flip, and this is the only test in the repo that renders
+    // a box at a non-zero angle -- so without this, dropping the `-` in
+    // `BoxDecal`'s `mat3.rotation(-angle)` (which reads exactly like a stray
+    // minus someone should tidy away, and which both `BoxDecal` and
+    // `mat3.rotationAngle` carry warnings about) would turn the rendered scene
+    // the wrong way with the suite green.
+    //
+    // `rotation(-π/2)` sends `(x, y)` to `(y, -x)`, so the first local corner
+    // `(-2, -1)` lands at `(-1, 2)`; without the negation it would land at
+    // `(1, -2)`.
+    expect(xs[0]).toBeCloseTo(-1, 6);
+    expect(ys[0]).toBeCloseTo(2, 6);
   });
 
   test('draws an outlined box as one line per edge', () => {
