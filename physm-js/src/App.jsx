@@ -37,7 +37,7 @@ const cartResistance = 5;
 const maxCartForce = 8500;
 const cartWidth = 4;
 
-const poleHeight = 8;
+const poleHeight = 1;
 const poleMass = 30;
 const poleBaseOffset = cartWidth / 3;
 
@@ -71,14 +71,18 @@ function getChain(side, rootPosition) {
     .reverse()
     .reduce((childSegment, index) => {
       const first = index === 0;
+
       // A frame's coordinate is its angle relative to its parent. The cart does
       // not rotate, so the first segment's coordinate is just its arc angle;
       // every one after that is the arc's shared turn.
+
       const angle = first ? chainSegmentAngles[0] : chainTurn;
+
       // Mirroring about the cart's centreline sends an *absolute* angle `φ` to
       // `π − φ`, which is the first segment; the relative turns that follow are
       // differences of absolute angles, so for them the mirror is a negation.
       const mirrored = first ? Math.PI - angle : -angle;
+
       return new RotationalFrame({
         id: `chain${side < 0 ? 'L' : 'R'}${index}`,
         initialState: [side < 0 ? angle : mirrored, 0],
@@ -96,6 +100,7 @@ function getChain(side, rootPosition) {
         frames: childSegment ? [childSegment] : [],
         resistance: chainSegmentResistance,
       });
+
     }, null);
 }
 
@@ -110,7 +115,7 @@ const chainTip = [chainSegmentLength, 0];
 // That is the difference between a rig that has to be derived and one that can
 // be dragged around. Nothing here has to be recomputed when the segment count,
 // the sag angle or the pole height changes.
-const poleTips = [-1, 1].map((side) => [side * 5.5, poleHeight]);
+const poleTips = [-1, 1].map((side) => [side * 5.5, -poleHeight]);
 
 const cart = new TrackFrame({
   id: 'cart',
