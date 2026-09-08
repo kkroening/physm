@@ -1,6 +1,5 @@
 import './App.css';
 import 'normalize.css';
-import * as mat3 from './Mat3';
 import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
 import LineDecal from './LineDecal';
@@ -9,6 +8,7 @@ import React from 'react';
 import RotationalFrame from './RotationalFrame';
 import RsSolver from './RsSolver';
 import Scene from './Scene';
+import getViewXformMatrix from './getViewXformMatrix';
 import SceneView from './react/SceneView';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
@@ -16,6 +16,7 @@ import { CoincidenceConstraint } from './Constraint';
 import { required } from './utils';
 import { useEffect } from 'react';
 import { useRef } from 'react';
+import { useLayoutEffect } from 'react';
 import { useState } from 'react';
 import { InvalidStateMapError } from './Solver';
 
@@ -405,28 +406,42 @@ function simulate(
  * The plot is `width: 100%; height: 100%` of a flex item, so its size is the
  * window's, not a constant -- and the view transform has to centre on it. A
  * `ResizeObserver` rather than a `resize` listener because the element also
- * changes size when the surrounding layout does, with no window event.
+ * changes size when the surrounding layout does, with no window event to hear.
  *
- * Starts at zero and is measured on the first commit; `getViewXformMatrix`
- * treats zero as "not measured yet" so the first frame is not drawn at a
- * corner.
+ * `useLayoutEffect`, not `useEffect`, and the first measurement is taken
+ * synchronously rather than waited for. An effect runs *after* the browser
+ * paints, so an observer started there cannot report until the second frame --
+ * which would make the first painted frame a view centred on `(0, 0)`, the
+ * element's own corner, with half the scene clipped away. A layout effect runs
+ * before paint and its `setSize` is flushed before paint, so that frame never
+ * reaches the screen.
+ *
+ * No guard on a null ref: `useMouse` and `useTouch` take this same ref and
+ * dereference it bare, so an unmounted element already fails loudly here. A
+ * guard would turn "not mounted yet" into a permanent zero -- the effect runs
+ * once, since a ref's identity never changes -- which renders as a corner-
+ * centred view rather than as an error.
  */
 function useElementSize(ref) {
   const [size, setSize] = useState([0, 0]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = ref.current;
-    if (!element) {
-      return undefined;
-    }
+    const update = (width, height) =>
+      setSize((current) =>
+        // The *same array* when nothing moved, not an equal one: React skips a
+        // re-render only on `Object.is`, so returning a fresh pair here would
+        // re-render the whole scene on every observer delivery.
+        width === current[0] && height === current[1]
+          ? current
+          : [width, height],
+      );
+
+    update(element.clientWidth, element.clientHeight);
 
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      setSize(([currentWidth, currentHeight]) =>
-        width === currentWidth && height === currentHeight
-          ? [currentWidth, currentHeight]
-          : [width, height],
-      );
+      update(width, height);
     });
     observer.observe(element);
 
@@ -434,25 +449,6 @@ function useElementSize(ref) {
   }, [ref]);
 
   return size;
-}
-
-/**
- * World coordinates to the plot's, centred on the plot.
- *
- * The centre used to be a hardcoded `(300, 300)`, which put the scene outside
- * any viewport shorter than about 600px -- the plot simply rendered blank, with
- * everything drawn below its bottom edge. It is the element's own midpoint now.
- *
- * `-scale` on the `y` axis because the world is `y`-up and SVG is `y`-down.
- */
-function getViewXformMatrix(translation, scale, [width, height]) {
-  return mat3.multiply(
-    mat3.multiply(
-      mat3.translation(width / 2, height / 2),
-      mat3.scaling(scale, -scale),
-    ),
-    mat3.translation(translation[0], translation[1]),
-  );
 }
 
 function createSolver(

@@ -11,7 +11,7 @@ immer.enableMapSet();
 // on the plot's rendered size. A stub rather than a polyfill: nothing under
 // test asserts anything about resizing, and a real implementation would need a
 // layout engine jsdom does not have. Elements therefore stay at zero size,
-// which `getViewXformMatrix` already treats as "not measured yet".
+// which is a case `getViewXformMatrix.test.ts` pins directly.
 globalThis.ResizeObserver ??= class {
   observe() {}
   unobserve() {}
