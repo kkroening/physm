@@ -2,7 +2,6 @@ import * as daglet from './daglet';
 import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import { CONSISTENCY_RELATIVE_TOLERANCE } from './Constraint';
-import { ZERO_STATE } from './State';
 import { SingularMatrixError } from './solveLinearSystem';
 import { factor, fromRows, solveFactored } from './solveLinearSystem';
 import type Constraint from './Constraint';
@@ -135,10 +134,12 @@ export default class Scene {
       throw new Error('Frames should only have one parent'); // TODO: use AssertionError?
     }
     this.frameIdParentMap = new Map(
-      [...frameIdParentsMap].map(([frameId, parents]): [FrameId, FrameId | null] => [
-        frameId,
-        parents.size ? ([...parents][0]?.id ?? null) : null,
-      ]),
+      [...frameIdParentsMap].map(
+        ([frameId, parents]): [FrameId, FrameId | null] => [
+          frameId,
+          parents.size ? ([...parents][0]?.id ?? null) : null,
+        ],
+      ),
     );
     this.frameIdPathMap = daglet.transformNodes(this.sortedFrames, {
       getNodeParents: (frame: Frame) => [
@@ -146,7 +147,9 @@ export default class Scene {
       ],
       getNodeKey: getFrameId,
       visitNode: (frame: Frame, parentPaths: readonly FrameId[][]) =>
-        parentPaths.length ? [...at(parentPaths, 0, 'parent path'), frame.id] : [frame.id],
+        parentPaths.length
+          ? [...at(parentPaths, 0, 'parent path'), frame.id]
+          : [frame.id],
     });
     // ...only now, with the derived tables built, is there a pose to solve
     // constraints against. One pose for the whole list: `addConstraint` moves
@@ -246,10 +249,7 @@ export default class Scene {
     options?: PoseQueryOptions,
   ): Separation;
 
-  getSeparation(
-    frameId1: FrameId,
-    ...rest: unknown[]
-  ): Separation {
+  getSeparation(frameId1: FrameId, ...rest: unknown[]): Separation {
     /**
      * The gap between two frame-relative positions: `{ vector, distance }`.
      *
@@ -268,7 +268,12 @@ export default class Scene {
     const twoIds = typeof rest[0] === 'string';
     const [position1, frameId2, position2, options] = twoIds
       ? [vec3.ORIGIN, rest[0] as FrameId, vec3.ORIGIN, rest[1]]
-      : [rest[0] as PositionLike, rest[1] as FrameId, rest[2] ?? vec3.ORIGIN, rest[3]];
+      : [
+          rest[0] as PositionLike,
+          rest[1] as FrameId,
+          rest[2] ?? vec3.ORIGIN,
+          rest[3],
+        ];
     const { stateMap = null, posMatMap = null } =
       (options as PoseQueryOptions | undefined) ?? {};
 
@@ -293,7 +298,10 @@ export default class Scene {
 
   addConstraint(
     constraint: Constraint,
-    { allowInitialViolation = false, posMatMap = null }: AddConstraintOptions = {},
+    {
+      allowInitialViolation = false,
+      posMatMap = null,
+    }: AddConstraintOptions = {},
   ): this {
     /**
      * Add a loop-closure constraint, mirroring `Scene::add_constraint` in
@@ -703,7 +711,10 @@ export default class Scene {
     return new Map(
       this.sortedFrames.map((frame, index): [FrameId, State] => [
         frame.id,
-        [mapGet(stateMap, frame.id, 'state')[0], at(projected, index, 'projected velocity')],
+        [
+          mapGet(stateMap, frame.id, 'state')[0],
+          at(projected, index, 'projected velocity'),
+        ],
       ]),
     );
   }

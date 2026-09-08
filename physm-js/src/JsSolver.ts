@@ -51,7 +51,10 @@ export default class JsSolver extends Solver {
   readonly rungeKutta: boolean;
   stateMap: StateMap;
 
-  constructor(scene: Scene, { rungeKutta = true }: { rungeKutta?: boolean } = {}) {
+  constructor(
+    scene: Scene,
+    { rungeKutta = true }: { rungeKutta?: boolean } = {},
+  ) {
     super(scene);
     this.rungeKutta = rungeKutta;
     this.stateMap = scene.getInitialStateMap();
@@ -122,7 +125,10 @@ export default class JsSolver extends Solver {
     for (const frame of this.scene.sortedFrames) {
       const [, qd] = mapGet(stateMap, frame.id, 'state');
       const parentId = this.scene.frameIdParentMap.get(frame.id);
-      const globalVelMat = mat3.scale(mapGet(velMatMap, frame.id, 'velocity matrix'), qd);
+      const globalVelMat = mat3.scale(
+        mapGet(velMatMap, frame.id, 'velocity matrix'),
+        qd,
+      );
       const velSumMat = parentId
         ? mat3.add(globalVelMat, mapGet(velSumMatMap, parentId, 'velocity sum'))
         : globalVelMat;
@@ -143,12 +149,26 @@ export default class JsSolver extends Solver {
       const [, qd] = mapGet(stateMap, frame.id, 'state');
       const parentId = this.scene.frameIdParentMap.get(frame.id);
       const accelSumMat = (() => {
-        const globalAccelMat = mat3.scale(mapGet(accelMatMap, frame.id, 'acceleration matrix'), qd * qd);
+        const globalAccelMat = mat3.scale(
+          mapGet(accelMatMap, frame.id, 'acceleration matrix'),
+          qd * qd,
+        );
         let accelSumMat;
         if (parentId) {
-          const parentAccelSumMat = mapGet(accelSumMatMap, parentId, 'acceleration sum');
-          const parentVelSumMat = mapGet(velSumMatMap, parentId, 'velocity sum');
-          const globalVelMat = mat3.scale(mapGet(velMatMap, frame.id, 'velocity matrix'), 2 * qd);
+          const parentAccelSumMat = mapGet(
+            accelSumMatMap,
+            parentId,
+            'acceleration sum',
+          );
+          const parentVelSumMat = mapGet(
+            velSumMatMap,
+            parentId,
+            'velocity sum',
+          );
+          const globalVelMat = mat3.scale(
+            mapGet(velMatMap, frame.id, 'velocity matrix'),
+            2 * qd,
+          );
           const crossAccelMat = mat3.multiply(parentVelSumMat, globalVelMat);
           accelSumMat = mat3.add(
             mat3.add(globalAccelMat, crossAccelMat),
@@ -168,17 +188,11 @@ export default class JsSolver extends Solver {
     return this.scene.getWeightPosMap(posMatMap);
   }
 
-  _isFrameDescendent(
-    descendentFrame: Frame,
-    ancestorFrame: Frame,
-  ) {
+  _isFrameDescendent(descendentFrame: Frame, ancestorFrame: Frame) {
     return this.scene.isFrameDescendent(descendentFrame.id, ancestorFrame.id);
   }
 
-  _getDescendentFrame(
-    frame1: Frame,
-    frame2: Frame,
-  ) {
+  _getDescendentFrame(frame1: Frame, frame2: Frame) {
     let descendent;
     if (this._isFrameDescendent(frame1, frame2)) {
       descendent = frame1;
@@ -228,8 +242,16 @@ export default class JsSolver extends Solver {
     let result = 0;
     const baseVelMat = mapGet(velMatMap, baseFrame.id, 'velocity matrix');
     for (const childFrame of this._getDescendentFrames(baseFrame)) {
-      const childVelSumMat = mapGet(velSumMatMap, childFrame.id, 'velocity sum');
-      const childAccelSumMat = mapGet(accelSumMatMap, childFrame.id, 'acceleration sum');
+      const childVelSumMat = mapGet(
+        velSumMatMap,
+        childFrame.id,
+        'velocity sum',
+      );
+      const childAccelSumMat = mapGet(
+        accelSumMatMap,
+        childFrame.id,
+        'acceleration sum',
+      );
       for (
         let weightIndex = 0;
         weightIndex < childFrame.weights.length;
@@ -391,21 +413,19 @@ export default class JsSolver extends Solver {
         massMatrix,
         forceVector,
         {
-        sortedFrames: this.scene.sortedFrames,
-        frameIdPathMap: this.scene.frameIdPathMap,
-        posMatMap,
-        velMatMap,
-        velSumMatMap,
-        accelSumMatMap,
-      });
+          sortedFrames: this.scene.sortedFrames,
+          frameIdPathMap: this.scene.frameIdPathMap,
+          posMatMap,
+          velMatMap,
+          velSumMatMap,
+          accelSumMatMap,
+        },
+      );
     }
     return [massMatrix, forceVector];
   }
 
-  _solve(
-    stateMap: StateMap,
-    externalForceMap: ExternalForceMap,
-  ) {
+  _solve(stateMap: StateMap, externalForceMap: ExternalForceMap) {
     const [rows, vector] = this._getSystemOfEquations(
       stateMap,
       externalForceMap,
@@ -427,8 +447,7 @@ export default class JsSolver extends Solver {
     { inPlace = false }: { inPlace?: boolean } = {},
   ): StateMap {
     const newStateMap: StateMap = inPlace ? stateMap : new Map();
-    const velocities =
-      deltaQdArray ?? [...stateMap].map(([, [, qd]]) => qd);
+    const velocities = deltaQdArray ?? [...stateMap].map(([, [, qd]]) => qd);
 
     this.scene.sortedFrames.forEach((frame, index) => {
       const [q, qd] = mapGet(stateMap, frame.id, 'state');
@@ -481,8 +500,7 @@ export default class JsSolver extends Solver {
     );
     const qdds = this.scene.sortedFrames.map(
       (unused, i) =>
-        (at(qdds0, i) + 2 * at(qdds1, i) + 2 * at(qdds2, i) + at(qdds3, i)) /
-        6,
+        (at(qdds0, i) + 2 * at(qdds1, i) + 2 * at(qdds2, i) + at(qdds3, i)) / 6,
     );
 
     return this._applyDeltas(stateMap0, deltaTime, qdds, qds);
@@ -493,9 +511,8 @@ export default class JsSolver extends Solver {
     tickCount = 1,
     externalForceMap: ExternalForceMap = null,
   ): void {
-    const doTick = (this.rungeKutta
-      ? this._tickRungeKutta
-      : this._tickSimple
+    const doTick = (
+      this.rungeKutta ? this._tickRungeKutta : this._tickSimple
     ).bind(this);
     for (let i = 0; i < tickCount; i++) {
       this.stateMap = doTick(this.stateMap, deltaTime, externalForceMap);

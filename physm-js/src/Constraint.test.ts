@@ -438,7 +438,9 @@ describe('Constraint', () => {
       // evaluating a constraint at a trial configuration cannot silently read
       // velocities belonging to some other configuration.
       const solver = getConstrainedSolver({ kind });
-      const ctx = solver._getConfigKinematics(solver.scene.getInitialStateMap());
+      const ctx = solver._getConfigKinematics(
+        solver.scene.getInitialStateMap(),
+      );
       expect(() => solver.scene.constraints[0].bias(ctx)).toThrow(
         /trial configuration/,
       );
@@ -539,7 +541,6 @@ describe('Constraint', () => {
 
     // ...while the prismatic ancestor above it still cancels exactly.
     columnOf('cart').forEach((entry) => expect(entry).toBeCloseTo(0, 6));
-
   });
 
   test('an unconstrained scene still assembles the plain n-by-n system', () => {
@@ -574,7 +575,10 @@ describe('Constraint', () => {
 describe('Scene build', () => {
   // The rig the query API exists for: two poles on a cart, roped tip to tip.
   // Nothing here computes the geometry -- the scene is asked.
-  function getRopeScene({ spacing = POLE_SPACING, poleAngle = POLE_ANGLE } = {}) {
+  function getRopeScene({
+    spacing = POLE_SPACING,
+    poleAngle = POLE_ANGLE,
+  } = {}) {
     return new Scene({
       frames: [
         new TrackFrame({
@@ -627,7 +631,12 @@ describe('Scene build', () => {
 
   test('getSeparation measures the gap a DistanceConstraint would close on', () => {
     const scene = getRopeScene();
-    const { vector, distance } = scene.getSeparation('pole1', tip, 'pole2', tip);
+    const { vector, distance } = scene.getSeparation(
+      'pole1',
+      tip,
+      'pole2',
+      tip,
+    );
     expect(distance).toBeCloseTo(TIP_GAP, 4);
     // Mirrored poles put the tips at the same height, so the gap is horizontal.
     expect(vector[1]).toBeCloseTo(0, 4);
@@ -954,22 +963,23 @@ describe('Scene build', () => {
           new TrackFrame({
             id: 'cart',
             weights: [new Weight(20)],
-            frames: [-1, 1].map((side) =>
-              new RotationalFrame({
-                id: side < 0 ? 'pole1' : 'pole2',
-                initialState: [
-                  side < 0 ? poleAngle : Math.PI - poleAngle,
-                  // Non-zero, and not mirrored, so it violates the constraint:
-                  // with every velocity at zero the residual is identically
-                  // zero, the early return fires, and the grid would sweep the
-                  // position half only.
-                  side < 0 ? 0.7 : 0,
-                ],
-                position: [side < 0 ? 0 : spacing * scale, 0],
-                weights: [
-                  new Weight(4, { position: [POLE_LENGTH * scale, 0] }),
-                ],
-              }),
+            frames: [-1, 1].map(
+              (side) =>
+                new RotationalFrame({
+                  id: side < 0 ? 'pole1' : 'pole2',
+                  initialState: [
+                    side < 0 ? poleAngle : Math.PI - poleAngle,
+                    // Non-zero, and not mirrored, so it violates the constraint:
+                    // with every velocity at zero the residual is identically
+                    // zero, the early return fires, and the grid would sweep the
+                    // position half only.
+                    side < 0 ? 0.7 : 0,
+                  ],
+                  position: [side < 0 ? 0 : spacing * scale, 0],
+                  weights: [
+                    new Weight(4, { position: [POLE_LENGTH * scale, 0] }),
+                  ],
+                }),
             ),
           }),
         ],

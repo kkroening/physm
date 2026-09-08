@@ -32,7 +32,9 @@ describe('TrackFrame', () => {
       1 / (2 * h),
     );
 
-    expect(mat3.equals(frame.getLocalVelMatrix(0), difference, 1e-7)).toBe(true);
+    expect(mat3.equals(frame.getLocalVelMatrix(0), difference, 1e-7)).toBe(
+      true,
+    );
     expect(frame.getLocalVelMatrix(0)).toEqual(frame.getLocalVelMatrix(42));
   });
 

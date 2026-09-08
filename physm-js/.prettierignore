@@ -1,0 +1,8 @@
+# Generated or vendored.
+dist/
+package-lock.json
+
+# Markdown is hand-written prose, and Prettier has opinions about it that this
+# repo has not taken -- it rewrites `*emphasis*` to `_emphasis_` throughout.
+# The docs are formatted by their authors.
+*.md

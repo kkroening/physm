@@ -119,9 +119,9 @@ describe('Mat3', () => {
   test('invertRigid agrees with the general inverse on rigid transforms', () => {
     const rigid = mat3.multiply(mat3.rotation(1.3), mat3.translation(4, -7));
 
-    expect(mat3.equals(mat3.invertRigid(rigid), mat3.invert(rigid), 1e-12)).toBe(
-      true,
-    );
+    expect(
+      mat3.equals(mat3.invertRigid(rigid), mat3.invert(rigid), 1e-12),
+    ).toBe(true);
     expect(
       mat3.equals(mat3.multiply(rigid, mat3.invertRigid(rigid)), mat3.IDENTITY),
     ).toBe(true);

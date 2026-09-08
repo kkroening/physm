@@ -6,6 +6,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "eslint .",
     "prebuild": "npm run wasm",
     "predev": "npm run wasm",
@@ -13,8 +15,8 @@
     "preview": "vite preview",
     "setup": "npm run wasm && npm run wasm:node && npm install",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test:watch": "vitest",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "wasm": "wasm-pack build --target bundler ../physm-rs",
     "wasm:node": "wasm-pack build --target nodejs --out-dir nodepkg ../physm-rs"
   },
@@ -39,6 +41,7 @@
     "eslint-plugin-react-refresh": "^0.4.16",
     "globals": "^15.14.0",
     "jsdom": "^26.0.0",
+    "prettier": "^3.9.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",
     "vite": "^7.0.0",

@@ -22,9 +22,7 @@ describe('Scene queries', () => {
         new TrackFrame({
           id: 'root',
           initialState: [7, 0],
-          frames: [
-            new RotationalFrame({ id: 'child', position: [3, 4] }),
-          ],
+          frames: [new RotationalFrame({ id: 'child', position: [3, 4] })],
         }),
       ],
     });
@@ -206,7 +204,10 @@ describe('Scene class', () => {
   });
 
   test('.getInitialStateMap method', () => {
-    const generateState = () => [faker.number.int(99999), faker.number.int(99999)];
+    const generateState = () => [
+      faker.number.int(99999),
+      faker.number.int(99999),
+    ];
     const frame1 = new Frame({
       id: 'frame1',
       initialState: generateState(),

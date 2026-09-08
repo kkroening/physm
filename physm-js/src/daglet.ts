@@ -40,7 +40,9 @@ export interface TraversalOptions<Node, Key> {
  * nodes shaped that way -- hence the cast. Callers whose nodes are shaped
  * otherwise pass their own accessor, and then this is never reached.
  */
-export function defaultGetNodeParents<Node>(node: Node): readonly Node[] | null {
+export function defaultGetNodeParents<Node>(
+  node: Node,
+): readonly Node[] | null {
   return (node as { parents?: readonly Node[] | null }).parents ?? null;
 }
 
@@ -153,21 +155,31 @@ export function getChildMap<Node, Key = Node>(
   return childMap;
 }
 
-export interface TransformOptions<Node, Key, NodeValue, EdgeValue>
-  extends TraversalOptions<Node, Key> {
+export interface TransformOptions<
+  Node,
+  Key,
+  NodeValue,
+  EdgeValue,
+> extends TraversalOptions<Node, Key> {
   visitNode?: VisitNode<Node, NodeValue, EdgeValue> | undefined;
   visitEdge?: VisitEdge<Node, NodeValue, EdgeValue> | undefined;
 }
 
 /** `transformNodes` folds nodes only, so it does not accept an edge visitor. */
-export interface TransformNodesOptions<Node, Key, NodeValue>
-  extends TraversalOptions<Node, Key> {
+export interface TransformNodesOptions<
+  Node,
+  Key,
+  NodeValue,
+> extends TraversalOptions<Node, Key> {
   visitNode?: VisitNode<Node, NodeValue, NodeValue> | undefined;
 }
 
 /** `transformEdges` folds edges only, so it does not accept a node visitor. */
-export interface TransformEdgesOptions<Node, Key, EdgeValue>
-  extends TraversalOptions<Node, Key> {
+export interface TransformEdgesOptions<
+  Node,
+  Key,
+  EdgeValue,
+> extends TraversalOptions<Node, Key> {
   visitEdge?: VisitEdge<Node, unknown, EdgeValue> | undefined;
 }
 
@@ -177,7 +189,12 @@ export interface TransformEdgesOptions<Node, Key, EdgeValue>
  * Because the traversal is topological, every parent's value is already computed
  * by the time a node is visited, which is what lets `visitNode` build on them.
  */
-export function transform<Node, Key = Node, NodeValue = unknown, EdgeValue = unknown>(
+export function transform<
+  Node,
+  Key = Node,
+  NodeValue = unknown,
+  EdgeValue = unknown,
+>(
   nodes: Iterable<Node>,
   {
     getNodeParents = defaultGetNodeParents,

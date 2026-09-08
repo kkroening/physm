@@ -73,9 +73,14 @@ describe('JsSolver', () => {
       ['ball', 'cart', 'pendulum1', 'pendulum2'].sort(),
     );
 
-    expect(mat3.equals(posMatMap.get('cart')!, composePoses('cart'))).toBe(true);
+    expect(mat3.equals(posMatMap.get('cart')!, composePoses('cart'))).toBe(
+      true,
+    );
     expect(
-      mat3.equals(posMatMap.get('pendulum1')!, composePoses('cart', 'pendulum1')),
+      mat3.equals(
+        posMatMap.get('pendulum1')!,
+        composePoses('cart', 'pendulum1'),
+      ),
     ).toBe(true);
     expect(
       mat3.equals(
@@ -85,7 +90,9 @@ describe('JsSolver', () => {
     ).toBe(true);
 
     // `ball` is a root, so its pose is its own transform and nothing else.
-    expect(mat3.equals(posMatMap.get('ball')!, composePoses('ball'))).toBe(true);
+    expect(mat3.equals(posMatMap.get('ball')!, composePoses('ball'))).toBe(
+      true,
+    );
   });
 
   test('the inverse pose undoes the pose', () => {
@@ -111,7 +118,9 @@ describe('JsSolver', () => {
         invPosMatMap.get(id)!,
       );
 
-    expect(mat3.equals(velMatMap.get('cart')!, expected('cart', []))).toBe(true);
+    expect(mat3.equals(velMatMap.get('cart')!, expected('cart', []))).toBe(
+      true,
+    );
     expect(
       mat3.equals(velMatMap.get('pendulum1')!, expected('pendulum1', ['cart'])),
     ).toBe(true);

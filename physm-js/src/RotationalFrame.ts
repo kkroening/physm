@@ -1,4 +1,3 @@
-import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import Frame from './Frame';
 import type { FrameOptions } from './Frame';

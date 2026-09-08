@@ -96,7 +96,9 @@ function setAt(
 function entry(values: Float64Array, index: number): number {
   const value = values[index];
   if (value === undefined) {
-    throw new RangeError(`${index} is outside a ${values.length}-element array`);
+    throw new RangeError(
+      `${index} is outside a ${values.length}-element array`,
+    );
   }
 
   return value;
