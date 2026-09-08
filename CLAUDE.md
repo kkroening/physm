@@ -67,8 +67,8 @@ delivers that.
 
 ### The demo scene's numbers are round on purpose
 
-`App.jsx` places its rope anchors at round numbers, where the two chains do
-**not** meet. That is the demonstration: a `CoincidenceConstraint` solves for its
+`CartAndRope.tsx` places its rope anchors at round numbers, where the two chains
+do **not** meet. That is the demonstration: a `CoincidenceConstraint` solves for its
 second attachment point, so arbitrary geometry builds. Deriving the positions so
 the chains meet exactly would remove the thing the scene exists to show — and is
 why the numbers there are worth leaving alone, whatever they happen to be.

@@ -1,18 +1,11 @@
 import './App.css';
 import 'normalize.css';
-import BoxDecal from './BoxDecal';
-import CircleDecal from './CircleDecal';
-import LineDecal from './LineDecal';
 import { produce as producer } from 'immer';
 import React from 'react';
-import RotationalFrame from './RotationalFrame';
+import CartAndRope from './CartAndRope';
 import RsSolver from './RsSolver';
-import Scene from './Scene';
+import Scene from './react/Scene';
 import getViewXformMatrix from './getViewXformMatrix';
-import SceneView from './react/SceneView';
-import TrackFrame from './TrackFrame';
-import Weight from './Weight';
-import { CoincidenceConstraint } from './Constraint';
 import { required } from './utils';
 import { useEffect } from 'react';
 import { useRef } from 'react';
@@ -28,142 +21,21 @@ import { InvalidStateMapError } from './Solver';
 // coincidence constraint, adding two rows to the saddle-point system the solver
 // assembles. See `docs/constraints.md`.
 //
-// The poles are rigid parts of the cart rather than jointed frames, because a
-// pole hinged at its base is an inverted pendulum: whatever it starts at, it
-// falls, and the rig is on the ground within seconds. Joint resistance only
-// slows that down -- nothing in the model restores a frame toward an angle.
-const cartMass = 250;
-const cartResistance = 5;
+// How hard the arrow keys, a drag or a swipe push the cart. A control-input
+// scale rather than scene geometry, which is why it stays here while the rig
+// itself lives in `CartAndRope`.
 const maxCartForce = 8500;
-const cartWidth = 4;
 
-const poleHeight = 1;
-const poleMass = 30;
-const poleBaseOffset = cartWidth / 3;
-
-const chainSegmentCount = 5;
-const chainSegmentLength = 1.4;
-const chainSegmentMass = 2;
-const chainSegmentDrag = 6;
-const chainSegmentResistance = 1.5;
-
-// Each chain starts on a circular arc -- every segment turns by the same amount
-// -- running from steeply-downward at the pole to horizontal where the two meet.
-// The arc keeps the initial shape exact rather than eyeballed, and it sags
-// rather than pulling straight: a taut chain is a kinematic singularity, where
-// every segment is collinear and the constraint Jacobian loses rank.
-const chainSweep = 1.15;
-const chainTurn = chainSweep / (chainSegmentCount - 1);
-const chainSegmentAngles = Array.from(
-  { length: chainSegmentCount },
-  (unused, index) => -chainSweep + index * chainTurn,
-);
+// The frame the controls push. Authored in `CartAndRope`, and the one id in the
+// rig that is written rather than generated -- precisely because something
+// outside the scene has to name it.
+const CART_FRAME_ID = 'cart';
 
 const initialScale = 12;
 const MIN_ANIMATION_FPS = 5;
 const TARGET_ANIMATION_FPS = 60;
 const TIME_SCALE = 1.5;
 const TARGET_PHYSICS_FPS = 400 * TIME_SCALE;
-
-// Built leaf-first, so each segment can be handed to its parent as a child.
-function getChain(side, rootPosition) {
-  return Array.from({ length: chainSegmentCount }, (unused, index) => index)
-    .reverse()
-    .reduce((childSegment, index) => {
-      const first = index === 0;
-
-      // A frame's coordinate is its angle relative to its parent. The cart does
-      // not rotate, so the first segment's coordinate is just its arc angle;
-      // every one after that is the arc's shared turn.
-
-      const angle = first ? chainSegmentAngles[0] : chainTurn;
-
-      // Mirroring about the cart's centreline sends an *absolute* angle `φ` to
-      // `π − φ`, which is the first segment; the relative turns that follow are
-      // differences of absolute angles, so for them the mirror is a negation.
-      const mirrored = first ? Math.PI - angle : -angle;
-
-      return new RotationalFrame({
-        id: `chain${side < 0 ? 'L' : 'R'}${index}`,
-        initialState: [side < 0 ? angle : mirrored, 0],
-        position: first ? rootPosition : [chainSegmentLength, 0],
-        decals: [
-          new LineDecal({ endPos: [chainSegmentLength, 0], lineWidth: 0.18 }),
-          new CircleDecal({ position: [chainSegmentLength, 0], radius: 0.16 }),
-        ],
-        weights: [
-          new Weight(chainSegmentMass, {
-            position: [chainSegmentLength, 0],
-            drag: chainSegmentDrag,
-          }),
-        ],
-        frames: childSegment ? [childSegment] : [],
-        resistance: chainSegmentResistance,
-      });
-    }, null);
-}
-
-const chainTipId = (side) =>
-  `chain${side < 0 ? 'L' : 'R'}${chainSegmentCount - 1}`;
-const chainTip = [chainSegmentLength, 0];
-
-// Round numbers, chosen to look right. They are *not* required to make the two
-// chains meet, and they don't: at this spacing the left chain's end lands some
-// way from the right one's. The constraint solves for where on the right chain
-// the left one attaches, so the loop closes exactly whatever these are set to.
-//
-// That is the difference between a rig that has to be derived and one that can
-// be dragged around. Nothing here has to be recomputed when the segment count,
-// the sag angle or the pole height changes.
-const poleTips = [-1, 1].map((side) => [side * 5, -poleHeight]);
-
-const cart = new TrackFrame({
-  id: 'cart',
-  decals: [
-    new BoxDecal({
-      width: cartWidth,
-      height: cartWidth / 1.618,
-      lineWidth: 0.2,
-    }),
-    ...poleTips.map(
-      (tip, index) =>
-        new LineDecal({
-          startPos: [index === 0 ? -poleBaseOffset : poleBaseOffset, 0],
-          endPos: tip,
-          lineWidth: 0.35,
-        }),
-    ),
-    ...poleTips.map((tip) => new CircleDecal({ position: tip, radius: 0.3 })),
-  ],
-  frames: [getChain(-1, poleTips[0]), getChain(1, poleTips[1])],
-  initialState: [0, 0],
-  weights: [
-    new Weight(cartMass),
-    ...poleTips.map((tip) => new Weight(poleMass, { position: tip })),
-  ],
-  resistance: cartResistance,
-});
-
-const scene = new Scene({
-  frames: [cart],
-  decals: [
-    new LineDecal({
-      startPos: [-300, 0],
-      endPos: [300, 0],
-      color: 'gray',
-      lineWidth: 0.1,
-    }),
-  ],
-}).addConstraint(
-  // Only one attachment point is named. Where the *left* chain's end sits on
-  // the right chain is solved for out of the pose, so there is no geometry to
-  // get right and nothing to reject.
-  new CoincidenceConstraint({
-    frame1: chainTipId(-1),
-    frame2: chainTipId(1),
-    position1: chainTip,
-  }),
-);
 
 function useKeyboard(callback = null) {
   const [pressedKeys, setPressedKeys] = useState(new Set());
@@ -361,7 +233,7 @@ function getExternalForceMap(
   if (Math.abs(cartForce) > maxCartForce) {
     cartForce = Math.sign(cartForce) * maxCartForce;
   }
-  return new Map([[cart.id, cartForce]]);
+  return new Map([[CART_FRAME_ID, cartForce]]);
 }
 
 function simulate(
@@ -487,20 +359,30 @@ function App({ rsWasmModule }) {
   const pressedKeys = useKeyboard();
   const clickLocationDelta = useMouse(svgRef);
   const touchLocationDelta = useTouch(svgRef);
-  const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
+  // Both arrive on the second render: `<Scene>` assembles from what its
+  // children registered, so there is no scene during the first one. `null`
+  // until then, which `<Scene>` reads as "draw the initial pose".
+  const [scene, setScene] = useState(null);
+  const [stateMap, setStateMap] = useState(null);
   const plotSize = useElementSize(svgRef);
   const viewXformMatrix = getViewXformMatrix(translation, scale, plotSize);
   const solver = useRef(null);
 
   useEffect(() => {
+    if (!scene) {
+      return undefined;
+    }
+
     solver.current = createSolver(scene, rsWasmModule);
+    setStateMap(scene.getInitialStateMap());
+
     // React 18+ StrictMode mounts, unmounts and remounts in development, so
     // without this the Rust-side SolverContext from the first mount is orphaned.
     return () => {
       solver.current?.dispose();
       solver.current = null;
     };
-  }, [rsWasmModule]);
+  }, [scene, rsWasmModule]);
 
   useAnimationFrame((deltaTime) => {
     handleViewControls({
@@ -511,7 +393,7 @@ function App({ rsWasmModule }) {
       setTranslation,
       translation,
     });
-    if (!paused) {
+    if (!paused && solver.current) {
       const externalForceMap = getExternalForceMap(
         pressedKeys,
         clickLocationDelta,
@@ -546,11 +428,13 @@ function App({ rsWasmModule }) {
         }
         <div className="plot__main">
           <svg className="plot__svg" ref={svgRef}>
-            <SceneView
-              scene={scene}
-              stateMap={stateMap}
+            <Scene
+              onSceneChange={setScene}
+              stateMap={stateMap ?? undefined}
               xformMatrix={viewXformMatrix}
-            />
+            >
+              <CartAndRope />
+            </Scene>
           </svg>
         </div>
         <button onClick={togglePaused}>{paused ? 'Unpause' : 'Pause'}</button>
