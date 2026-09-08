@@ -1,9 +1,8 @@
 import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import Decal from './Decal';
-import type { DecalRenderOptions } from './Decal';
+import type { DecalKind } from './Decal';
 import type { Mat3 } from './Mat3';
-import type { ReactElement, SVGProps } from 'react';
 import type { Vec3 } from './Vec3';
 
 /** The four corners of a unit square, centred on the origin. */
@@ -40,6 +39,7 @@ export interface BoxDecalOptions {
  * render carries them through the view transform.
  */
 export default class BoxDecal extends Decal {
+  override readonly kind = 'box' as const satisfies DecalKind;
   readonly width: number;
   readonly height: number;
   readonly position: Vec3;
@@ -48,7 +48,17 @@ export default class BoxDecal extends Decal {
   readonly solid: boolean;
   readonly lineWidth: number;
   readonly color: string;
-  private readonly corners: readonly Vec3[];
+  /**
+   * The four corners in the decal's own frame, computed once at construction.
+   *
+   * Public because drawing an outlined box means transforming these, and the
+   * renderer lives outside this class now. Deriving them from `width`,
+   * `height` and `angle` at render time instead would agree only for a
+   * transform that is a rotation and a uniform scale -- a reflected view
+   * transform composes into `angle` wrongly, while carrying the corners
+   * through is exact for any transform at all.
+   */
+  readonly corners: readonly Vec3[];
 
   constructor({
     width = 1,
@@ -96,52 +106,5 @@ export default class BoxDecal extends Decal {
       lineWidth: this.lineWidth * scale,
       color: this.color,
     });
-  }
-
-  override getDomElement(
-    xformMatrix: Mat3,
-    { key }: DecalRenderOptions = {},
-  ): ReactElement<SVGProps<SVGElement>> {
-    const scale = mat3.scaleFactor(xformMatrix);
-    const corners = this.corners.map((corner) =>
-      mat3.apply(xformMatrix, corner),
-    );
-
-    if (this.solid) {
-      // The fourth corner is the upper-left one, which is where an SVG `rect`
-      // wants its origin.
-      const [x, y] = corners[3] ?? vec3.ORIGIN;
-
-      return (
-        <rect
-          x={x}
-          y={y}
-          width={this.width * scale}
-          height={this.height * scale}
-          key={key}
-        />
-      );
-    }
-
-    return (
-      <g key={key}>
-        {corners.map((from, index) => {
-          const to = corners[(index + 1) % corners.length] ?? from;
-
-          return (
-            <line
-              className="plot__line"
-              x1={from[0]}
-              y1={from[1]}
-              x2={to[0]}
-              y2={to[1]}
-              strokeWidth={this.lineWidth * scale}
-              stroke={this.color}
-              key={index}
-            />
-          );
-        })}
-      </g>
-    );
   }
 }

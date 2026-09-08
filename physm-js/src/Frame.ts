@@ -1,7 +1,6 @@
 import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import type { Mat3 } from './Mat3';
-import type { ReactElement, SVGProps } from 'react';
 import type { State } from './State';
 import type { Vec3 } from './Vec3';
 import Decal from './Decal';
@@ -85,26 +84,6 @@ export default class Frame {
   /** `∂²L_i/∂q²`. Local, and so *not* the `𝒜_i = V_i²` of §4. */
   getLocalAccelMatrix(_q: number): Mat3 {
     return mat3.ZERO;
-  }
-
-  getDomElement(
-    stateMap: StateMap,
-    xformMatrix: Mat3,
-    { key }: { key?: string | undefined } = {},
-  ): ReactElement<SVGProps<SVGElement>> {
-    const [q] = stateMap.get(this.id) ?? this.initialState;
-    const childXform = mat3.multiply(xformMatrix, this.getLocalPosMatrix(q));
-
-    return (
-      <g className="frame" key={key}>
-        {this.decals.map((decal, index) =>
-          decal.getDomElement(childXform, { key: `decal${index}` }),
-        )}
-        {this.frames.map((frame, index) =>
-          frame.getDomElement(stateMap, childXform, { key: `frame${index}` }),
-        )}
-      </g>
-    );
   }
 
   toJsonObj({ includeDecals = false }: FrameJsonOptions = {}): Record<

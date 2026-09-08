@@ -12,7 +12,6 @@ import type { ConstraintCtx } from './Constraint';
 import type { FrameId, StateMap } from './Frame';
 import type { Mat3 } from './Mat3';
 import type { Vec3 } from './Vec3';
-import type { ReactElement, SVGProps } from 'react';
 import type { State } from './State';
 
 /**
@@ -371,23 +370,6 @@ export default class Scene {
     this.constraints.push(constraint);
     constraint.allowInitialViolation = allowInitialViolation;
     return this;
-  }
-
-  getDomElement(
-    stateMap: StateMap,
-    xformMatrix: Mat3 = mat3.IDENTITY,
-    { key }: { key?: string } = {},
-  ): ReactElement<SVGProps<SVGElement>> {
-    return (
-      <g className="scene" key={key}>
-        {this.decals.map((decal, index) =>
-          decal.getDomElement(xformMatrix, { key: 'decal' + index }),
-        )}
-        {this.frames.map((frame, index) =>
-          frame.getDomElement(stateMap, xformMatrix, { key: 'frame' + index }),
-        )}
-      </g>
-    );
   }
 
   getInvPosMatrixMap(posMatMap: Map<FrameId, Mat3>): Map<FrameId, Mat3> {

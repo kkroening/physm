@@ -1,12 +1,6 @@
-import * as mat3 from './Mat3';
-import CircleDecal from './CircleDecal';
 import { faker } from '@faker-js/faker';
 import Frame from './Frame';
-import React from 'react';
 import RotationalFrame from './RotationalFrame';
-// `react-test-renderer` ships no types and `@types/react-test-renderer` is
-// deprecated for React 19; the shim in `src/types/` declares what is used here.
-import renderer from 'react-test-renderer';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import { DEFAULT_GRAVITY } from './Scene';
@@ -146,39 +140,6 @@ describe('Scene class', () => {
         [frame2.id, [frame0.id, frame1.id, frame2.id]],
         [frame3.id, [frame0.id, frame1.id, frame3.id]],
       ]),
-    );
-  });
-
-  test('.getDomElement method', () => {
-    const scene = new Scene({
-      frames: [
-        new Frame({
-          decals: [new CircleDecal({ radius: 7 })],
-        }),
-      ],
-    });
-    const stateMap = new Map();
-    const xformMatrix = mat3.IDENTITY;
-    const domElement = scene.getDomElement(stateMap, xformMatrix);
-    const rendered = renderer.create(<svg>{domElement}</svg>);
-    expect(rendered.toJSON()).toEqual(
-      renderer
-        .create(
-          <svg>
-            <g className="scene">
-              <g className="frame">
-                <circle
-                  className="plot__circle"
-                  cx={0}
-                  cy={0}
-                  r={7}
-                  fill="black"
-                />
-              </g>
-            </g>
-          </svg>,
-        )
-        .toJSON(),
     );
   });
 

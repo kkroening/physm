@@ -6,7 +6,7 @@ written down separately from the code.
 | Directory | What it is |
 | --- | --- |
 | [`physm-rs`](physm-rs/) | The Rust solver, compiled to wasm. The fast path. |
-| [`physm-js`](physm-js/) | The JavaScript solver, and the React app that draws it. |
+| [`physm-js`](physm-js/) | The JavaScript solver, and the React app that draws it. Rendering lives in [`src/react`](physm-js/src/react/) — the only part that imports React. |
 | [`physm-py`](physm-py/) | The original 2019 prototype. Historical; not maintained. |
 | [`docs`](docs/) | [`algorithm.md`](docs/algorithm.md) — the equations of motion, mapped onto the code. [`constraints.md`](docs/constraints.md) — the loop-closure design. |
 | [`docs/issues`](docs/issues/) | The issue tracker: one Markdown file per issue. Regenerate its index with `scripts/render_issues`. |
@@ -22,11 +22,39 @@ deliberate decision with a reason that is not visible from the code alone.
 matrix by composite-inertia sweeps. That is duplication in the sense that both
 compute `g`, and it is **not** duplication worth removing.
 
-The cross-validation in `Solver.test.js` runs the same scene through both and
+The cross-validation in `Solver.test.ts` runs the same scene through both and
 requires the trajectories to agree. That check is only worth having because the
 two get there by *different* routes — two implementations that mirror each other
 are one implementation with a spare copy, and would agree just as happily while
 both being wrong. Unifying them would leave the test passing and testing nothing.
+
+### The core does not know how to draw
+
+The **scene graph** imports no React: `Scene`, `Frame`, `Decal` and the decal
+classes are plain data with geometry on them, so a scene builds, steps and
+serializes with no renderer present. Drawing lives in
+[`physm-js/src/react`](physm-js/src/react/); `App.jsx` and `index.jsx` are the
+app shell that mounts it.
+
+That is the boundary, and it is stated as one rather than as a directory-wide
+grep — `git grep react physm-js/src` has hits outside `src/react/` and always
+will, because the app is a React app. What must not come back is a `Scene`,
+`Frame` or `Decal` that cannot exist without a renderer.
+
+`DecalView` switches on a union of the decal classes to decide what element a
+shape becomes.
+
+That looks like indirection worth collapsing — put `getDomElement` back on the
+decal and the switch disappears. It is deliberate: it is what lets a scene be
+built, stepped and inspected with no renderer present, and what a second
+renderer would need.
+
+The switch narrows over a union of *classes*, not over `kind` alone, and that
+detail is the point: a `kind`-only check catches a new kind string but happily
+admits a new class reusing an existing one, which is then cast to the wrong
+class and draws `NaN`. Adding a decal must be a compile error in `DecalView`
+rather than a shape silently missing from the picture, and only the union
+delivers that.
 
 ### The demo scene's numbers are round on purpose
 

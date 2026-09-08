@@ -4,7 +4,6 @@ import type Frame from './Frame';
 import type { FrameId } from './Frame';
 import type { Mat3 } from './Mat3';
 import type { Vec3 } from './Vec3';
-import { required } from './utils';
 
 /** A position as a scene author may write it. */
 export type PositionLike = number | readonly number[] | Vec3;

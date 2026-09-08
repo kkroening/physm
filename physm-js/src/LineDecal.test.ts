@@ -20,15 +20,4 @@ describe('LineDecal', () => {
     // Stroke width follows `sqrt(|det|)`, so a 10x zoom thickens by 10.
     expect(moved.lineWidth).toBeCloseTo(20, 9);
   });
-
-  test('renders at the transformed position, not the local one', () => {
-    // The element's props rather than a rendered tree: `getDomElement` returns a
-    // bare SVG child, which a test renderer has no root to mount into.
-    const element = new LineDecal({ endPos: [3, 4] }).getDomElement(
-      mat3.translation(100, 200),
-    );
-
-    expect(element.type).toBe('line');
-    expect(element.props).toMatchObject({ x1: 100, y1: 200, x2: 103, y2: 204 });
-  });
 });
