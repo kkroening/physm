@@ -1,5 +1,4 @@
 import { getChildMap } from './daglet';
-import * as tf from './tfjs';
 import { toposort } from './daglet';
 import { transform } from './daglet';
 import { transformEdges } from './daglet';

@@ -13,13 +13,12 @@
     "preview": "vite preview",
     "setup": "npm run wasm && npm run wasm:node && npm install",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test:watch": "vitest",
     "wasm": "wasm-pack build --target bundler ../physm-rs",
     "wasm:node": "wasm-pack build --target nodejs --out-dir nodepkg ../physm-rs"
   },
   "dependencies": {
-    "@tensorflow/tfjs": "^4.22.0",
     "immer": "^10.1.1",
     "normalize.css": "^8.0.1",
     "physm-rs": "file:../physm-rs/pkg",

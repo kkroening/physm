@@ -1,22 +1,10 @@
 import './index.css';
 import * as immer from 'immer';
-import * as tf from '@tensorflow/tfjs';
 import App from './App';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 
 immer.enableMapSet();
-
-window.tf = tf; // (for debugging)
-
-function initTfCpuBackend() {
-  tf.setBackend('cpu');
-}
-
-function initTfWebGLBackend() {
-  tf.env().set('WEBGL_CPU_FORWARD', false);
-  tf.setBackend('webgl');
-}
 
 async function initRsWasmModule() {
   const rsWasmModule = await import('physm-rs');
@@ -25,9 +13,6 @@ async function initRsWasmModule() {
 }
 
 async function init() {
-  tf.enableProdMode();
-  initTfCpuBackend();
-  //initTfWebGLBackend();
   return await initRsWasmModule();
 }
 

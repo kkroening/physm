@@ -5,7 +5,6 @@ import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { DistanceConstraint } from './Constraint';
-import { checkTfMemory } from './testutils';
 
 /**
  * The tree scene: no loop closures, so both solvers assemble a plain `n`-by-`n`
@@ -138,10 +137,10 @@ function describeCrossValidation(
         const DELTA_TIME = 1 / 60;
         let curStateMap = initialStateMap;
         for (let timeIndex = 0; timeIndex < MAX_TIME_INDEX; timeIndex++) {
-          const newStateMap = checkTfMemory(() => {
+          const newStateMap = (() => {
             solver.tick(DELTA_TIME);
             return solver.getStateMap();
-          });
+          })();
           stateMaps[solverIndex].push(curStateMap);
           expect(curStateMap).not.toEqual(newStateMap);
           [...newStateMap].forEach(([frameId, [newQ, newQd]]) => {
@@ -173,8 +172,8 @@ function describeCrossValidation(
           const stateMap2 = stateMaps2[timeIndex];
           expect(Object.keys(stateMap1)).toEqual(Object.keys(stateMap2));
           scene.sortedFrames.forEach((frame) => {
-            const [q1, qd1] = stateMap1.get(frame.id);
-            const [q2, qd2] = stateMap2.get(frame.id);
+            const [q1, qd1] = stateMap1.get(frame.id)!;
+            const [q2, qd2] = stateMap2.get(frame.id)!;
             expect(Math.abs(q2 - q1)).toBeLessThan(tolerance);
             expect(Math.abs(qd2 - qd1)).toBeLessThan(tolerance);
           });
@@ -186,9 +185,13 @@ function describeCrossValidation(
 
 describeCrossValidation('tree scene', getTreeScene, {
   checkStep: ({ frameId, newQ, newQd, curStateMap, timeIndex }) => {
-    const [q, qd] = curStateMap.get(frameId);
-    timeIndex < 60 && expect(newQ).not.toBeCloseTo(q);
-    timeIndex < 15 && expect(newQd).not.toBeCloseTo(qd);
+    const [q, qd] = curStateMap.get(frameId)!;
+    if (timeIndex < 60) {
+      expect(newQ).not.toBeCloseTo(q);
+    }
+    if (timeIndex < 15) {
+      expect(newQd).not.toBeCloseTo(qd);
+    }
     if (frameId == 'ball' || timeIndex >= 10) {
       // The ball accelerates quickly; skip the following expectations.
     } else {

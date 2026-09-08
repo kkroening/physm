@@ -38,6 +38,18 @@ describe('Vec3', () => {
     expect(vec3.toPlanar([7, 9, 1])).toEqual([7, 9]);
   });
 
+  test('coerce accepts the shapes a scene author writes', () => {
+    expect(vec3.coerce([3, 4])).toEqual([3, 4, 1]);
+    expect(vec3.coerce([3, 4, 9])).toEqual([3, 4, 1]);
+
+    // A bare number is an offset along the frame's own axis, which is how a
+    // link length or a track position is usually written.
+    expect(vec3.coerce(5)).toEqual([5, 0, 1]);
+
+    expect(() => vec3.coerce([1])).toThrow(TypeError);
+    expect(() => vec3.coerce([1, 2, 3, 4])).toThrow(TypeError);
+  });
+
   test('scale agrees with applying a scaling matrix', () => {
     // Pins `Vec3` against `Mat3` rather than against itself, so a shared
     // misunderstanding of the index order would have to be present in both.

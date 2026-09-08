@@ -55,3 +55,24 @@ export function planarLength(v: Vec3): number {
 export function toPlanar(v: Vec3): readonly [number, number] {
   return [v[0], v[1]];
 }
+
+/**
+ * Accept the shapes a scene author writes a position in, and produce a point.
+ *
+ * A bare number is an offset along the frame's own axis, which is how a track
+ * or a link length is usually written; an array is `[x, y]`, with a third
+ * element tolerated and ignored since the result is a point either way.
+ */
+export function coerce(position: number | readonly number[] | Vec3): Vec3 {
+  if (typeof position === 'number') {
+    return point(position, 0);
+  }
+
+  if (position.length < 2 || position.length > 3) {
+    throw new TypeError(
+      `Expected a position of 2 or 3 elements; got ${JSON.stringify(position)}`,
+    );
+  }
+
+  return point(position[0] ?? 0, position[1] ?? 0);
+}

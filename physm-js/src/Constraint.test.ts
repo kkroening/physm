@@ -1,11 +1,10 @@
-import * as tf from './tfjs';
+import * as mat3 from './Mat3';
 import JsSolver from './JsSolver';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint, DistanceConstraint } from './Constraint';
-import { checkTfMemory } from './testutils';
 
 // A branched rig: two poles rising from one cart, so the two attachment points
 // have root paths that share a prefix (`cart`) and then diverge. Anything that
@@ -163,7 +162,7 @@ describe('Constraint', () => {
           return rows.map((row) =>
             row.reduce(
               (total, entry, index) =>
-                total + entry * map.get(frames[index].id)[1],
+                total + entry * map.get(frames[index].id)![1],
               0,
             ),
           );
@@ -173,7 +172,7 @@ describe('Constraint', () => {
         const step = (sign) =>
           new Map(
             frames.map((frame, index) => {
-              const [q, qd] = stateMap.get(frame.id);
+              const [q, qd] = stateMap.get(frame.id)!;
               return [
                 frame.id,
                 [q + sign * h * qd, qd + sign * h * qddArray[index]],
@@ -193,26 +192,22 @@ describe('Constraint', () => {
       const solver = getConstrainedSolver({ kind, seed: 1 });
       const constraint = solver.scene.constraints[0];
       const size = solver.scene.sortedFrames.length + constraint.rowCount;
-      const array = checkTfMemory(() => {
-        const [aMat, bVec] = solver._getSystemOfEquations(
-          solver.scene.getInitialStateMap(),
-          new Map(),
-        );
-        expect(aMat.shape).toEqual([size, size]);
-        expect(bVec.shape).toEqual([size, 1]);
-        const result = aMat.arraySync();
-        aMat.dispose();
-        bVec.dispose();
-        return result;
-      });
+      const [array, vector] = solver._getSystemOfEquations(
+        solver.scene.getInitialStateMap(),
+        new Map(),
+      );
+      expect(array).toHaveLength(size);
+      expect(array[0]).toHaveLength(size);
+      expect(vector).toHaveLength(size);
       for (let row = 0; row < size; row++) {
         for (let col = 0; col < size; col++) {
           expect(array[row][col]).toBeCloseTo(array[col][row], 5);
         }
         // The multiplier block is exactly zero: constraints carry no inertia.
-        for (let col = solver.scene.sortedFrames.length; col < size; col++) {
-          row >= solver.scene.sortedFrames.length &&
+        if (row >= solver.scene.sortedFrames.length) {
+          for (let col = solver.scene.sortedFrames.length; col < size; col++) {
             expect(array[row][col]).toBe(0);
+          }
         }
       }
     });
@@ -356,18 +351,17 @@ describe('Constraint', () => {
     };
 
     // Computed straight from the sweep, independently of the constraint.
-    const expected = tf.tidy(() => {
+    const expected = (() => {
       const at = (frameId) =>
-        ctx.velMatMap
-          .get('boom')
-          .matMul(
-            ctx.posMatMap.get(frameId).matMul(constraint.position1),
-          )
-          .dataSync();
+        mat3.apply(
+          ctx.velMatMap.get('boom')!,
+          mat3.apply(ctx.posMatMap.get(frameId)!, constraint.position1),
+        );
       const p = at('pole1');
       const q = at('pole2');
+
       return [p[0] - q[0], p[1] - q[1]];
-    });
+    })();
 
     const boom = columnOf('boom');
     boom.forEach((entry, axis) => expect(entry).toBeCloseTo(expected[axis], 4));
@@ -386,14 +380,13 @@ describe('Constraint', () => {
   test('an unconstrained scene still assembles the plain n-by-n system', () => {
     const solver = new JsSolver(getBranchedScene({ seed: 1 }));
     const size = solver.scene.sortedFrames.length;
-    const [aMat, bVec] = solver._getSystemOfEquations(
+    const [array, vector] = solver._getSystemOfEquations(
       solver.scene.getInitialStateMap(),
       new Map(),
     );
-    expect(aMat.shape).toEqual([size, size]);
-    expect(bVec.shape).toEqual([size, 1]);
-    aMat.dispose();
-    bVec.dispose();
+    expect(array).toHaveLength(size);
+    expect(array[0]).toHaveLength(size);
+    expect(vector).toHaveLength(size);
   });
 
   test('DistanceConstraint rejects a non-positive length', () => {
@@ -653,7 +646,7 @@ describe('Scene build', () => {
           position2: [5 * scale, 0],
         }),
       );
-      return scene.getInitialStateMap().get('pole')[1] / authored;
+      return scene.getInitialStateMap().get('pole')![1] / authored;
     };
 
     const reference = ratioAt(1);
@@ -661,15 +654,17 @@ describe('Scene build', () => {
     // not all agreeing on "unchanged".
     expect(reference).toBeGreaterThan(0.01);
     expect(reference).toBeLessThan(0.99);
-    // ...and identical to six figures across five and a half orders of
-    // magnitude. The band is not unbounded, and the bound is real rather than a
+    // ...and identical to eight figures across ten orders of magnitude. Under
+    // the float32 arithmetic this replaced, the same assertion held over five
+    // and a half: `3e2` down to `1e-3`.
+    //
+    // The band is still not unbounded, and the bound is real rather than a
     // tolerance: `g` mixes a prismatic coordinate's mass with a revolute one's
     // mass-times-length-squared, so its condition number grows like the square
-    // of the scale, and tfjs computes in float32. Outside this band the solve
-    // fails loudly, which is the behaviour worth having -- it used to skip the
-    // projection and hand the violation back in silence.
-    [3e2, 1e2, 1, 1e-2, 1e-3].forEach((scale) =>
-      expect(ratioAt(scale)).toBeCloseTo(reference, 6),
+    // of the scale, and float64 runs out eventually too. Outside it the solve
+    // fails loudly, which is the behaviour worth having.
+    [1e5, 1e3, 1, 1e-3, 1e-5].forEach((scale) =>
+      expect(ratioAt(scale)).toBeCloseTo(reference, 8),
     );
   });
 
@@ -711,7 +706,7 @@ describe('Scene build', () => {
     const before = scene.getInitialStateMap({ project: false });
     const after = scene.getInitialStateMap();
     const delta = scene.sortedFrames.map(
-      (frame) => after.get(frame.id)[1] - before.get(frame.id)[1],
+      (frame) => after.get(frame.id)![1] - before.get(frame.id)![1],
     );
     expect(Math.hypot(...delta)).toBeGreaterThan(0.1); // it actually ran
 
@@ -719,12 +714,9 @@ describe('Scene build', () => {
     const [jacobian] = scene.constraints[0].jacobianRows(ctx);
     scene.disposeConfigKinematics(ctx);
     const massMatrix = scene.getMassMatrix(before);
-    const massDelta = tf.tidy(() => [
-      ...massMatrix
-        .matMul(tf.tensor2d(delta.map((entry) => [entry])))
-        .dataSync(),
-    ]);
-    massMatrix.dispose();
+    const massDelta = massMatrix.map((row) =>
+      row.reduce((total, entry, index) => total + entry * delta[index], 0),
+    );
 
     // `g·Δq̇ ∥ Jᵀ`: the ratios agree across coordinates.
     const ratios = massDelta.map((entry, index) => entry / jacobian[index]);
@@ -743,9 +735,9 @@ describe('Scene build', () => {
     // Under the previous design, which measured the gap and rejected a
     // non-zero one, most of this grid failed.
     const poses = [];
-    for (let poleAngle of [0.3, 0.6, 0.9, 1.3]) {
-      for (let spacing of [4, 11.5, 20, 137]) {
-        for (let scale of [0.001, 1, 1000]) {
+    for (const poleAngle of [0.3, 0.6, 0.9, 1.3]) {
+      for (const spacing of [4, 11.5, 20, 137]) {
+        for (const scale of [0.001, 1, 1000]) {
           poses.push({ poleAngle, spacing, scale });
         }
       }
@@ -809,7 +801,7 @@ describe('Scene build', () => {
               Math.abs(
                 row.reduce(
                   (total, entry, index) =>
-                    total + entry * map.get(scene.sortedFrames[index].id)[1],
+                    total + entry * map.get(scene.sortedFrames[index].id)![1],
                   0,
                 ),
               ),
@@ -846,7 +838,7 @@ describe('Scene build', () => {
       scene.disposeConfigKinematics(ctx);
       return row.reduce(
         (total, entry, index) =>
-          total + entry * stateMap.get(scene.sortedFrames[index].id)[1],
+          total + entry * stateMap.get(scene.sortedFrames[index].id)![1],
         0,
       );
     };
@@ -860,9 +852,9 @@ describe('Scene build', () => {
     expect(Math.abs(rateOfChange(projected))).toBeLessThan(1e-4);
     // Least-norm, so the authored motion survives as far as the constraint
     // permits rather than being zeroed.
-    expect(Math.abs(projected.get('pole1')[1])).toBeGreaterThan(0.5);
+    expect(Math.abs(projected.get('pole1')![1])).toBeGreaterThan(0.5);
     // Positions are untouched: only the velocity half is projected here.
-    expect(projected.get('pole1')[0]).toBeCloseTo(POLE_ANGLE, 6);
+    expect(projected.get('pole1')![0]).toBeCloseTo(POLE_ANGLE, 6);
   });
 
   test('a consistent initial velocity is left exactly alone', () => {
@@ -885,8 +877,8 @@ describe('Scene build', () => {
     scene.frameMap.get('pole1').initialState = [POLE_ANGLE, 2];
     scene.frameMap.get('pole2').initialState = [Math.PI - POLE_ANGLE, 2];
     const projected = scene.getInitialStateMap();
-    expect(projected.get('pole1')[1]).toBeCloseTo(2, 5);
-    expect(projected.get('pole2')[1]).toBeCloseTo(2, 5);
+    expect(projected.get('pole1')![1]).toBeCloseTo(2, 5);
+    expect(projected.get('pole2')![1]).toBeCloseTo(2, 5);
   });
 
   test('the cart column of the Jacobian is structurally zero', () => {
@@ -908,7 +900,7 @@ describe('Scene build', () => {
     const cartIndex = scene.sortedFrames.findIndex(
       (frame) => frame.id === 'cart',
     );
-    expect(row[cartIndex]).toBe(0);
+    expect(row[cartIndex]).toBeCloseTo(0, 12);
     expect(Math.max(...row.map(Math.abs))).toBeGreaterThan(1);
   });
 });

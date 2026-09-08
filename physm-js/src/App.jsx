@@ -1,6 +1,6 @@
 import './App.css';
 import 'normalize.css';
-import * as tf from './tfjs';
+import * as mat3 from './Mat3';
 import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
 import LineDecal from './LineDecal';
@@ -12,8 +12,6 @@ import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint } from './Constraint';
-import { getScaleMatrix } from './utils';
-import { getTranslationMatrix } from './utils';
 import { required } from './utils';
 import { useEffect } from 'react';
 import { useRef } from 'react';
@@ -401,10 +399,9 @@ function simulate(
 }
 
 function getViewXformMatrix(translation, scale) {
-  return tf.tidy(() =>
-    getTranslationMatrix([300, 300])
-      .matMul(getScaleMatrix(scale, -scale))
-      .matMul(getTranslationMatrix(translation)),
+  return mat3.multiply(
+    mat3.multiply(mat3.translation(300, 300), mat3.scaling(scale, -scale)),
+    mat3.translation(translation[0], translation[1]),
   );
 }
 
@@ -447,7 +444,6 @@ function App({ rsWasmModule }) {
   const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
   const viewXformMatrix = getViewXformMatrix(translation, scale);
   const sceneDomElement = scene.getDomElement(stateMap, viewXformMatrix);
-  viewXformMatrix.dispose();
   const solver = useRef(null);
 
   useEffect(() => {
@@ -496,7 +492,6 @@ function App({ rsWasmModule }) {
       <div className="plot">
         <h2 className="plot__title">Cart, Poles &amp; Rope</h2>
         {
-          //<p>Number of tensors: {tf.memory().numTensors}</p>
         }
         {
           //<p>Keys: {[...pressedKeys].join(', ')}</p>
