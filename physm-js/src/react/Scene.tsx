@@ -76,6 +76,12 @@ export default function Scene({
     }
 
     if (!frames.length && !decals.length) {
+      // Cleared on this path too. The warnings below read these refs, so an
+      // early return that left them alone would re-report the *previous*
+      // assembly's failures against a scene that no longer has any.
+      unresolvedRef.current = [];
+      unresolvedAnchorsRef.current = [];
+
       return null;
     }
 
