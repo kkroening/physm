@@ -8,7 +8,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 | # | Title | Kind | Status |
 |---|---|---|---|
 | [0009](0009.md) | Centre the demo's view on the plot rather than on a hardcoded point | Bug | Resolved |
-| [0008](0008.md) | Point the ESLint test-file block at `testutils.ts`, which it now misses | Bug | Open |
+| [0008](0008.md) | Delete `testutils.ts`, which nothing imports and the lint config misnames | Bug | Resolved |
 | [0007](0007.md) | Settle whether authoring components should share names with the classes they wrap | RFC | Open |
 | [0006](0006.md) | Let a JSX rig be assembled without mounting a renderer | RFC | Open |
 | [0005](0005.md) | Give JSX siblings their tree order, which effect registration cannot | RFC | Open |

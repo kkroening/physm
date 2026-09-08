@@ -60,11 +60,10 @@ export default [
   }),
 
   {
-    files: [
-      '**/*.test.{js,jsx,ts,tsx}',
-      'src/setupTests.js',
-      'src/testutils.js',
-    ],
+    // `setupTests.js` is named explicitly because it is not a test file itself:
+    // vite loads it through `setupFiles`, and it calls `vi`-adjacent globals.
+    // The glob covers everything else.
+    files: ['**/*.test.{js,jsx,ts,tsx}', 'src/setupTests.js'],
     languageOptions: { globals: { ...globals.vitest } },
   },
 ];
