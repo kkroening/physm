@@ -3,6 +3,7 @@ import 'normalize.css';
 import { produce as producer } from 'immer';
 import React from 'react';
 import CartAndRope from './CartAndRope';
+import { CART_FRAME_ID } from './CartAndRope';
 import RsSolver from './RsSolver';
 import Scene from './react/Scene';
 import getViewXformMatrix from './getViewXformMatrix';
@@ -13,23 +14,24 @@ import { useLayoutEffect } from 'react';
 import { useState } from 'react';
 import { InvalidStateMapError } from './Solver';
 
-// A rope slung between two poles on a rolling cart.
-//
-// The rope is two chains, one hanging from each pole, and they have to meet in
-// the middle. No frame tree can say that: a frame has one parent, so the point
-// where the chains join would need two. It is not a frame at all -- it is a
-// coincidence constraint, adding two rows to the saddle-point system the solver
-// assembles. See `docs/constraints.md`.
-//
 // How hard the arrow keys, a drag or a swipe push the cart. A control-input
 // scale rather than scene geometry, which is why it stays here while the rig
 // itself lives in `CartAndRope`.
 const maxCartForce = 8500;
 
-// The frame the controls push. Authored in `CartAndRope`, and the one id in the
-// rig that is written rather than generated -- precisely because something
-// outside the scene has to name it.
-const CART_FRAME_ID = 'cart';
+// Built once, at module scope, rather than as `<CartAndRope />` inline.
+//
+// `stateMap` changes sixty times a second, which re-renders `App` and every
+// child element it rebuilds -- and the authoring components are children. They
+// draw nothing, but each decal and weight computes a `JSON.stringify` of its
+// props during render to build its dependency array, so an inline element would
+// spend about twenty-five of those per frame concluding that nothing moved.
+//
+// A stable element lets React bail out of the whole subtree on identity. The
+// bailout is safe here because everything under it reads only the registry and
+// parent-key contexts, and `<Scene>` provides an identity-stable registry and a
+// constant `null` to those.
+const RIG = <CartAndRope />;
 
 const initialScale = 12;
 const MIN_ANIMATION_FPS = 5;
@@ -433,7 +435,7 @@ function App({ rsWasmModule }) {
               stateMap={stateMap ?? undefined}
               xformMatrix={viewXformMatrix}
             >
-              <CartAndRope />
+              {RIG}
             </Scene>
           </svg>
         </div>

@@ -10,6 +10,19 @@ import { useRef } from 'react';
 import type { AnchorPoint } from './react/sceneNodes';
 import type { ReactElement, ReactNode } from 'react';
 
+/**
+ * The one written id in the rig, and the reason it is written.
+ *
+ * Every other frame here is generated and named by its component key, which is
+ * the point -- a `RopeChain` names none of what it produces. But the controls
+ * push the cart from *outside* the scene, and `<Anchor>` only wires one part of
+ * a scene to another. So the cart needs a name something else can hold, and
+ * this is it: exported rather than duplicated, because a literal on each side
+ * would diverge silently -- an external force keyed to no frame contributes
+ * zero and reports nothing, leaving the arrow keys quietly dead.
+ */
+export const CART_FRAME_ID = 'cart';
+
 const CART_MASS = 250;
 const CART_RESISTANCE = 5;
 const CART_WIDTH = 4;
@@ -101,7 +114,10 @@ function RopeChain({
   index = 0,
   children,
 }: RopeChainProps): ReactNode {
-  if (index === SEGMENT_COUNT) {
+  // `>=`, not `===`: the counter is an internal accumulator, but it is a
+  // declared prop, so an `index` past the end would otherwise recurse without
+  // bound rather than terminating.
+  if (index >= SEGMENT_COUNT) {
     return children;
   }
 
@@ -132,6 +148,12 @@ function RopeChain({
  * The demo rig: a cart on a track, two rigid poles, and a rope slung between
  * them and closed by a constraint.
  *
+ * The rope is two chains, one hanging from each pole, and they have to meet in
+ * the middle. **No frame tree can say that**: a frame has one parent, so the
+ * point where the chains join would need two. It is not a frame at all -- it is
+ * a coincidence constraint, adding two rows to the saddle-point system the
+ * solver assembles. See `docs/constraints.md`.
+ *
  * The two chains are wired together through anchors rather than frame ids,
  * because `RopeChain` generates its frames and names none of them. The right
  * anchor deliberately states no point: `<Coincidence>` solves for the
@@ -151,7 +173,7 @@ export default function CartAndRope(): ReactElement {
         color="gray"
       />
 
-      <TrackFrame id="cart" resistance={CART_RESISTANCE}>
+      <TrackFrame id={CART_FRAME_ID} resistance={CART_RESISTANCE}>
         <Box width={CART_WIDTH} height={CART_WIDTH / 1.618} lineWidth={0.2} />
         <Weight mass={CART_MASS} />
 
