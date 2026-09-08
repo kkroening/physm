@@ -244,6 +244,22 @@ the velocity half of the projection strategy below, run once rather than per ste
 warning, because acceleration-level enforcement preserves $`C_0 \neq 0`$ exactly and forever: the
 constraint would silently hold the wrong separation and never converge toward the authored one.
 
+> **Built**, in `physm-js`: `Scene.addConstraint` measures the gap the scene places and either
+> adopts it as the `length` or rejects a stated one that disagrees, and `Scene.getInitialStateMap`
+> returns $`\dot q_0`$ projected. Both solvers seed from that one method, so they cannot disagree
+> about what the initial state is.
+>
+> **And only there**, for the reason two paragraphs up: `physm-rs` frames do not carry an initial
+> state at all — they never parse `initialState`, and the wasm boundary receives $`(q, \dot q)`$ on
+> every call. There is no pose on that side to check a constraint against, and inventing one would
+> mean a second source of truth for the initial state, which is a worse failure than the one this
+> section is about. Rust rejects what it *can* judge without a pose: a constraint naming a frame
+> the scene does not contain.
+>
+> An authored violation is still reachable, deliberately, through
+> `addConstraint(c, { allowInitialViolation: true })` — because "$`C`$ is conserved" is only
+> observable from a scene that starts violated, so the tests for this formulation need it.
+
 ### Then the numerical drift
 
 With consistent initial conditions, position and velocity violations are still unobserved, and

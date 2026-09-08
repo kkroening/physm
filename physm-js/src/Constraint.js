@@ -2,6 +2,11 @@ import * as tf from './tfjs';
 import { coercePositionVector } from './utils';
 import { required } from './utils';
 
+// How far an authored `length` may sit from the geometry before it counts as a
+// disagreement rather than rounding. Generous, because it is guarding against
+// an authoring mistake rather than measuring anything.
+export const CONSISTENCY_TOLERANCE = 1e-6;
+
 /**
  * Loop closure via Lagrange multipliers. See `docs/constraints.md`.
  *
@@ -139,11 +144,20 @@ export default class Constraint {
     this.position2.dispose();
   }
 
+  /** The attachment points as plain `[x, y]`, in their own frames' coordinates. */
+  get localPosition1() {
+    return tf.tidy(() => [...this.position1.dataSync().slice(0, 2)]);
+  }
+
+  get localPosition2() {
+    return tf.tidy(() => [...this.position2.dataSync().slice(0, 2)]);
+  }
+
   _positionsJsonObj() {
-    return tf.tidy(() => ({
-      position1: [...this.position1.dataSync().slice(0, 2)],
-      position2: [...this.position2.dataSync().slice(0, 2)],
-    }));
+    return {
+      position1: this.localPosition1,
+      position2: this.localPosition2,
+    };
   }
 }
 
@@ -155,14 +169,49 @@ export default class Constraint {
  * blank, so `length` must be positive.
  */
 export class DistanceConstraint extends Constraint {
-  constructor({ length = required('length'), ...rest } = {}) {
+  constructor({ length = null, ...rest } = {}) {
     super(rest);
-    if (!(length > 0)) {
+    if (length != null && !(length > 0)) {
       throw new Error(
         `DistanceConstraint length must be positive; got ${length}`,
       );
     }
+    // `null` means "however far apart the scene places them" — resolved by
+    // `Scene.addConstraint`, which is the first moment there is a scene to
+    // measure. Until then the constraint is well-formed but not yet answerable.
     this.length = length;
+  }
+
+  resolveLength(measured = required('measured')) {
+    /**
+     * Fix the rest length against the geometry the scene actually places.
+     *
+     * An unset `length` adopts the measurement, which is the ergonomic default:
+     * a rope authored between two points is as long as the gap between them. An
+     * explicit one is checked against it, because a `length` that disagrees
+     * with the pose is an inconsistent initial condition, and this formulation
+     * has no way to work one off — `C` keeps whatever value it starts with, so
+     * the disagreement is permanent and silent.
+     */
+    if (this.length == null) {
+      if (!(measured > 0)) {
+        throw new Error(
+          'DistanceConstraint has no length and the scene places its two ' +
+            `attachment points ${measured} apart, which is degenerate; ` +
+            'separate them, or set an explicit length',
+        );
+      }
+      this.length = measured;
+    } else if (Math.abs(this.length - measured) > CONSISTENCY_TOLERANCE) {
+      throw new Error(
+        `DistanceConstraint length ${this.length} disagrees with the ` +
+          `${measured} the scene places between its attachment points. ` +
+          'Constraint violation is conserved, not corrected, so the gap ' +
+          'would persist for the life of the simulation; move the frames, ' +
+          'or drop the explicit length to adopt the measured one.',
+      );
+    }
+    return this;
   }
 
   get typeName() {
@@ -210,6 +259,13 @@ export class DistanceConstraint extends Constraint {
   }
 
   toJsonObj() {
+    if (this.length == null) {
+      throw new Error(
+        'DistanceConstraint has no length yet, so there is nothing to ' +
+          'serialize. A length is resolved by `Scene.addConstraint`, against ' +
+          'the geometry the scene places.',
+      );
+    }
     return {
       frame1: this.frameId1,
       frame2: this.frameId2,
@@ -228,6 +284,18 @@ export class DistanceConstraint extends Constraint {
  * target; the price is that it removes two degrees of freedom rather than one.
  */
 export class CoincidenceConstraint extends Constraint {
+  resolveLength(measured = required('measured')) {
+    /** A coincidence constraint has no length to resolve, only a gap to check. */
+    if (measured > CONSISTENCY_TOLERANCE) {
+      throw new Error(
+        `CoincidenceConstraint joins two points the scene places ${measured} ` +
+          'apart. Constraint violation is conserved, not corrected, so they ' +
+          'would never actually meet; place them together.',
+      );
+    }
+    return this;
+  }
+
   get typeName() {
     return 'CoincidenceConstraint';
   }

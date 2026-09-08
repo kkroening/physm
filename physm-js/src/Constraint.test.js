@@ -85,7 +85,12 @@ function getConstrainedSolver({
   const scene = getBranchedScene({
     seed,
     spacing: kind.spacing + spacingOffset,
-  }).addConstraint(kind.createConstraint());
+  }).addConstraint(kind.createConstraint(), {
+    // `spacingOffset` exists to violate the constraint at `t = 0`, which is
+    // the whole point of the conservation test below; scene build rejects that
+    // by default.
+    allowInitialViolation: spacingOffset !== 0,
+  });
   return new JsSolver(scene, { rungeKutta });
 }
 
@@ -335,6 +340,9 @@ describe('Constraint', () => {
         position1: [POLE_LENGTH, 0],
         position2: [POLE_LENGTH, 0],
       }),
+      // Only the Jacobian is under test here, and it is defined whether or not
+      // the two points currently meet.
+      { allowInitialViolation: true },
     );
     const solver = new JsSolver(scene);
     const constraint = scene.constraints[0];
@@ -402,5 +410,212 @@ describe('Constraint', () => {
           }),
       ).toThrow(/must be positive/);
     });
+  });
+});
+
+describe('Scene build', () => {
+  // The rig the query API exists for: two poles on a cart, roped tip to tip.
+  // Nothing here computes the geometry -- the scene is asked.
+  function getRopeScene({ spacing = POLE_SPACING, poleAngle = POLE_ANGLE } = {}) {
+    return new Scene({
+      frames: [
+        new TrackFrame({
+          id: 'cart',
+          weights: [new Weight(20)],
+          frames: [
+            new RotationalFrame({
+              id: 'pole1',
+              initialState: [poleAngle, 0],
+              weights: [new Weight(4, { position: [POLE_LENGTH, 0] })],
+            }),
+            new RotationalFrame({
+              id: 'pole2',
+              initialState: [Math.PI - poleAngle, 0],
+              position: [spacing, 0],
+              weights: [new Weight(7, { position: [POLE_LENGTH, 0] })],
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  const tip = [POLE_LENGTH, 0];
+
+  test('getWorldPosition places a frame-relative point', () => {
+    const scene = getRopeScene();
+    // Pole 1 pivots at the cart's origin, so its tip is just the pole vector.
+    expect(scene.getWorldPosition('pole1', tip)).toEqual([
+      expect.closeTo(POLE_LENGTH * Math.cos(POLE_ANGLE), 4),
+      expect.closeTo(POLE_LENGTH * Math.sin(POLE_ANGLE), 4),
+    ]);
+    // A frame's own origin needs no position argument.
+    expect(scene.getWorldPosition('pole2')).toEqual([
+      expect.closeTo(POLE_SPACING, 4),
+      expect.closeTo(0, 4),
+    ]);
+  });
+
+  test('getWorldPosition answers about a state other than the initial one', () => {
+    const scene = getRopeScene();
+    const stateMap = new Map([['pole1', [0, 0]]]);
+    // `cart` and `pole2` are absent from the map and read at rest, which is
+    // what makes this answerable while a scene is still being assembled.
+    expect(scene.getWorldPosition('pole1', tip, { stateMap })).toEqual([
+      expect.closeTo(POLE_LENGTH, 4),
+      expect.closeTo(0, 4),
+    ]);
+  });
+
+  test('getSeparation measures the gap a DistanceConstraint would close on', () => {
+    const scene = getRopeScene();
+    const { vector, distance } = scene.getSeparation('pole1', tip, 'pole2', tip);
+    expect(distance).toBeCloseTo(TIP_GAP, 4);
+    // Mirrored poles put the tips at the same height, so the gap is horizontal.
+    expect(vector[1]).toBeCloseTo(0, 4);
+    expect(vector[0]).toBeCloseTo(TIP_GAP, 4);
+  });
+
+  test('an unset length adopts the gap the scene places', () => {
+    // The ergonomic path: author the rope, let the scene measure it.
+    const scene = getRopeScene().addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+        position2: tip,
+      }),
+    );
+    expect(scene.constraints[0].length).toBeCloseTo(TIP_GAP, 4);
+    // ...and the result starts consistent, which is the point of measuring it.
+    const ctx = scene.getConfigKinematics(scene.getInitialStateMap());
+    expect(Math.abs(scene.constraints[0].value(ctx)[0])).toBeLessThan(1e-4);
+    scene.disposeConfigKinematics(ctx);
+  });
+
+  test('the same scene at a different pose measures a different gap', () => {
+    // The geometry is not baked into the constraint: it is read off whatever
+    // scene the constraint is added to.
+    const wide = getRopeScene({ poleAngle: 0.9 }).addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+        position2: tip,
+      }),
+    );
+    expect(wide.constraints[0].length).toBeCloseTo(
+      POLE_SPACING - 2 * POLE_LENGTH * Math.cos(0.9),
+      4,
+    );
+    expect(wide.constraints[0].length).not.toBeCloseTo(TIP_GAP, 2);
+  });
+
+  test('an explicit length that disagrees with the geometry is rejected', () => {
+    expect(() =>
+      getRopeScene().addConstraint(
+        new DistanceConstraint({
+          frame1: 'pole1',
+          frame2: 'pole2',
+          position1: tip,
+          position2: tip,
+          length: TIP_GAP + 2,
+        }),
+      ),
+    ).toThrow(/disagrees with/);
+    // An explicit length that agrees is fine -- authoring it is redundant, not
+    // wrong, and a scene generator may well have computed it.
+    expect(() =>
+      getRopeScene().addConstraint(
+        new DistanceConstraint({
+          frame1: 'pole1',
+          frame2: 'pole2',
+          position1: tip,
+          position2: tip,
+          length: TIP_GAP,
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  test('a coincidence constraint on two points that do not meet is rejected', () => {
+    expect(() =>
+      getRopeScene().addConstraint(
+        new CoincidenceConstraint({
+          frame1: 'pole1',
+          frame2: 'pole2',
+          position1: tip,
+          position2: tip,
+        }),
+      ),
+    ).toThrow(/would never actually meet/);
+    // Closing the pivot spacing by exactly the gap makes the tips coincide.
+    expect(() =>
+      getRopeScene({ spacing: POLE_SPACING - TIP_GAP }).addConstraint(
+        new CoincidenceConstraint({
+          frame1: 'pole1',
+          frame2: 'pole2',
+          position1: tip,
+          position2: tip,
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  test('a constraint naming an absent frame is rejected', () => {
+    expect(() =>
+      getRopeScene().addConstraint(
+        new DistanceConstraint({ frame1: 'pole1', frame2: 'nope' }),
+      ),
+    ).toThrow(/does not contain: nope/);
+  });
+
+  test('an inconsistent initial velocity is projected onto J qd = 0', () => {
+    const scene = getRopeScene().addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+        position2: tip,
+      }),
+    );
+    // Spin one pole and leave the other still: the rope would have to stretch.
+    scene.frameMap.get('pole1').initialState = [POLE_ANGLE, 2.5];
+
+    const rateOfChange = (stateMap) => {
+      const ctx = scene.getConfigKinematics(stateMap);
+      const [row] = scene.constraints[0].jacobianRows(ctx);
+      scene.disposeConfigKinematics(ctx);
+      return row.reduce(
+        (total, entry, index) =>
+          total + entry * stateMap.get(scene.sortedFrames[index].id)[1],
+        0,
+      );
+    };
+
+    expect(
+      Math.abs(rateOfChange(scene.getInitialStateMap({ project: false }))),
+    ).toBeGreaterThan(1);
+    const projected = scene.getInitialStateMap();
+    expect(Math.abs(rateOfChange(projected))).toBeLessThan(1e-6);
+    // Least-norm, so the authored motion survives as far as the constraint
+    // permits rather than being zeroed.
+    expect(Math.abs(projected.get('pole1')[1])).toBeGreaterThan(0.5);
+    // Positions are untouched: only the velocity half is projected here.
+    expect(projected.get('pole1')[0]).toBeCloseTo(POLE_ANGLE, 6);
+  });
+
+  test('a consistent initial velocity is left exactly alone', () => {
+    const scene = getRopeScene().addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+        position2: tip,
+      }),
+    );
+    // Rolling the cart moves both tips together, so it stretches nothing.
+    scene.frameMap.get('cart').initialState = [0, 3];
+    expect(scene.getInitialStateMap().get('cart')).toEqual([0, 3]);
   });
 });
