@@ -46,11 +46,15 @@ on:
     paths:
       - 'physm-js/**'
       - 'physm-rs/**'
+      - 'docs/issues/**'
+      - 'scripts/**'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'physm-js/**'
       - 'physm-rs/**'
+      - 'docs/issues/**'
+      - 'scripts/**'
       - '.github/workflows/ci.yml'
   schedule:
     - cron: '17 6 * * 1'
@@ -125,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    # This job also covers physm-rs end to end: physm-js/src/Solver.test.js steps
+    # This job also covers physm-rs end to end: physm-js/src/Solver.test.ts steps
     # JsSolver and RsSolver over the same scene and asserts they agree, so it is a
     # cross-language check on the whole solver, and would catch an error in the
     # equations that both Rust implementations shared. That is a different check
@@ -187,7 +191,7 @@ jobs:
       # is not committed. Both wasm targets are built before `npm ci` so the link
       # resolves to a real directory rather than dangling until the first build.
       # The two targets are not interchangeable: `pkg` (bundler) is what the browser
-      # imports, `nodepkg` (nodejs) is what Solver.test.js imports.
+      # imports, `nodepkg` (nodejs) is what Solver.test.ts imports.
       #
       # These are not the only wasm builds in the run: package.json's `pretest` and
       # `prebuild` hooks fire the same commands again, so wasm-pack runs four times,
@@ -231,3 +235,23 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  issues:
+    name: issues (index)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    # `docs/issues/README.md` is generated from the issue files, so it can
+    # disagree with them silently -- and the guide expects it to conflict on
+    # every rebase that touches the tracker, which is precisely when someone is
+    # tempted to hand-resolve a generated file. `--check` also parses each issue,
+    # so it doubles as the tracker's format linter: a bad heading or an
+    # undefined Status/Kind fails here rather than rendering a wrong row.
+    #
+    # Cheap enough not to need a path filter of its own; the workflow-level one
+    # already keeps it off changes that touch neither the tracker nor scripts.
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the issue index is current
+        run: scripts/render_issues --check
