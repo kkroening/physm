@@ -35,5 +35,6 @@
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["src", "vite.config.js", "eslint.config.js"]
+  "include": ["src", "vite.config.js", "eslint.config.js"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

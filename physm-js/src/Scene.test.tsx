@@ -1,13 +1,14 @@
-import * as tf from './tfjs';
+import * as mat3 from './Mat3';
 import CircleDecal from './CircleDecal';
 import { faker } from '@faker-js/faker';
 import Frame from './Frame';
 import React from 'react';
 import RotationalFrame from './RotationalFrame';
+// `react-test-renderer` ships no types and `@types/react-test-renderer` is
+// deprecated for React 19; the shim in `src/types/` declares what is used here.
 import renderer from 'react-test-renderer';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
-import { checkTfMemory } from './testutils';
 import { DEFAULT_GRAVITY } from './Scene';
 
 describe('Scene queries', () => {
@@ -32,21 +33,24 @@ describe('Scene queries', () => {
       ],
     });
 
-  test('tensors are not orphaned, including on the error paths', () => {
-    // These methods hand ownership of a pose map to the caller, and `tf.tidy`
-    // only reclaims what is created inside it -- so a throw between allocating
-    // one and disposing it would leak one tensor per frame in the scene.
+  test('the queries reject a frame id the scene does not contain', () => {
+    // This also asserted that no tensor was orphaned on these paths, which was
+    // a live concern when a pose map was an owned resource -- it caught two
+    // real leaks. Nothing is owned now: the queries return plain tuples, so
+    // only the rejection is left to pin.
     const scene = build();
-    checkTfMemory(() => scene.getWorldPosition('child', [1, 2]));
-    checkTfMemory(() => scene.getLocalPosition('child', [1, 2]));
-    checkTfMemory(() => scene.getSeparation('root', [0, 0], 'child', [1, 2]));
-    checkTfMemory(() => {
-      expect(() => scene.getWorldPosition('nope')).toThrow(/No such frame/);
-      expect(() => scene.getLocalPosition('nope')).toThrow(/No such frame/);
-      expect(() => scene.getSeparation('root', [0, 0], 'nope')).toThrow(
-        /No such frame/,
-      );
-    });
+
+    expect(scene.getWorldPosition('child', [1, 2])).toHaveLength(2);
+    expect(scene.getLocalPosition('child', [1, 2])).toHaveLength(2);
+    expect(
+      scene.getSeparation('root', [0, 0], 'child', [1, 2]).distance,
+    ).toBeGreaterThan(0);
+
+    expect(() => scene.getWorldPosition('nope')).toThrow(/No such frame/);
+    expect(() => scene.getLocalPosition('nope')).toThrow(/No such frame/);
+    expect(() => scene.getSeparation('root', [0, 0], 'nope')).toThrow(
+      /No such frame/,
+    );
   });
 
   test('getLocalPosition inverts getWorldPosition', () => {
@@ -54,7 +58,7 @@ describe('Scene queries', () => {
     // a `RotationalFrame` offset from a `TrackFrame` displaced by 7, so an
     // implementation that returned its argument would fail here.
     const scene = build();
-    scene.frameMap.get('child').initialState = [0.9, 0];
+    scene.frameMap.get('child')!.initialState = [0.9, 0];
     const local = [1.5, -2.25];
     const world = scene.getWorldPosition('child', local);
     expect(world[0]).not.toBeCloseTo(local[0], 2);
@@ -87,7 +91,7 @@ describe('Scene queries', () => {
 
 describe('Scene class', () => {
   test('constructor with default arguments', () => {
-    const scene = checkTfMemory(() => new Scene());
+    const scene = new Scene();
     expect(scene.decals).toEqual([]);
     expect(scene.frames).toEqual([]);
     expect(scene.springs).toEqual([]);
@@ -104,7 +108,7 @@ describe('Scene class', () => {
     let frame1;
     let frame2;
     let frame3;
-    const scene = checkTfMemory(() => {
+    const scene = (() => {
       frame3 = new Frame({ id: 'frame3' });
       frame2 = new Frame({ id: 'frame2' });
       frame1 = new Frame({ id: 'frame1', frames: [frame3, frame2] });
@@ -112,7 +116,7 @@ describe('Scene class', () => {
       return new Scene({
         frames: [frame0],
       });
-    });
+    })();
     expect(scene.decals).toEqual([]);
     expect(scene.frames).toEqual([frame0]);
     expect(scene.springs).toEqual([]);
@@ -154,10 +158,8 @@ describe('Scene class', () => {
       ],
     });
     const stateMap = new Map();
-    const xformMatrix = tf.eye(3);
-    const domElement = checkTfMemory(() =>
-      scene.getDomElement(stateMap, xformMatrix),
-    );
+    const xformMatrix = mat3.IDENTITY;
+    const domElement = scene.getDomElement(stateMap, xformMatrix);
     const rendered = renderer.create(<svg>{domElement}</svg>);
     expect(rendered.toJSON()).toEqual(
       renderer
@@ -204,7 +206,7 @@ describe('Scene class', () => {
 
   test('.toJsonObj method', () => {
     const scene = new Scene({ frames: [new Frame({ id: 'd34db33f' })] });
-    const obj = checkTfMemory(() => scene.toJsonObj());
+    const obj = scene.toJsonObj();
     expect(obj).toEqual({
       gravity: scene.gravity,
       frames: [

@@ -1,12 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 import * as immer from 'immer';
-import * as tf from '@tensorflow/tfjs';
 
-// Immer's Map/Set support is opt-in, and Scene keys frames by id in a Map.
+// Immer's Map/Set support is opt-in, and `Scene` keys frames by id in a `Map`
+// that key handling drives through `produce`. Nothing here is tfjs's -- this
+// file lost it once to a sweep looking for tfjs setup, and without it the first
+// test to drive a key event fails on immer's "MapSet plugin not loaded".
 immer.enableMapSet();
-
-// The pure-JS CPU backend. Tests used to swap in `@tensorflow/tfjs-node` via a
-// manual mock for speed; that package is a native addon with no darwin-arm64
-// build, so it is gone and `src/tfjs.js` now resolves to plain tfjs everywhere.
-await tf.setBackend('cpu');
-await tf.ready();

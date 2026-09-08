@@ -181,17 +181,25 @@ export function invertRigid(m: Mat3): Mat3 {
 export function invert(m: Mat3): Mat3 {
   const det = determinant(m);
 
-  // Relative to the entries, not `=== 0`. A determinant scales as the cube of
-  // the matrix, so an absolute test says more about the units a scene was
-  // authored in than about invertibility -- `diag(1e-7, 1e-7, 1e-7)` has a
+  // Relative, not `=== 0`. An absolute test says more about the units a scene
+  // was authored in than about invertibility -- `diag(1e-7, 1e-7, 1e-7)` has a
   // determinant of `1e-21` and inverts perfectly, while a genuinely rank-2
-  // matrix of order-1 entries can reach `1e-17` and must not. Same argument
-  // `solveLinearSystem` makes for its pivot test.
-  const scale = Math.max(...m.map(Math.abs));
-  if (Math.abs(det) <= SINGULAR_RELATIVE_TOLERANCE * scale ** 3) {
+  // matrix of order-1 entries can reach `1e-17` and must not.
+  //
+  // The scale is Hadamard's bound, the product of the row norms, and *not* the
+  // largest entry cubed. The difference is not academic: a rigid transform
+  // carrying a large translation has entries of that size in two rows while its
+  // determinant stays 1, so `maxEntry³` calls it singular. `translation(11500,
+  // 0)` composed with a rotation was rejected exactly that way.
+  const bound =
+    Math.hypot(m[0], m[1], m[2]) *
+    Math.hypot(m[3], m[4], m[5]) *
+    Math.hypot(m[6], m[7], m[8]);
+
+  if (Math.abs(det) <= SINGULAR_RELATIVE_TOLERANCE * bound) {
     throw new Error(
       `Matrix is singular; cannot invert ${JSON.stringify(m)} ` +
-        `(determinant ${det} against an entry scale of ${scale})`,
+        `(determinant ${det} against a Hadamard bound of ${bound})`,
     );
   }
 
@@ -210,6 +218,37 @@ export function invert(m: Mat3): Mat3 {
     (m[1] * m[6] - m[0] * m[7]) * inverseDet,
     (m[0] * m[4] - m[1] * m[3]) * inverseDet,
   ];
+}
+
+/** The signed area scaling of the linear part, ignoring translation. */
+export function planarDeterminant(m: Mat3): number {
+  return m[0] * m[4] - m[1] * m[3];
+}
+
+/**
+ * How much the transform scales lengths, as `sqrt(|det|)`.
+ *
+ * Decals use it to keep stroke widths constant on screen while the view zooms.
+ */
+export function scaleFactor(m: Mat3): number {
+  return Math.sqrt(Math.abs(planarDeterminant(m)));
+}
+
+/**
+ * The rotation the transform applies, in radians.
+ *
+ * `atan2(m01, -m00)`, which is the convention `utils.js` used and which callers
+ * are calibrated against -- it differs from `atan2(m10, m00)` by a half turn.
+ * Preserved rather than corrected, because `TrackFrame` and `BoxDecal` read it
+ * and a "fix" here would silently rotate the rendered scene.
+ */
+export function rotationAngle(m: Mat3): number {
+  return Math.atan2(m[1], -m[0]);
+}
+
+/** The translation column, as a plain `[x, y]`. */
+export function translationOf(m: Mat3): readonly [number, number] {
+  return [m[2], m[5]];
 }
 
 /**

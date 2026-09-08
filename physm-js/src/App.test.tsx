@@ -1,8 +1,9 @@
 import React from 'react';
 import { render } from '@testing-library/react';
 import App from './App';
+import type { RsWasmModule } from './RsSolver';
 
-let rsWasmModule = null;
+let rsWasmModule: RsWasmModule | null = null;
 
 beforeAll(async () => {
   // TODO: find a better way to load physm-rs.

@@ -1,0 +1,22 @@
+{
+  // The suite, checked separately and one notch less strictly.
+  //
+  // `noUncheckedIndexedAccess` is off here. It exists to stop a production path
+  // treating a possibly-absent element as present, and a test does the opposite
+  // by design: it indexes arrays it just built, and an out-of-range read fails
+  // the test on the spot rather than propagating. Carrying it into the suite
+  // cost about 130 assertions that documented nothing.
+  //
+  // Everything else -- `strict`, `noImplicitOverride`, the rest -- still applies.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": false
+  },
+
+  // `exclude` is inherited through `extends`, and the base excludes exactly the
+  // files this project exists to check -- so without clearing it, `include`
+  // below matches nothing and this pass silently re-checks the sources a second
+  // time, more weakly. It cannot fail where the first pass passed.
+  "exclude": [],
+  "include": ["src/**/*.test.ts", "src/**/*.test.tsx", "src"]
+}
