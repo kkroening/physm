@@ -1,7 +1,9 @@
+import * as vec3 from './Vec3';
 import { faker } from '@faker-js/faker';
 import Frame from './Frame';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
+import type { StateMap } from './Frame';
 import TrackFrame from './TrackFrame';
 import { DEFAULT_GRAVITY } from './Scene';
 
@@ -45,6 +47,58 @@ describe('Scene queries', () => {
     expect(() => scene.getSeparation('root', [0, 0], 'nope')).toThrow(
       /No such frame/,
     );
+  });
+
+  test('getSeparation measures frame origins when given two ids', () => {
+    // The two-id overload is the ergonomic probe an interactive scene builder
+    // wants -- "how far apart are these two frames?" should not require naming
+    // two origins. Every other call site in the tree uses the four-argument
+    // form, so without this the branch the overload exists to add is never
+    // executed.
+    const scene = build();
+
+    expect(scene.getSeparation('root', 'child')).toEqual(
+      scene.getSeparation('root', vec3.ORIGIN, 'child', vec3.ORIGIN),
+    );
+
+    // The options argument sits in a different position in the two forms, so
+    // it is worth proving it still lands. That needs a scene whose separation
+    // the state map can actually change: only a prismatic coordinate moves a
+    // frame's own origin, and `child` rides `root`, so posing either leaves
+    // this pair exactly where it was.
+    const sliders = new Scene({
+      frames: [
+        new TrackFrame({ id: 'a' }),
+        new TrackFrame({ id: 'b', position: [10, 0] }),
+      ],
+    });
+    const posed: StateMap = new Map([['b', [4, 0]]]);
+
+    expect(sliders.getSeparation('a', 'b', { stateMap: posed })).toEqual(
+      sliders.getSeparation('a', vec3.ORIGIN, 'b', vec3.ORIGIN, {
+        stateMap: posed,
+      }),
+    );
+
+    // ...and that it is not simply being ignored by both.
+    expect(sliders.getSeparation('a', 'b').distance).toBeCloseTo(10, 9);
+    expect(
+      sliders.getSeparation('a', 'b', { stateMap: posed }).distance,
+    ).toBeCloseTo(14, 9);
+  });
+
+  test('getSeparation requires its second frame at compile time', () => {
+    // Not a runtime assertion -- the assertion is that this file compiles.
+    // `@ts-expect-error` fails the build if the error ever stops being an
+    // error, which turns a one-off manual check into a standing one.
+    //
+    // It is the bug the overload pair replaced: a defaulted `frameId2` made the
+    // parameter optional to the compiler, leaving a runtime sentinel as the
+    // only thing requiring it.
+    const scene = build();
+
+    // @ts-expect-error -- one id is not a valid call
+    expect(() => scene.getSeparation('root')).toThrow();
   });
 
   test('getLocalPosition inverts getWorldPosition', () => {
