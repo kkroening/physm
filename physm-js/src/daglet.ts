@@ -25,9 +25,14 @@ export type VisitEdge<Node, NodeValue, EdgeValue> = (
   parentValue: NodeValue | undefined,
 ) => EdgeValue;
 
+/**
+ * `| undefined` on each: these options are forwarded from destructured values,
+ * so under `exactOptionalPropertyTypes` an explicitly-`undefined` property is a
+ * real input and not the same thing as an absent one.
+ */
 export interface TraversalOptions<Node, Key> {
-  getNodeParents?: GetNodeParents<Node>;
-  getNodeKey?: GetNodeKey<Node, Key>;
+  getNodeParents?: GetNodeParents<Node> | undefined;
+  getNodeKey?: GetNodeKey<Node, Key> | undefined;
 }
 
 /**
@@ -112,6 +117,22 @@ export function toposort<Node, Key = Node>(
  * The reverse adjacency: each node's key mapped to the nodes that name it as a
  * parent. Every key reachable from `nodes` appears, including childless ones.
  */
+/** The child set for a key, created empty on first reach. */
+function childrenOf<Node, Key>(
+  childMap: Map<Key, Set<Node>>,
+  key: Key,
+): Set<Node> {
+  const existing = childMap.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const created = new Set<Node>();
+  childMap.set(key, created);
+
+  return created;
+}
+
 export function getChildMap<Node, Key = Node>(
   nodes: Iterable<Node>,
   {
@@ -121,23 +142,11 @@ export function getChildMap<Node, Key = Node>(
 ): Map<Key, Set<Node>> {
   const childMap = new Map<Key, Set<Node>>();
 
-  const childrenOf = (key: Key): Set<Node> => {
-    const existing = childMap.get(key);
-    if (existing) {
-      return existing;
-    }
-
-    const created = new Set<Node>();
-    childMap.set(key, created);
-
-    return created;
-  };
-
   toposort(nodes, { getNodeParents, getNodeKey }).forEach((node) => {
-    childrenOf(getNodeKey(node));
+    childrenOf(childMap, getNodeKey(node));
 
     (getNodeParents(node) ?? []).forEach((parent) =>
-      childrenOf(getNodeKey(parent)).add(node),
+      childrenOf(childMap, getNodeKey(parent)).add(node),
     );
   });
 
@@ -146,8 +155,20 @@ export function getChildMap<Node, Key = Node>(
 
 export interface TransformOptions<Node, Key, NodeValue, EdgeValue>
   extends TraversalOptions<Node, Key> {
-  visitNode?: VisitNode<Node, NodeValue, EdgeValue>;
-  visitEdge?: VisitEdge<Node, NodeValue, EdgeValue>;
+  visitNode?: VisitNode<Node, NodeValue, EdgeValue> | undefined;
+  visitEdge?: VisitEdge<Node, NodeValue, EdgeValue> | undefined;
+}
+
+/** `transformNodes` folds nodes only, so it does not accept an edge visitor. */
+export interface TransformNodesOptions<Node, Key, NodeValue>
+  extends TraversalOptions<Node, Key> {
+  visitNode?: VisitNode<Node, NodeValue, NodeValue> | undefined;
+}
+
+/** `transformEdges` folds edges only, so it does not accept a node visitor. */
+export interface TransformEdgesOptions<Node, Key, EdgeValue>
+  extends TraversalOptions<Node, Key> {
+  visitEdge?: VisitEdge<Node, unknown, EdgeValue> | undefined;
 }
 
 /**
@@ -161,6 +182,7 @@ export function transform<Node, Key = Node, NodeValue = unknown, EdgeValue = unk
   {
     getNodeParents = defaultGetNodeParents,
     getNodeKey = defaultGetNodeKey,
+
     // `null`, not `undefined`: `transformEdges` leans on this being the value a
     // parent contributes when no `visitNode` was supplied.
     visitNode = () => null as NodeValue,
@@ -193,9 +215,20 @@ export function transform<Node, Key = Node, NodeValue = unknown, EdgeValue = unk
 /** `transform`, for callers that only want the per-node values. */
 export function transformNodes<Node, Key = Node, NodeValue = unknown>(
   nodes: Iterable<Node>,
-  options: TransformOptions<Node, Key, NodeValue, NodeValue> = {},
+  {
+    getNodeParents,
+    getNodeKey,
+    visitNode,
+  }: TransformNodesOptions<Node, Key, NodeValue> = {},
 ): Map<Key, NodeValue> {
-  const [nodeMap] = transform<Node, Key, NodeValue, NodeValue>(nodes, options);
+  // Forwarded field by field rather than as a bag: passing the whole object on
+  // would let a stray `visitEdge` reach `transform` and change what the node
+  // visitor is handed.
+  const [nodeMap] = transform<Node, Key, NodeValue, NodeValue>(nodes, {
+    getNodeParents,
+    getNodeKey,
+    visitNode,
+  });
 
   return nodeMap;
 }
@@ -203,9 +236,20 @@ export function transformNodes<Node, Key = Node, NodeValue = unknown>(
 /** `transform`, for callers that only want the per-edge values. */
 export function transformEdges<Node, Key = Node, EdgeValue = unknown>(
   nodes: Iterable<Node>,
-  options: TransformOptions<Node, Key, unknown, EdgeValue> = {},
+  {
+    getNodeParents,
+    getNodeKey,
+    visitEdge,
+  }: TransformEdgesOptions<Node, Key, EdgeValue> = {},
 ): Map<[Key, Key], EdgeValue> {
-  const [, edgeMap] = transform<Node, Key, unknown, EdgeValue>(nodes, options);
+  // Likewise: no `visitNode` reaches `transform`, so every `parentValue` handed
+  // to `visitEdge` is the default `null` rather than something a caller
+  // supplied for a map this function then discards.
+  const [, edgeMap] = transform<Node, Key, unknown, EdgeValue>(nodes, {
+    getNodeParents,
+    getNodeKey,
+    visitEdge,
+  });
 
   return edgeMap;
 }

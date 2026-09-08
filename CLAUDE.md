@@ -35,23 +35,42 @@ second attachment point, so arbitrary geometry builds. Deriving the positions so
 the chains meet exactly would remove the thing the scene exists to show — and is
 why the numbers there are worth leaving alone, whatever they happen to be.
 
-### Constraints solve; they do not grade
+### Constraints solve for what is omitted, and check what is given
 
-A constraint type leaves one parameter unspecified and `Scene.addConstraint`
-fills it in from the pose — `length` for a distance constraint, `position2` for a
-coincidence one. An earlier design measured the geometry and *rejected* an
-inconsistent scene; it was replaced because it forces the author to solve a
-problem the code can solve, and because "move the frames until the points
-coincide" is not advice an interactive scene builder can act on.
+Both branches are live, and the asymmetry is the point.
+
+A parameter the author **omits** is solved for from the pose — `length` for a
+distance constraint, `position2` for a coincidence one — so the constraint holds
+at `t = 0` by construction, at any geometry. Solving is the *default* because an
+earlier design made the author place the frames so the constraint was already
+satisfied and then graded the result, which forces them to solve a problem the
+code can solve, and because "move the frames until the points coincide" is not
+advice an interactive scene builder can act on.
+
+A parameter the author **supplies** is still measured against the pose and
+**rejected** on disagreement. Those `throw`s in `Constraint.resolveGeometry` are
+load-bearing: this formulation conserves a violation rather than correcting it,
+so a stated value that disagrees is a permanent, silent error.
+`addConstraint`'s `allowInitialViolation` is the deliberate opt-out, and the
+tests for the formulation need it.
 
 ## Style
 
 These are not preferences to weigh against others; treat them as requirements.
 
-### One exported component per file
+### One principal export per file, named for the file
 
 A file exports **one** React component, and its name matches the filename. It may
 also contain small, private helper components that are not exported.
+
+Most modules here are not components, and the same rule applies to them: a module
+is named for its principal export, which is its default export, with closely
+related types and helpers alongside — `Constraint.js` exports `Constraint` plus
+its two subclasses and `consistencyTolerance`; `Solver.js` exports `Solver` plus
+`InvalidStateMapError`.
+
+`utils.js` is the counter-example, not the pattern: twenty-odd unrelated exports
+under a name that describes none of them. It is being dismantled.
 
 ### Define before use
 
@@ -95,5 +114,8 @@ cd physm-rs && cargo test
 cd physm-rs && cargo fmt
 ```
 
-CI runs both packages on every push and pull request: `physm-rs` is `cargo fmt
---check` plus `cargo test`; `physm-js` is lint, typecheck, test and build.
+CI runs on pull requests, and on pushes to `master`, when `physm-js/`,
+`physm-rs/` or the workflow itself changes — a PR touching only `docs/` produces
+no run at all, which is worth knowing before treating a green tick as coverage.
+`physm-rs` is `cargo fmt --check` plus `cargo test`; `physm-js` is lint,
+typecheck, test and build.

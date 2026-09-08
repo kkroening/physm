@@ -212,8 +212,12 @@ jobs:
       # is the same failure this file exists to fix. The react-hooks rules are
       # configured as errors regardless.
       #
+      # It is a *ceiling*, not a measurement: nothing fails when the true count
+      # drops below it, so it can go slack without anyone noticing -- it had, by
+      # two, between #4 and here. Re-measure before quoting it.
+      #
       # Ratchet it down as the debt is paid, which the TypeScript port does a file
-      # at a time: porting `daglet` alone took it from 48 to 43.
+      # at a time: `master` linted at 46, of which `daglet` was 3.
       - name: Lint
         run: npm run lint -- --max-warnings 43
 

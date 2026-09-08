@@ -20,6 +20,15 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
 
+    // `test.globals` is on in `vite.config.js`, so test files call `describe`
+    // and `expect` without importing them, and `jest-dom` adds its matchers to
+    // `expect`. Without these, the first `.ts` test file fails `tsc` with an
+    // error suggesting Jest's types -- which would be the wrong fix.
+    //
+    // Naming `types` disables automatic `@types/*` inclusion; harmless here,
+    // since `@types/react` is reached through the import rather than globally.
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
+
     // The port is incremental: `.js` files coexist with `.ts` ones and are not
     // type-checked until they become `.ts`. Both flags come out when the last
     // `.js` file does.

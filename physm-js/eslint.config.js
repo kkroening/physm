@@ -8,7 +8,6 @@ export default [
   { ignores: ['dist/**', 'coverage/**'] },
   js.configs.recommended,
 
-
   {
     files: ['**/*.{js,jsx,mjs,ts,tsx}'],
     languageOptions: {
@@ -36,7 +35,9 @@ export default [
     },
   },
   // Scoped to TypeScript, so the recommended TS rules do not promote the
-  // pre-existing `.js` warnings below into errors.
+  // pre-existing `.js` warnings above into errors -- `tseslint`'s rules carry no
+  // `files` of their own, so without the wrapper its `no-unused-vars` would
+  // apply to `.js` at `error` severity.
   ...tseslint.config({
     files: ['**/*.ts', '**/*.tsx'],
     extends: [...tseslint.configs.recommended],
