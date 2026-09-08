@@ -55,7 +55,9 @@ rather than a loop that appends to an array. Assembly takes two renders, because
 a `Frame` takes its children as constructor arguments, so `Scene` reports the
 built scene through `onSceneChange` rather than returning it.
 
-`App.jsx` and `index.jsx` are the app shell that mounts all this.
+[`CartAndRope.tsx`](src/CartAndRope.tsx) is the demo rig, written this way —
+worth reading as the worked example. `App.jsx` and `index.jsx` are the app shell
+that mounts it: the controls, the animation loop, and the solver.
 
 ## Prerequisites
 
