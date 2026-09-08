@@ -37,6 +37,10 @@ export default function Coincidence({
     useId(),
     {
       slot: 'constraint',
+      describe: () =>
+        `a <Coincidence> between ` +
+        `${typeof frame1 === 'string' ? `'${frame1}'` : 'an anchor'} and ` +
+        `${typeof frame2 === 'string' ? `'${frame2}'` : 'an anchor'}`,
       build: () => {
         const end1 = resolveAnchor(frame1, position1);
         const end2 = resolveAnchor(frame2, position2 ?? undefined);

@@ -30,7 +30,7 @@ export interface SceneProps {
  * ```jsx
  * <Scene gravity={10}>
  *   <TrackFrame id="cart">
- *     <BoxDecal width={4} height={2} />
+ *     <Box width={4} height={2} />
  *     <Weight mass={250} />
  *   </TrackFrame>
  * </Scene>
@@ -58,7 +58,7 @@ export default function Scene({
 }: SceneProps): ReactElement {
   const { registry, version } = useSceneRegistry();
   const unresolvedRef = useRef<Constraint[]>([]);
-  const unresolvedAnchorsRef = useRef(0);
+  const unresolvedAnchorsRef = useRef<string[]>([]);
 
   const scene = useMemo(() => {
     const { decals, weights, frames } = buildChildren(registry.entries, null);
@@ -66,7 +66,7 @@ export default function Scene({
     // A scene carries no mass of its own, so there is nowhere for a root
     // `<Weight>` to go. Silently dropping it would remove mass from a rig,
     // which changes the answer rather than the picture -- and `<Weight>` and
-    // `<BoxDecal>` are siblings inside a frame, so mistaking one for the other
+    // `<Box>` are siblings inside a frame, so mistaking one for the other
     // is an easy thing to do from the JSX alone.
     if (weights.length) {
       throw new Error(
@@ -80,7 +80,7 @@ export default function Scene({
     }
 
     const unresolved: Constraint[] = [];
-    let unresolvedAnchors = 0;
+    const unresolvedAnchors: string[] = [];
     const built = new CoreScene({
       decals,
       frames,
@@ -108,7 +108,7 @@ export default function Scene({
       // constraint names has not handed out its point yet.
       const constraint = node.build();
       if (!constraint) {
-        unresolvedAnchors += 1;
+        unresolvedAnchors.push(node.describe?.() ?? 'a constraint');
         continue;
       }
 
@@ -163,12 +163,11 @@ export default function Scene({
       );
     }
 
-    if (unresolvedAnchorsRef.current) {
+    for (const description of unresolvedAnchorsRef.current) {
       console.warn(
-        `physm: ${unresolvedAnchorsRef.current} constraint(s) were dropped ` +
-          'because an <Anchor> they name never reported. An anchor reports ' +
-          'when it mounts, so this usually means the ref was never passed to ' +
-          'one.',
+        `physm: ${description} was dropped: an <Anchor> it names has not ` +
+          'reported. Either the ref was never passed to one, or the anchor ' +
+          'has unmounted while the constraint outlived it.',
       );
     }
   }, [scene]);

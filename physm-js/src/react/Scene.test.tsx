@@ -2,6 +2,7 @@ import Box from './Box';
 import Anchor from './Anchor';
 import Circle from './Circle';
 import Coincidence from './Coincidence';
+import Distance from './Distance';
 import CoreBoxDecal from './../BoxDecal';
 import CoreCircleDecal from './../CircleDecal';
 import CoreRotationalFrame from './../RotationalFrame';
@@ -13,6 +14,7 @@ import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint as CoreCoincidenceConstraint } from './../Constraint';
+import { DistanceConstraint as CoreDistanceConstraint } from './../Constraint';
 import { DEFAULT_GRAVITY } from './../Scene';
 import { StrictMode } from 'react';
 import { render } from '@testing-library/react';
@@ -392,18 +394,30 @@ describe('Scene (authoring)', () => {
     // and names none of them, so an author outside it has no id to write --
     // which is the problem the JSX authoring exists to remove, reappearing one
     // level up. The chain marks its own tip instead.
+    //
+    // The two chains are deliberately *different*: same-shaped chains put
+    // corresponding frames at identical poses, so any pair of them separates by
+    // zero and the closing assertion below would hold for the chain's root, its
+    // middle link, or a position of [0, 0]. Different depths and angles are what
+    // make it distinguish the tip from anything else.
     function Chain({
       depth,
+      angle,
       children,
     }: {
       depth: number;
+      angle: number;
       children?: ReactNode;
     }): ReactElement {
       return depth === 0 ? (
-        <RotationalFrame position={[1, 0]}>{children}</RotationalFrame>
+        <RotationalFrame position={[1, 0]} initialState={[angle, 0]}>
+          {children}
+        </RotationalFrame>
       ) : (
-        <RotationalFrame position={[1, 0]}>
-          <Chain depth={depth - 1}>{children}</Chain>
+        <RotationalFrame position={[1, 0]} initialState={[angle, 0]}>
+          <Chain depth={depth - 1} angle={angle}>
+            {children}
+          </Chain>
         </RotationalFrame>
       );
     }
@@ -415,11 +429,12 @@ describe('Scene (authoring)', () => {
       return (
         <>
           <TrackFrame id="cart">
-            <Chain depth={2}>
+            <Chain depth={2} angle={0.3}>
               <Anchor ref={left} position={[1, 0]} />
             </Chain>
-            <Chain depth={2}>
-              <Anchor ref={right} position={[1, 0]} />
+            <Chain depth={3} angle={-0.7}>
+              {/* No position: the attachment on this end is solved. */}
+              <Anchor ref={right} />
             </Chain>
           </TrackFrame>
           <Coincidence frame1={left} frame2={right} />
@@ -431,25 +446,122 @@ describe('Scene (authoring)', () => {
 
     expect(scene.constraints).toHaveLength(1);
 
-    // The constraint names two generated ids, neither of which appears in the
-    // JSX above -- which is the whole point.
-    const solved = scene.constraints[0]!;
-    expect(solved.frameId1).not.toBe(solved.frameId2);
+    const solved = scene.constraints[0] as CoreCoincidenceConstraint;
+
+    // Both ids are generated -- neither appears in the JSX above, which is the
+    // whole point -- and each names a chain *tip*, not some frame along it: a
+    // tip is the one frame in its chain with no child frame.
     for (const frameId of [solved.frameId1, solved.frameId2]) {
       expect(scene.frameMap.has(frameId)).toBe(true);
       expect(frameId).not.toBe('cart');
+      expect(scene.frameMap.get(frameId)!.frames).toHaveLength(0);
+    }
+    expect(solved.frameId1).not.toBe(solved.frameId2);
+
+    // And the loop closes across a gap nobody measured. The right anchor states
+    // no point, so `position2` is solved from the assembled pose -- which is
+    // what lets two chains of different length and lean meet exactly.
+    const gap = scene.getSeparation(
+      solved.frameId1,
+      [1, 0],
+      solved.frameId2,
+      solved.localPosition2,
+    ).distance;
+
+    expect(gap).toBeCloseTo(0, 9);
+
+    // ...and they genuinely were apart, so the closing above is the solve
+    // working rather than the two ends coinciding by construction.
+    expect(
+      scene.getSeparation(solved.frameId1, [1, 0], solved.frameId2, [1, 0])
+        .distance,
+    ).toBeGreaterThan(0.5);
+  });
+
+  test('an anchor mounting alone still resolves its constraint', () => {
+    // Why `<Anchor>` registers a node it contributes nothing to. The point
+    // travels by ref, and a ref re-renders nobody -- so when an anchor is the
+    // *only* thing that mounts, its own registration is the sole bump available
+    // to trigger the reassembly that resolves the constraint. Without it the
+    // memo returns its cached scene forever, with the ref sitting there
+    // populated and the constraint dropped.
+    //
+    // `Rig` is declared here rather than inside the render helper on purpose. A
+    // component declared inside one is a fresh type on every call, so React
+    // unmounts and remounts the whole subtree and *everything* re-registers --
+    // which hides exactly the thing this test is for.
+    let scene: CoreScene | null = null;
+
+    function Rig({ withAnchor }: { withAnchor: boolean }): ReactElement {
+      const tip = useRef<AnchorPoint>(null);
+
+      return (
+        <>
+          <RotationalFrame id="post" position={[1, 0]}>
+            {withAnchor ? <Anchor ref={tip} /> : null}
+          </RotationalFrame>
+          <RotationalFrame id="other" position={[3, 0]} />
+          <Coincidence frame1="other" frame2={tip} />
+        </>
+      );
     }
 
-    // And it closes: `position2` is solved from the assembled pose, so the two
-    // tips coincide exactly however the chains happen to be placed.
-    expect(
-      scene.getSeparation(
-        solved.frameId1,
-        [1, 0],
-        solved.frameId2,
-        (solved as CoreCoincidenceConstraint).localPosition2,
-      ).distance,
-    ).toBeCloseTo(0, 9);
+    const tree = (withAnchor: boolean): ReactElement => (
+      <svg>
+        <Scene onSceneChange={(built) => (scene = built)}>
+          <Rig withAnchor={withAnchor} />
+        </Scene>
+      </svg>
+    );
+
+    const { rerender } = render(tree(false));
+    expect(scene!.constraints).toHaveLength(0);
+
+    rerender(tree(true));
+
+    expect(scene!.constraints).toHaveLength(1);
+  });
+
+  test('a Distance constraint takes anchors too, and solves its length', () => {
+    // `<Distance>` gained anchor ends in the same change and had no test. Its
+    // free parameter is `length` rather than `position2`, so an omitted one
+    // adopts whatever gap the assembled scene places -- the same "author any
+    // geometry" property, on the other constraint type.
+    function Rig(): ReactElement {
+      const a = useRef<AnchorPoint>(null);
+      const b = useRef<AnchorPoint>(null);
+
+      return (
+        <>
+          <TrackFrame id="cart">
+            <RotationalFrame id="left" position={[-4, 0]}>
+              <Anchor ref={a} position={[1, 0]} />
+            </RotationalFrame>
+            <RotationalFrame id="right" position={[4, 0]}>
+              <Anchor ref={b} position={[1, 0]} />
+            </RotationalFrame>
+          </TrackFrame>
+          <Distance frame1={a} frame2={b} />
+        </>
+      );
+    }
+
+    const scene = assemble(<Rig />);
+
+    expect(scene.constraints).toHaveLength(1);
+
+    const solved = scene.constraints[0] as CoreDistanceConstraint;
+
+    // Both arms sit at angle 0, so both reach +1 along x: the tips land at -3
+    // and 5, which is 8 apart. The adopted length is that gap, whatever it
+    // happens to be -- which is the property, not the number.
+    expect(solved.length).toBeCloseTo(8, 9);
+    expect(solved.length).toBeCloseTo(
+      scene.getSeparation('left', [1, 0], 'right', [1, 0]).distance,
+      9,
+    );
+    expect(solved.frameId1).toBe('left');
+    expect(solved.frameId2).toBe('right');
   });
 
   test('a constraint naming an anchor that never reports is dropped, not thrown', () => {
