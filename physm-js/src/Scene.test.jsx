@@ -3,10 +3,87 @@ import CircleDecal from './CircleDecal';
 import { faker } from '@faker-js/faker';
 import Frame from './Frame';
 import React from 'react';
+import RotationalFrame from './RotationalFrame';
 import renderer from 'react-test-renderer';
 import Scene from './Scene';
+import TrackFrame from './TrackFrame';
 import { checkTfMemory } from './testutils';
 import { DEFAULT_GRAVITY } from './Scene';
+
+describe('Scene queries', () => {
+  // `TrackFrame` and `RotationalFrame`, not the base `Frame`, whose
+  // `getLocalPosMatrix` returns the identity regardless of `q` *and* of
+  // `position` -- a scene built from those would make every assertion here
+  // hold whatever the implementation did.
+  //
+  // `root` also carries a non-zero `initialState`, so the two candidate
+  // fallbacks for an absent frame -- its authored coordinate, or zero -- give
+  // different answers. That is the difference these tests exist to pin.
+  const build = () =>
+    new Scene({
+      frames: [
+        new TrackFrame({
+          id: 'root',
+          initialState: [7, 0],
+          frames: [
+            new RotationalFrame({ id: 'child', position: [3, 4] }),
+          ],
+        }),
+      ],
+    });
+
+  test('tensors are not orphaned, including on the error paths', () => {
+    // These methods hand ownership of a pose map to the caller, and `tf.tidy`
+    // only reclaims what is created inside it -- so a throw between allocating
+    // one and disposing it would leak one tensor per frame in the scene.
+    const scene = build();
+    checkTfMemory(() => scene.getWorldPosition('child', [1, 2]));
+    checkTfMemory(() => scene.getLocalPosition('child', [1, 2]));
+    checkTfMemory(() => scene.getSeparation('root', [0, 0], 'child', [1, 2]));
+    checkTfMemory(() => {
+      expect(() => scene.getWorldPosition('nope')).toThrow(/No such frame/);
+      expect(() => scene.getLocalPosition('nope')).toThrow(/No such frame/);
+      expect(() => scene.getSeparation('root', [0, 0], 'nope')).toThrow(
+        /No such frame/,
+      );
+    });
+  });
+
+  test('getLocalPosition inverts getWorldPosition', () => {
+    // A round trip through a real rotation *and* a real translation: `child` is
+    // a `RotationalFrame` offset from a `TrackFrame` displaced by 7, so an
+    // implementation that returned its argument would fail here.
+    const scene = build();
+    scene.frameMap.get('child').initialState = [0.9, 0];
+    const local = [1.5, -2.25];
+    const world = scene.getWorldPosition('child', local);
+    expect(world[0]).not.toBeCloseTo(local[0], 2);
+    expect(scene.getLocalPosition('child', world)).toEqual([
+      expect.closeTo(local[0], 4),
+      expect.closeTo(local[1], 4),
+    ]);
+  });
+
+  test('an omitted state map and an empty one agree', () => {
+    // The two fallbacks have to be the same fallback: a frame nobody mentioned
+    // is read at its own `initialState`, whether the map is empty or absent.
+    // `root` is the frame nobody mentions, and its authored 7 is what a
+    // zero-coordinate fallback would silently discard.
+    const scene = build();
+    const omitted = scene.getWorldPosition('child', [1, 2]);
+    expect(
+      scene.getWorldPosition('child', [1, 2], { stateMap: new Map() }),
+    ).toEqual(omitted);
+    expect(
+      scene.getWorldPosition('child', [1, 2], {
+        stateMap: new Map([['child', [0, 0]]]),
+      }),
+    ).toEqual(omitted);
+    // ...and the authored 7 is actually in the answer, so the assertions above
+    // are not two ways of reading the same zero.
+    expect(omitted[0]).toBeCloseTo(7 + 3 + 1, 4);
+  });
+});
 
 describe('Scene class', () => {
   test('constructor with default arguments', () => {

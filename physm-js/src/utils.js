@@ -229,8 +229,17 @@ export function solveLinearSystem(
     const cVec = qMat.transpose().matMul(bVec).dataSync();
     const rArray = rMat.arraySync();
     const xArray = Array(n);
+    // Singularity is a *relative* property: a well-conditioned system whose
+    // entries are all small is not singular, it is small. Comparing a pivot
+    // against a fixed absolute constant refuses a scene for being authored in
+    // kilometres rather than metres -- a 1x1 system of `[[6e-7]]` is perfectly
+    // solvable, and was being rejected.
+    const pivotScale = Math.max(
+      ...rArray.map((row, index) => Math.abs(row[index])),
+      Number.MIN_VALUE,
+    );
     for (let i = n - 1; i >= 0; i--) {
-      if (Math.abs(rArray[i][i]) < DEFAULT_TOLERANCE) {
+      if (Math.abs(rArray[i][i]) < DEFAULT_TOLERANCE * pivotScale) {
         throw new SingularMatrixError(`Singular matrix: ${aMat.toString()}`);
       }
       let sum = 0;

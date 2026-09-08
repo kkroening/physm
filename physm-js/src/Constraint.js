@@ -1,6 +1,25 @@
 import * as tf from './tfjs';
 import { coercePositionVector } from './utils';
 import { required } from './utils';
+import { ZERO_POS } from './utils';
+
+// How far an authored value may sit from the geometry before it counts as a
+// disagreement rather than rounding.
+//
+// Relative, not absolute. Poses are measured through tfjs, which is float32, so
+// the residual between two points that *are* the same point grows with the
+// scene's coordinate magnitude while an absolute threshold does not. A fixed
+// `1e-6` is about two ULP at the demo's scale, and refuses a geometrically
+// correct rig as soon as it grows: measured, the demo stops building at nine
+// rope segments instead of five, and a rig authored in millimetres rather than
+// metres is judged differently from the same rig.
+export const CONSISTENCY_RELATIVE_TOLERANCE = 1e-5;
+
+export function consistencyTolerance(scale = 0) {
+  // The floor keeps a scene authored near the origin from demanding exactness
+  // no float32 computation can deliver.
+  return Math.max(1e-9, CONSISTENCY_RELATIVE_TOLERANCE * Math.abs(scale));
+}
 
 /**
  * Loop closure via Lagrange multipliers. See `docs/constraints.md`.
@@ -18,6 +37,29 @@ import { required } from './utils';
  * the configuration has velocities attached to it.
  */
 export default class Constraint {
+  /**
+   * Reconcile the constraint with the gap the scene places between its two
+   * attachment points, now that there is a scene to measure.
+   *
+   * The base behaviour is the coincidence one: the two points have to be the
+   * same point, so a gap is a violation. A type with a free parameter to solve
+   * for overrides this and solves for it instead.
+   */
+  resolveGeometry(measured = required('measured'), scale = 1) {
+    // `scale` is the magnitude of the coordinates involved, never `measured`
+    // itself: `measured` is the quantity being tested against zero, so a
+    // tolerance derived from it would reject every non-zero value.
+    if (measured > consistencyTolerance(scale)) {
+      throw new Error(
+        `${this.typeName} joins two points the scene places ${measured} ` +
+          'apart. Constraint violation is conserved, not corrected, so they ' +
+          'would never actually meet. Omit `position2` to have it solved for, ' +
+          'or move the frames together.',
+      );
+    }
+    return this;
+  }
+
   constructor({
     frame1 = required('frame1'),
     frame2 = required('frame2'),
@@ -134,16 +176,32 @@ export default class Constraint {
     return [a[0] - b[0], a[1] - b[1]];
   }
 
+  setPosition2(position = required('position')) {
+    /** Install a solved attachment point, replacing the placeholder. */
+    this.position2.dispose();
+    this.position2 = coercePositionVector(position);
+    return this;
+  }
+
   dispose() {
     this.position1.dispose();
     this.position2.dispose();
   }
 
+  /** The attachment points as plain `[x, y]`, in their own frames' coordinates. */
+  get localPosition1() {
+    return tf.tidy(() => [...this.position1.dataSync().slice(0, 2)]);
+  }
+
+  get localPosition2() {
+    return tf.tidy(() => [...this.position2.dataSync().slice(0, 2)]);
+  }
+
   _positionsJsonObj() {
-    return tf.tidy(() => ({
-      position1: [...this.position1.dataSync().slice(0, 2)],
-      position2: [...this.position2.dataSync().slice(0, 2)],
-    }));
+    return {
+      position1: this.localPosition1,
+      position2: this.localPosition2,
+    };
   }
 }
 
@@ -155,14 +213,52 @@ export default class Constraint {
  * blank, so `length` must be positive.
  */
 export class DistanceConstraint extends Constraint {
-  constructor({ length = required('length'), ...rest } = {}) {
+  constructor({ length = null, ...rest } = {}) {
     super(rest);
-    if (!(length > 0)) {
+    if (length != null && !(length > 0)) {
       throw new Error(
         `DistanceConstraint length must be positive; got ${length}`,
       );
     }
+    // `null` means "however far apart the scene places them" — resolved by
+    // `Scene.addConstraint`, which is the first moment there is a scene to
+    // measure. Until then the constraint is well-formed but not yet answerable.
     this.length = length;
+  }
+
+  resolveGeometry(measured = required('measured'), scale = 1) {
+    /**
+     * Fix the rest length against the geometry the scene actually places.
+     *
+     * An unset `length` adopts the measurement, which is the ergonomic default:
+     * a rope authored between two points is as long as the gap between them. An
+     * explicit one is checked against it, because a `length` that disagrees
+     * with the pose is an inconsistent initial condition, and this formulation
+     * has no way to work one off — `C` keeps whatever value it starts with, so
+     * the disagreement is permanent and silent.
+     */
+    if (this.length == null) {
+      if (!(measured > 0)) {
+        throw new Error(
+          'DistanceConstraint has no length and the scene places its two ' +
+            `attachment points ${measured} apart, which is degenerate; ` +
+            'separate them, or set an explicit length',
+        );
+      }
+      this.length = measured;
+    } else if (
+      Math.abs(this.length - measured) >
+      consistencyTolerance(Math.max(this.length, measured, scale))
+    ) {
+      throw new Error(
+        `DistanceConstraint length ${this.length} disagrees with the ` +
+          `${measured} the scene places between its attachment points. ` +
+          'Constraint violation is conserved, not corrected, so the gap ' +
+          'would persist for the life of the simulation; move the frames, ' +
+          'or drop the explicit length to adopt the measured one.',
+      );
+    }
+    return this;
   }
 
   get typeName() {
@@ -210,6 +306,13 @@ export class DistanceConstraint extends Constraint {
   }
 
   toJsonObj() {
+    if (this.length == null) {
+      throw new Error(
+        'DistanceConstraint has no length yet, so there is nothing to ' +
+          'serialize. A length is resolved by `Scene.addConstraint`, against ' +
+          'the geometry the scene places.',
+      );
+    }
     return {
       frame1: this.frameId1,
       frame2: this.frameId2,
@@ -228,6 +331,14 @@ export class DistanceConstraint extends Constraint {
  * target; the price is that it removes two degrees of freedom rather than one.
  */
 export class CoincidenceConstraint extends Constraint {
+  constructor({ position2 = null, ...rest } = {}) {
+    super({ ...rest, position2: position2 == null ? ZERO_POS : position2 });
+    // `null` means "wherever frame 2 has to be touched for this to hold" —
+    // solved for by `Scene.addConstraint`, which is the first moment there is a
+    // pose to solve against.
+    this.inferPosition2 = position2 == null;
+  }
+
   get typeName() {
     return 'CoincidenceConstraint';
   }

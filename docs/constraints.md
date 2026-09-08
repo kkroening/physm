@@ -244,6 +244,61 @@ the velocity half of the projection strategy below, run once rather than per ste
 warning, because acceleration-level enforcement preserves $`C_0 \neq 0`$ exactly and forever: the
 constraint would silently hold the wrong separation and never converge toward the authored one.
 
+> **Built**, in `physm-js` — and *solving* rather than rejecting, which turned out to be the
+> better half of this section's advice. Each constraint type leaves one thing unspecified, and
+> `Scene.addConstraint` fills it in from the pose the scene is actually in:
+>
+> | type | free parameter | solved to |
+> | --- | --- | --- |
+> | `DistanceConstraint` | `length` | the gap between the two attachment points |
+> | `CoincidenceConstraint` | `position2` | $`M_2^{-1}M_1 r_1`$ |
+>
+> So the author places the frames wherever they belong and names *one* attachment point, and the
+> constraint holds at $`t = 0`$ by construction. There is no geometry to get right, and so nothing
+> to reject. Rejection survives only for a value the author does supply, which is opting back into
+> being responsible for it.
+>
+> **The rejecting form was written first and was the wrong instinct** *(Karl, 2026-09-07)*. It
+> forces the author to solve the geometry and then grades their answer, which is backwards when the
+> answer is derivable — and it is unworkable for a scene nobody typed. An interactive builder
+> cannot ask someone dragging two chains together to place them coincident to float32 precision,
+> and "move the frames until the points meet" is not advice a generator can act on.
+>
+> `Scene.getInitialStateMap` returns $`\dot q_0`$ projected, and both solvers seed from that one
+> method, so they cannot disagree about what the initial state is. **The projection is orthogonal
+> in the scene's own metric** $`g`$ — $`\dot q \leftarrow \dot q - g^{-1}J^{\mathsf T}(Jg^{-1}J^{\mathsf T})^{-1}J\dot q`$
+> — not in the Euclidean one. A plain least-norm correction minimises $`\lVert\Delta\dot q\rVert_2`$,
+> which adds a prismatic coordinate's metres per second to a revolute one's radians per second and
+> so depends on the unit lengths were authored in; measured, the same rig in millimetres, metres and
+> kilometres gave three different answers. The metric version minimises $`\tfrac12\Delta\dot q^{\mathsf T}g\Delta\dot q`$,
+> the kinetic energy of the correction — Gauss's principle of least constraint — and an energy does
+> not care what anybody authored lengths in.
+>
+> **Over a band, not unboundedly.** Measured, the correction is identical to six figures across
+> about five and a half orders of magnitude of length scale, and outside that the solve *fails*
+> rather than degrading quietly. The bound is real rather than a tolerance: $`g`$ mixes a prismatic
+> coordinate's mass with a revolute one's mass × length², so its condition number grows like the
+> square of the scale, and `physm-js` computes in float32. Rescaling the scene is the fix.
+>
+> **And a coincidence constraint welds two points wherever they land.** Solving `position2` means
+> the attachment can sit some way from anything the author drew — in the demo it is about 14% of a
+> segment past the end of the last drawn link. That is the contract, not an accident: the constraint
+> is about two *points*, and where the geometry is drawn is the renderer's business. It is the price
+> of never refusing a scene, and for an interactive builder it is the right side of that trade —
+> though a builder will want to *say* when the gap it absorbed is large, since a rig that
+> simulates correctly while looking wrong is its own kind of confusing.
+>
+> **And only there**, for the reason two paragraphs up: `physm-rs` frames do not carry an initial
+> state at all — they never parse `initialState`, and the wasm boundary receives $`(q, \dot q)`$ on
+> every call. There is no pose on that side to check a constraint against, and inventing one would
+> mean a second source of truth for the initial state, which is a worse failure than the one this
+> section is about. Rust rejects what it *can* judge without a pose: a constraint naming a frame
+> the scene does not contain.
+>
+> An authored violation is still reachable, deliberately, through
+> `addConstraint(c, { allowInitialViolation: true })` — because "$`C`$ is conserved" is only
+> observable from a scene that starts violated, so the tests for this formulation need it.
+
 ### Then the numerical drift
 
 With consistent initial conditions, position and velocity violations are still unobserved, and

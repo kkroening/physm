@@ -85,7 +85,12 @@ function getConstrainedSolver({
   const scene = getBranchedScene({
     seed,
     spacing: kind.spacing + spacingOffset,
-  }).addConstraint(kind.createConstraint());
+  }).addConstraint(kind.createConstraint(), {
+    // `spacingOffset` exists to violate the constraint at `t = 0`, which is
+    // the whole point of the conservation test below; scene build rejects that
+    // by default.
+    allowInitialViolation: spacingOffset !== 0,
+  });
   return new JsSolver(scene, { rungeKutta });
 }
 
@@ -335,6 +340,9 @@ describe('Constraint', () => {
         position1: [POLE_LENGTH, 0],
         position2: [POLE_LENGTH, 0],
       }),
+      // Only the Jacobian is under test here, and it is defined whether or not
+      // the two points currently meet.
+      { allowInitialViolation: true },
     );
     const solver = new JsSolver(scene);
     const constraint = scene.constraints[0];
@@ -402,5 +410,505 @@ describe('Constraint', () => {
           }),
       ).toThrow(/must be positive/);
     });
+  });
+});
+
+describe('Scene build', () => {
+  // The rig the query API exists for: two poles on a cart, roped tip to tip.
+  // Nothing here computes the geometry -- the scene is asked.
+  function getRopeScene({ spacing = POLE_SPACING, poleAngle = POLE_ANGLE } = {}) {
+    return new Scene({
+      frames: [
+        new TrackFrame({
+          id: 'cart',
+          weights: [new Weight(20)],
+          frames: [
+            new RotationalFrame({
+              id: 'pole1',
+              initialState: [poleAngle, 0],
+              weights: [new Weight(4, { position: [POLE_LENGTH, 0] })],
+            }),
+            new RotationalFrame({
+              id: 'pole2',
+              initialState: [Math.PI - poleAngle, 0],
+              position: [spacing, 0],
+              weights: [new Weight(7, { position: [POLE_LENGTH, 0] })],
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  const tip = [POLE_LENGTH, 0];
+
+  test('getWorldPosition places a frame-relative point', () => {
+    const scene = getRopeScene();
+    // Pole 1 pivots at the cart's origin, so its tip is just the pole vector.
+    expect(scene.getWorldPosition('pole1', tip)).toEqual([
+      expect.closeTo(POLE_LENGTH * Math.cos(POLE_ANGLE), 4),
+      expect.closeTo(POLE_LENGTH * Math.sin(POLE_ANGLE), 4),
+    ]);
+    // A frame's own origin needs no position argument.
+    expect(scene.getWorldPosition('pole2')).toEqual([
+      expect.closeTo(POLE_SPACING, 4),
+      expect.closeTo(0, 4),
+    ]);
+  });
+
+  test('getWorldPosition answers about a state other than the initial one', () => {
+    const scene = getRopeScene();
+    const stateMap = new Map([['pole1', [0, 0]]]);
+    // `cart` and `pole2` are absent from the map and read at rest, which is
+    // what makes this answerable while a scene is still being assembled.
+    expect(scene.getWorldPosition('pole1', tip, { stateMap })).toEqual([
+      expect.closeTo(POLE_LENGTH, 4),
+      expect.closeTo(0, 4),
+    ]);
+  });
+
+  test('getSeparation measures the gap a DistanceConstraint would close on', () => {
+    const scene = getRopeScene();
+    const { vector, distance } = scene.getSeparation('pole1', tip, 'pole2', tip);
+    expect(distance).toBeCloseTo(TIP_GAP, 4);
+    // Mirrored poles put the tips at the same height, so the gap is horizontal.
+    expect(vector[1]).toBeCloseTo(0, 4);
+    // `vector` is the constraint's own `d = x₁ − x₂`, so it points from the
+    // second attachment back to the first: pole 1's tip is the left one.
+    expect(vector[0]).toBeCloseTo(-TIP_GAP, 4);
+  });
+
+  test('an unset length adopts the gap the scene places', () => {
+    // The ergonomic path: author the rope, let the scene measure it.
+    const scene = getRopeScene().addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+        position2: tip,
+      }),
+    );
+    expect(scene.constraints[0].length).toBeCloseTo(TIP_GAP, 4);
+    // ...and the result starts consistent, which is the point of measuring it.
+    const ctx = scene.getConfigKinematics(scene.getInitialStateMap());
+    expect(Math.abs(scene.constraints[0].value(ctx)[0])).toBeLessThan(1e-4);
+    scene.disposeConfigKinematics(ctx);
+  });
+
+  test('the same scene at a different pose measures a different gap', () => {
+    // The geometry is not baked into the constraint: it is read off whatever
+    // scene the constraint is added to.
+    const wide = getRopeScene({ poleAngle: 0.9 }).addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+        position2: tip,
+      }),
+    );
+    expect(wide.constraints[0].length).toBeCloseTo(
+      POLE_SPACING - 2 * POLE_LENGTH * Math.cos(0.9),
+      4,
+    );
+    expect(wide.constraints[0].length).not.toBeCloseTo(TIP_GAP, 2);
+  });
+
+  test('an explicit length that disagrees with the geometry is rejected', () => {
+    expect(() =>
+      getRopeScene().addConstraint(
+        new DistanceConstraint({
+          frame1: 'pole1',
+          frame2: 'pole2',
+          position1: tip,
+          position2: tip,
+          length: TIP_GAP + 2,
+        }),
+      ),
+    ).toThrow(/disagrees with/);
+    // An explicit length that agrees is fine -- authoring it is redundant, not
+    // wrong, and a scene generator may well have computed it.
+    expect(() =>
+      getRopeScene().addConstraint(
+        new DistanceConstraint({
+          frame1: 'pole1',
+          frame2: 'pole2',
+          position1: tip,
+          position2: tip,
+          length: TIP_GAP,
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  test('a coincidence constraint solves for its second attachment point', () => {
+    // The poles are nowhere near meeting, and it does not matter: the author
+    // names the point on pole 1, and the attachment on pole 2 is solved for.
+    const scene = getRopeScene().addConstraint(
+      new CoincidenceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+      }),
+    );
+    const constraint = scene.constraints[0];
+
+    // The solved point is off pole 2's own axis, because pole 1's tip is not on
+    // it -- which is the mechanism working rather than a defect. Asserting the
+    // invariant rather than the coordinates: the two attachments name one world
+    // point.
+    expect(scene.getWorldPosition('pole2', constraint.localPosition2)).toEqual([
+      expect.closeTo(scene.getWorldPosition('pole1', tip)[0], 4),
+      expect.closeTo(scene.getWorldPosition('pole1', tip)[1], 4),
+    ]);
+    expect(constraint.localPosition2[1]).not.toBeCloseTo(0, 2);
+
+    // ...and the loop is closed at `t = 0` by construction.
+    const ctx = scene.getConfigKinematics(scene.getInitialStateMap());
+    constraint
+      .value(ctx)
+      .forEach((entry) => expect(Math.abs(entry)).toBeLessThan(1e-4));
+    scene.disposeConfigKinematics(ctx);
+  });
+
+  test('the solved attachment tracks the pose it was solved against', () => {
+    // Nothing about the rig has to be arranged for this to work, which is the
+    // property an interactive scene builder needs: the same constraint
+    // authored against a differently-posed scene lands somewhere else, and is
+    // correct in both.
+    const attachmentAt = (poleAngle) =>
+      getRopeScene({ poleAngle }).addConstraint(
+        new CoincidenceConstraint({
+          frame1: 'pole1',
+          frame2: 'pole2',
+          position1: tip,
+        }),
+      ).constraints[0].localPosition2;
+
+    const narrow = attachmentAt(0.6);
+    const wide = attachmentAt(0.9);
+    expect(narrow[0]).not.toBeCloseTo(wide[0], 2);
+    // Both still close their own loop exactly -- that is the invariant, not
+    // the number.
+    [0.6, 0.9, 1.3].forEach((poleAngle) => {
+      const scene = getRopeScene({ poleAngle }).addConstraint(
+        new CoincidenceConstraint({
+          frame1: 'pole1',
+          frame2: 'pole2',
+          position1: tip,
+        }),
+      );
+      const ctx = scene.getConfigKinematics(scene.getInitialStateMap());
+      scene.constraints[0]
+        .value(ctx)
+        .forEach((entry) => expect(Math.abs(entry)).toBeLessThan(1e-4));
+      scene.disposeConfigKinematics(ctx);
+    });
+  });
+
+  test('an explicit second attachment is still checked', () => {
+    // Supplying it is opting back into being responsible for it.
+    expect(() =>
+      getRopeScene().addConstraint(
+        new CoincidenceConstraint({
+          frame1: 'pole1',
+          frame2: 'pole2',
+          position1: tip,
+          position2: tip,
+        }),
+      ),
+    ).toThrow(/would never actually meet/);
+  });
+
+  test('the projection is scale-free across many orders of magnitude', () => {
+    // The claim the metric formulation is *for*: one physical rig, expressed at
+    // wildly different numeric length scales, gets the same correction as a
+    // fraction of what was authored.
+    //
+    // This needs its own test rather than a column in the sweep above, because
+    // the failure it guards lives at the extremes. An absolute early-return
+    // threshold does not misbehave at scale 1; it skips the projection entirely
+    // once the Jacobian entries fall far enough, and then silently hands the
+    // violation back.
+    const ratioAt = (scale) => {
+      const authored = 0.8;
+      const scene = new Scene({
+        frames: [
+          new TrackFrame({
+            id: 'slider',
+            initialState: [0, 0],
+            weights: [new Weight(10)],
+          }),
+          new RotationalFrame({
+            id: 'pole',
+            position: [8 * scale, 0],
+            initialState: [1.1, authored],
+            weights: [new Weight(3, { position: [5 * scale, 0] })],
+          }),
+        ],
+      }).addConstraint(
+        new DistanceConstraint({
+          frame1: 'slider',
+          frame2: 'pole',
+          position1: [0, 0],
+          position2: [5 * scale, 0],
+        }),
+      );
+      return scene.getInitialStateMap().get('pole')[1] / authored;
+    };
+
+    const reference = ratioAt(1);
+    // Genuinely corrected at the reference scale, so the comparisons below are
+    // not all agreeing on "unchanged".
+    expect(reference).toBeGreaterThan(0.01);
+    expect(reference).toBeLessThan(0.99);
+    // ...and identical to six figures across five and a half orders of
+    // magnitude. The band is not unbounded, and the bound is real rather than a
+    // tolerance: `g` mixes a prismatic coordinate's mass with a revolute one's
+    // mass-times-length-squared, so its condition number grows like the square
+    // of the scale, and tfjs computes in float32. Outside this band the solve
+    // fails loudly, which is the behaviour worth having -- it used to skip the
+    // projection and hand the violation back in silence.
+    [3e2, 1e2, 1, 1e-2, 1e-3].forEach((scale) =>
+      expect(ratioAt(scale)).toBeCloseTo(reference, 6),
+    );
+  });
+
+  test('the correction is the metric projection, not the Euclidean one', () => {
+    // The falsifying test for this PR's central claim, and the only one that
+    // runs the projector rather than its early return.
+    //
+    // Both candidates land on `J q̇ = 0`, so no assertion about the residual can
+    // tell them apart. What separates them is *direction*: the metric version
+    // moves along `g⁻¹Jᵀ` -- a generalized force, which is what the solver
+    // applies every step -- and the Euclidean one moves along `Jᵀ`. So `g·Δq̇`
+    // is parallel to `Jᵀ` and `Δq̇` itself is not.
+    //
+    // A slider and a pendulum, no shared ancestor, so neither Jacobian column
+    // is structurally zero and the two directions genuinely differ.
+    const scene = new Scene({
+      frames: [
+        new TrackFrame({
+          id: 'slider',
+          initialState: [0, 0],
+          weights: [new Weight(10)],
+        }),
+        new RotationalFrame({
+          id: 'pole',
+          position: [8, 0],
+          initialState: [1.1, 4],
+          weights: [new Weight(3, { position: [5, 0] })],
+        }),
+      ],
+    }).addConstraint(
+      new DistanceConstraint({
+        frame1: 'slider',
+        frame2: 'pole',
+        position1: [0, 0],
+        position2: [5, 0],
+      }),
+    );
+
+    const before = scene.getInitialStateMap({ project: false });
+    const after = scene.getInitialStateMap();
+    const delta = scene.sortedFrames.map(
+      (frame) => after.get(frame.id)[1] - before.get(frame.id)[1],
+    );
+    expect(Math.hypot(...delta)).toBeGreaterThan(0.1); // it actually ran
+
+    const ctx = scene.getConfigKinematics(before);
+    const [jacobian] = scene.constraints[0].jacobianRows(ctx);
+    scene.disposeConfigKinematics(ctx);
+    const massMatrix = scene.getMassMatrix(before);
+    const massDelta = tf.tidy(() => [
+      ...massMatrix
+        .matMul(tf.tensor2d(delta.map((entry) => [entry])))
+        .dataSync(),
+    ]);
+    massMatrix.dispose();
+
+    // `g·Δq̇ ∥ Jᵀ`: the ratios agree across coordinates.
+    const ratios = massDelta.map((entry, index) => entry / jacobian[index]);
+    expect(ratios[0]).toBeCloseTo(ratios[1], 3);
+    // ...while `Δq̇ ∥ Jᵀ` -- what the Euclidean version would give -- does not.
+    const euclidean = delta.map((entry, index) => entry / jacobian[index]);
+    expect(euclidean[0]).not.toBeCloseTo(euclidean[1], 1);
+  });
+
+  test('any geometry builds: no arrangement is required of the author', () => {
+    // The property an interactive scene builder needs. A person dragging two
+    // chains together cannot be asked to place them coincident to float32
+    // precision, and a generated scene has nobody to ask -- so the constraint
+    // has to accept whatever pose it is handed.
+    //
+    // Under the previous design, which measured the gap and rejected a
+    // non-zero one, most of this grid failed.
+    const poses = [];
+    for (let poleAngle of [0.3, 0.6, 0.9, 1.3]) {
+      for (let spacing of [4, 11.5, 20, 137]) {
+        for (let scale of [0.001, 1, 1000]) {
+          poses.push({ poleAngle, spacing, scale });
+        }
+      }
+    }
+    poses.forEach(({ poleAngle, spacing, scale }) => {
+      const scene = new Scene({
+        frames: [
+          new TrackFrame({
+            id: 'cart',
+            weights: [new Weight(20)],
+            frames: [-1, 1].map((side) =>
+              new RotationalFrame({
+                id: side < 0 ? 'pole1' : 'pole2',
+                initialState: [
+                  side < 0 ? poleAngle : Math.PI - poleAngle,
+                  // Non-zero, and not mirrored, so it violates the constraint:
+                  // with every velocity at zero the residual is identically
+                  // zero, the early return fires, and the grid would sweep the
+                  // position half only.
+                  side < 0 ? 0.7 : 0,
+                ],
+                position: [side < 0 ? 0 : spacing * scale, 0],
+                weights: [
+                  new Weight(4, { position: [POLE_LENGTH * scale, 0] }),
+                ],
+              }),
+            ),
+          }),
+        ],
+      });
+      expect(() =>
+        scene.addConstraint(
+          new CoincidenceConstraint({
+            frame1: 'pole1',
+            frame2: 'pole2',
+            position1: [POLE_LENGTH * scale, 0],
+          }),
+        ),
+      ).not.toThrow(); // would have thrown for all but the contrived cases
+
+      // Built is not enough -- it has to be built *consistent*, in both
+      // position and velocity.
+      const stateMap = scene.getInitialStateMap();
+      const ctx = scene.getConfigKinematics(stateMap);
+      const constraint = scene.constraints[0];
+      constraint.value(ctx).forEach((entry) => {
+        // Relative to the scale the scene works at, for the same float32
+        // reason the tolerance itself is relative.
+        expect(Math.abs(entry) / scale).toBeLessThan(1e-3);
+      });
+      // Cdot = J qd, which the projection has to have driven to zero. Measured
+      // against the residual it *started* with, which is the only denominator
+      // that stays meaningful: normalising by the projected terms themselves
+      // would be 0/0 in disguise, since driving them to zero is the whole job.
+      const authored = scene.getInitialStateMap({ project: false });
+      const residualOf = (map) =>
+        Math.max(
+          ...constraint
+            .jacobianRows(ctx)
+            .map((row) =>
+              Math.abs(
+                row.reduce(
+                  (total, entry, index) =>
+                    total + entry * map.get(scene.sortedFrames[index].id)[1],
+                  0,
+                ),
+              ),
+            ),
+        );
+      expect(residualOf(stateMap)).toBeLessThan(residualOf(authored) * 1e-5);
+      scene.disposeConfigKinematics(ctx);
+    });
+  });
+
+  test('a constraint naming an absent frame is rejected', () => {
+    expect(() =>
+      getRopeScene().addConstraint(
+        new DistanceConstraint({ frame1: 'pole1', frame2: 'nope' }),
+      ),
+    ).toThrow(/does not contain: nope/);
+  });
+
+  test('an inconsistent initial velocity is projected onto J qd = 0', () => {
+    const scene = getRopeScene().addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+        position2: tip,
+      }),
+    );
+    // Spin one pole and leave the other still: the rope would have to stretch.
+    scene.frameMap.get('pole1').initialState = [POLE_ANGLE, 2.5];
+
+    const rateOfChange = (stateMap) => {
+      const ctx = scene.getConfigKinematics(stateMap);
+      const [row] = scene.constraints[0].jacobianRows(ctx);
+      scene.disposeConfigKinematics(ctx);
+      return row.reduce(
+        (total, entry, index) =>
+          total + entry * stateMap.get(scene.sortedFrames[index].id)[1],
+        0,
+      );
+    };
+
+    expect(
+      Math.abs(rateOfChange(scene.getInitialStateMap({ project: false }))),
+    ).toBeGreaterThan(1);
+    const projected = scene.getInitialStateMap();
+    // Relative: the residual floor scales with the Jacobian's own magnitude,
+    // for the same float32 reason the consistency tolerance is relative.
+    expect(Math.abs(rateOfChange(projected))).toBeLessThan(1e-4);
+    // Least-norm, so the authored motion survives as far as the constraint
+    // permits rather than being zeroed.
+    expect(Math.abs(projected.get('pole1')[1])).toBeGreaterThan(0.5);
+    // Positions are untouched: only the velocity half is projected here.
+    expect(projected.get('pole1')[0]).toBeCloseTo(POLE_ANGLE, 6);
+  });
+
+  test('a consistent initial velocity is left exactly alone', () => {
+    const scene = getRopeScene().addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+        position2: tip,
+      }),
+    );
+    // Mirrored poles turning at the same rate keep their tips the same
+    // distance apart. Note what this does and does not pin: a null-space
+    // velocity has zero residual *by construction*, so it takes the early
+    // return and never enters the projection at all. What is pinned is that
+    // `J`'s pole columns are non-zero and that the residual cancels on a
+    // velocity the constraint can see -- which the cart version below cannot
+    // show, its column being structurally zero. The projector itself is pinned
+    // by the metric test further down, on an *inconsistent* velocity.
+    scene.frameMap.get('pole1').initialState = [POLE_ANGLE, 2];
+    scene.frameMap.get('pole2').initialState = [Math.PI - POLE_ANGLE, 2];
+    const projected = scene.getInitialStateMap();
+    expect(projected.get('pole1')[1]).toBeCloseTo(2, 5);
+    expect(projected.get('pole2')[1]).toBeCloseTo(2, 5);
+  });
+
+  test('the cart column of the Jacobian is structurally zero', () => {
+    // The other half of the test above, separated out because it pins a
+    // different claim: a rope slung between two arms of one *prismatic* frame
+    // exerts no net generalized force on it, so any cart velocity is
+    // consistent whatever else is going on.
+    const scene = getRopeScene().addConstraint(
+      new DistanceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: tip,
+        position2: tip,
+      }),
+    );
+    const ctx = scene.getConfigKinematics(scene.getInitialStateMap());
+    const [row] = scene.constraints[0].jacobianRows(ctx);
+    scene.disposeConfigKinematics(ctx);
+    const cartIndex = scene.sortedFrames.findIndex(
+      (frame) => frame.id === 'cart',
+    );
+    expect(row[cartIndex]).toBe(0);
+    expect(Math.max(...row.map(Math.abs))).toBeGreaterThan(1);
   });
 });

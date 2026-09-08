@@ -1,7 +1,6 @@
 import * as tf from './tfjs';
 import Solver from './Solver';
 import { checkStateMapValid } from './Solver';
-import { invertXformMatrix } from './utils';
 import { required } from './utils';
 import { solveLinearSystem } from './utils';
 
@@ -20,36 +19,17 @@ export default class JsSolver extends Solver {
     this.stateMap = stateMap;
   }
 
+  // The configuration sweeps live on `Scene`: they are questions about a pose,
+  // and answering them does not imply simulating anything. These delegate so
+  // that the solver and the scene queries cannot drift apart -- every tick runs
+  // through the same code the query API exposes.
+
   _getPosMatMap(stateMap = required('stateMap')) {
-    /**
-     * Determine all the local->global position transformation matrices,
-     * indexed by frame.
-     */
-    const posMatMap = new Map();
-    for (let frame of this.scene.sortedFrames) {
-      const [q] = stateMap.get(frame.id);
-      const parentId = this.scene.frameIdParentMap.get(frame.id);
-      const localPosMat = frame.getLocalPosMatrix(q);
-      const globalPosMat = parentId
-        ? posMatMap.get(parentId).matMul(localPosMat)
-        : localPosMat.clone();
-      localPosMat.dispose();
-      posMatMap.set(frame.id, globalPosMat);
-    }
-    return posMatMap;
+    return this.scene.getPosMatrixMap(stateMap);
   }
 
   _getInvPosMatMap(posMatMap = required('posMatMap')) {
-    /**
-     * Determine all the global->local ("inverse") position transformation
-     * matrices, indexed by frame.
-     */
-    return new Map(
-      [...posMatMap].map(([frameId, posMat]) => [
-        frameId,
-        invertXformMatrix(posMat),
-      ]),
-    );
+    return this.scene.getInvPosMatrixMap(posMatMap);
   }
 
   _getVelMatMap(
@@ -57,26 +37,7 @@ export default class JsSolver extends Solver {
     invPosMatMap = required('invPosMatMap'),
     stateMap = required('stateMap'),
   ) {
-    /**
-     * Determine all the global position -> global velocity transformation
-     * matrices, indexed by frame, where each matrix represents the velocity
-     * field of the corresponding frame in global coordinates, such that
-     * right-multiplying the matrix by a global position vector yields a global
-     * velocity vector.
-     */
-    return new Map(
-      this.scene.sortedFrames.map((frame) => {
-        const [q] = stateMap.get(frame.id);
-        const parentId = this.scene.frameIdParentMap.get(frame.id);
-        const localVelMat = frame.getLocalVelMatrix(q);
-        const relVelMat = localVelMat.matMul(invPosMatMap.get(frame.id));
-        const globalVelMat = parentId
-          ? posMatMap.get(parentId).matMul(relVelMat)
-          : relVelMat.clone();
-        tf.dispose([localVelMat, relVelMat]);
-        return [frame.id, globalVelMat];
-      }),
-    );
+    return this.scene.getVelMatrixMap(posMatMap, invPosMatMap, stateMap);
   }
 
   _getAccelMatMap(
@@ -156,29 +117,14 @@ export default class JsSolver extends Solver {
   }
 
   _getWeightPosMap(posMatMap = required('posMatMap')) {
-    /**
-     * Transform all the weight positions of all the frames into global
-     * positions, indexed by frame and mass reference.
-     */
-    return new Map(
-      this.scene.sortedFrames.map((frame) => [
-        frame.id,
-        frame.weights.map((weight) =>
-          posMatMap.get(frame.id).matMul(weight.position),
-        ),
-      ]),
-    );
+    return this.scene.getWeightPosMap(posMatMap);
   }
 
   _isFrameDescendent(
     descendentFrame = required('descendentFrame'),
     ancestorFrame = required('ancestorFrame'),
   ) {
-    return (
-      this.scene.frameIdPathMap
-        .get(descendentFrame.id)
-        .indexOf(ancestorFrame.id) !== -1
-    );
+    return this.scene.isFrameDescendent(descendentFrame.id, ancestorFrame.id);
   }
 
   _getDescendentFrame(
@@ -202,54 +148,24 @@ export default class JsSolver extends Solver {
     );
   }
 
+  // The mass matrix is the scene's pullback metric, a function of `q` alone.
+
   _getCoefficientMatrixEntry(
     rowIndex = required('rowIndex'),
     colIndex = required('colIndex'),
     velMatMap = required('velMatMap'),
     weightPosMap = required('weightPosMap'),
   ) {
-    const frame1 = this.scene.sortedFrames[rowIndex];
-    const frame2 = this.scene.sortedFrames[colIndex];
-    const velMat1 = velMatMap.get(frame1.id);
-    const velMat2 = velMatMap.get(frame2.id);
-    const baseFrame = this._getDescendentFrame(frame1, frame2);
-    const descendentFrames = baseFrame
-      ? this._getDescendentFrames(baseFrame)
-      : [];
-    let result = 0;
-    for (let frame3 of descendentFrames) {
-      for (let index = 0; index < frame3.weights.length; index++) {
-        const weight = frame3.weights[index];
-        const pos = weightPosMap.get(frame3.id)[index];
-        const vel1 = velMat1.matMul(pos);
-        const vel2 = velMat2.matMul(pos);
-        const dot = tf.matMul(vel2, vel1, true);
-        result += weight.mass * dot.dataSync()[0];
-        tf.dispose([vel1, vel2, dot]);
-      }
-    }
-    return result;
+    return this.scene.getMassMatrixEntry(
+      rowIndex,
+      colIndex,
+      velMatMap,
+      weightPosMap,
+    );
   }
 
-  _getCoefficientMatrix(
-    velMatMap = required('velMatMap'),
-    weightPosMap = required('weightPosMap'),
-  ) {
-    const numFrames = this.scene.sortedFrames.length;
-    const array = Array(numFrames);
-    for (let rowIndex = 0; rowIndex < numFrames; rowIndex++) {
-      const columns = Array(numFrames);
-      for (let colIndex = 0; colIndex < numFrames; colIndex++) {
-        columns[colIndex] = this._getCoefficientMatrixEntry(
-          rowIndex,
-          colIndex,
-          velMatMap,
-          weightPosMap,
-        );
-      }
-      array[rowIndex] = columns;
-    }
-    return tf.tensor2d(array);
+  _getCoefficientMatrix(stateMap = required('stateMap')) {
+    return this.scene.getMassMatrix(stateMap);
   }
 
   _getForceVectorEntry(
@@ -325,30 +241,11 @@ export default class JsSolver extends Solver {
   }
 
   _getConfigKinematics(stateMap = required('stateMap')) {
-    /**
-     * The configuration-only sweeps: everything a constraint's `value` and
-     * `jacobianRows` read, as a function of `q` alone. Evaluating those at a
-     * trial configuration — one no solve was run at — is what makes position
-     * projection implementable later, so the seam is kept explicit rather than
-     * inlined. See `docs/constraints.md` §7.
-     *
-     * The returned context carries no velocity-dependent maps, so `bias`
-     * throws on it. Dispose it with `_disposeConstraintCtx`.
-     */
-    const posMatMap = this._getPosMatMap(stateMap);
-    const invPosMatMap = this._getInvPosMatMap(posMatMap);
-    const velMatMap = this._getVelMatMap(posMatMap, invPosMatMap, stateMap);
-    tf.dispose([...invPosMatMap.values()]);
-    return {
-      sortedFrames: this.scene.sortedFrames,
-      frameIdPathMap: this.scene.frameIdPathMap,
-      posMatMap,
-      velMatMap,
-    };
+    return this.scene.getConfigKinematics(stateMap);
   }
 
   _disposeConstraintCtx(ctx = required('ctx')) {
-    tf.dispose([...ctx.posMatMap.values(), ...ctx.velMatMap.values()]);
+    this.scene.disposeConfigKinematics(ctx);
   }
 
   _augmentWithConstraints(
@@ -435,7 +332,7 @@ export default class JsSolver extends Solver {
     //     ms.map((m) => [...m.dataSync()]),
     //   ),
     // );
-    let aMat = this._getCoefficientMatrix(velMatMap, weightPosMap);
+    let aMat = this._getCoefficientMatrix(stateMap);
     let bVec = this._getForceVector(
       velMatMap,
       velSumMatMap,

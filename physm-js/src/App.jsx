@@ -37,7 +37,7 @@ const cartResistance = 5;
 const maxCartForce = 8500;
 const cartWidth = 4;
 
-const poleHeight = 8;
+const poleHeight = 1;
 const poleMass = 30;
 const poleBaseOffset = cartWidth / 3;
 
@@ -65,40 +65,28 @@ const TARGET_ANIMATION_FPS = 60;
 const TIME_SCALE = 1.5;
 const TARGET_PHYSICS_FPS = 400 * TIME_SCALE;
 
-function advance([x, y], angle, length) {
-  return [x + length * Math.cos(angle), y + length * Math.sin(angle)];
-}
-
-// How far a chain reaches from the pole it hangs off. The poles are then placed
-// exactly that far to either side of the cart's centreline, so the two chains
-// meet on it -- the loop closes at `t = 0`, which is what this formulation
-// needs: it holds `C̈` at zero, which leaves `C` free to keep whatever value it
-// starts with, forever.
-const chainReach = chainSegmentAngles.reduce(
-  (point, angle) => advance(point, angle, chainSegmentLength),
-  [0, 0],
-);
-const poleTips = [-1, 1].map((side) => [side * chainReach[0], poleHeight]);
-
 // Built leaf-first, so each segment can be handed to its parent as a child.
-function getChain(side) {
+function getChain(side, rootPosition) {
   return Array.from({ length: chainSegmentCount }, (unused, index) => index)
     .reverse()
     .reduce((childSegment, index) => {
       const first = index === 0;
+
       // A frame's coordinate is its angle relative to its parent. The cart does
       // not rotate, so the first segment's coordinate is just its arc angle;
       // every one after that is the arc's shared turn.
+
       const angle = first ? chainSegmentAngles[0] : chainTurn;
+
       // Mirroring about the cart's centreline sends an *absolute* angle `φ` to
       // `π − φ`, which is the first segment; the relative turns that follow are
-      // differences of absolute angles, so for them the mirror is just a
-      // negation.
+      // differences of absolute angles, so for them the mirror is a negation.
       const mirrored = first ? Math.PI - angle : -angle;
+
       return new RotationalFrame({
         id: `chain${side < 0 ? 'L' : 'R'}${index}`,
         initialState: [side < 0 ? angle : mirrored, 0],
-        position: first ? poleTips[side < 0 ? 0 : 1] : [chainSegmentLength, 0],
+        position: first ? rootPosition : [chainSegmentLength, 0],
         decals: [
           new LineDecal({ endPos: [chainSegmentLength, 0], lineWidth: 0.18 }),
           new CircleDecal({ position: [chainSegmentLength, 0], radius: 0.16 }),
@@ -112,8 +100,22 @@ function getChain(side) {
         frames: childSegment ? [childSegment] : [],
         resistance: chainSegmentResistance,
       });
+
     }, null);
 }
+
+const chainTipId = (side) => `chain${side < 0 ? 'L' : 'R'}${chainSegmentCount - 1}`;
+const chainTip = [chainSegmentLength, 0];
+
+// Round numbers, chosen to look right. They are *not* required to make the two
+// chains meet, and they don't: at this spacing the left chain's end lands some
+// way from the right one's. The constraint solves for where on the right chain
+// the left one attaches, so the loop closes exactly whatever these are set to.
+//
+// That is the difference between a rig that has to be derived and one that can
+// be dragged around. Nothing here has to be recomputed when the segment count,
+// the sag angle or the pole height changes.
+const poleTips = [-1, 1].map((side) => [side * 5.5, -poleHeight]);
 
 const cart = new TrackFrame({
   id: 'cart',
@@ -133,7 +135,7 @@ const cart = new TrackFrame({
     ),
     ...poleTips.map((tip) => new CircleDecal({ position: tip, radius: 0.3 })),
   ],
-  frames: [getChain(-1), getChain(1)],
+  frames: [getChain(-1, poleTips[0]), getChain(1, poleTips[1])],
   initialState: [0, 0],
   weights: [
     new Weight(cartMass),
@@ -153,11 +155,13 @@ const scene = new Scene({
     }),
   ],
 }).addConstraint(
+  // Only one attachment point is named. Where the *left* chain's end sits on
+  // the right chain is solved for out of the pose, so there is no geometry to
+  // get right and nothing to reject.
   new CoincidenceConstraint({
-    frame1: `chainL${chainSegmentCount - 1}`,
-    frame2: `chainR${chainSegmentCount - 1}`,
-    position1: [chainSegmentLength, 0],
-    position2: [chainSegmentLength, 0],
+    frame1: chainTipId(-1),
+    frame2: chainTipId(1),
+    position1: chainTip,
   }),
 );
 
