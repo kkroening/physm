@@ -399,9 +399,58 @@ function simulate(
   return solver.getStateMap();
 }
 
-function getViewXformMatrix(translation, scale) {
+/**
+ * Track an element's rendered size.
+ *
+ * The plot is `width: 100%; height: 100%` of a flex item, so its size is the
+ * window's, not a constant -- and the view transform has to centre on it. A
+ * `ResizeObserver` rather than a `resize` listener because the element also
+ * changes size when the surrounding layout does, with no window event.
+ *
+ * Starts at zero and is measured on the first commit; `getViewXformMatrix`
+ * treats zero as "not measured yet" so the first frame is not drawn at a
+ * corner.
+ */
+function useElementSize(ref) {
+  const [size, setSize] = useState([0, 0]);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSize(([currentWidth, currentHeight]) =>
+        width === currentWidth && height === currentHeight
+          ? [currentWidth, currentHeight]
+          : [width, height],
+      );
+    });
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return size;
+}
+
+/**
+ * World coordinates to the plot's, centred on the plot.
+ *
+ * The centre used to be a hardcoded `(300, 300)`, which put the scene outside
+ * any viewport shorter than about 600px -- the plot simply rendered blank, with
+ * everything drawn below its bottom edge. It is the element's own midpoint now.
+ *
+ * `-scale` on the `y` axis because the world is `y`-up and SVG is `y`-down.
+ */
+function getViewXformMatrix(translation, scale, [width, height]) {
   return mat3.multiply(
-    mat3.multiply(mat3.translation(300, 300), mat3.scaling(scale, -scale)),
+    mat3.multiply(
+      mat3.translation(width / 2, height / 2),
+      mat3.scaling(scale, -scale),
+    ),
     mat3.translation(translation[0], translation[1]),
   );
 }
@@ -443,7 +492,8 @@ function App({ rsWasmModule }) {
   const clickLocationDelta = useMouse(svgRef);
   const touchLocationDelta = useTouch(svgRef);
   const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
-  const viewXformMatrix = getViewXformMatrix(translation, scale);
+  const plotSize = useElementSize(svgRef);
+  const viewXformMatrix = getViewXformMatrix(translation, scale, plotSize);
   const solver = useRef(null);
 
   useEffect(() => {
