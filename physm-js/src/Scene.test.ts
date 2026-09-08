@@ -1,4 +1,3 @@
-import CircleDecal from './CircleDecal';
 import { faker } from '@faker-js/faker';
 import Frame from './Frame';
 import RotationalFrame from './RotationalFrame';

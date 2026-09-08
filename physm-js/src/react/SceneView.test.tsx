@@ -1,7 +1,6 @@
 import * as mat3 from './../Mat3';
 import CircleDecal from './../CircleDecal';
 import Frame from './../Frame';
-import React from 'react';
 import Scene from './../Scene';
 import SceneView from './SceneView';
 import TrackFrame from './../TrackFrame';

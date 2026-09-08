@@ -39,7 +39,7 @@ export interface BoxDecalOptions {
  * render carries them through the view transform.
  */
 export default class BoxDecal extends Decal {
-  override readonly kind: DecalKind = 'box';
+  override readonly kind = 'box' as const satisfies DecalKind;
   readonly width: number;
   readonly height: number;
   readonly position: Vec3;

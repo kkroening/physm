@@ -32,7 +32,11 @@ export default function FrameView({
   return (
     <g className="frame">
       {frame.decals.map((decal, index) => (
-        <DecalView decal={decal} xformMatrix={childXform} key={`decal${index}`} />
+        <DecalView
+          decal={decal}
+          xformMatrix={childXform}
+          key={`decal${index}`}
+        />
       ))}
       {frame.frames.map((child, index) => (
         <FrameView

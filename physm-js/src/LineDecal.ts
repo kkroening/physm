@@ -14,7 +14,7 @@ export interface LineDecalOptions {
 
 /** A straight segment between two frame-relative points. */
 export default class LineDecal extends Decal {
-  override readonly kind: DecalKind = 'line';
+  override readonly kind = 'line' as const satisfies DecalKind;
   readonly startPos: Vec3;
   readonly endPos: Vec3;
   readonly lineWidth: number;

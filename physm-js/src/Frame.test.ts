@@ -2,11 +2,7 @@ import * as mat3 from './Mat3';
 import * as vec3 from './Vec3';
 import CircleDecal from './CircleDecal';
 import Frame from './Frame';
-import TrackFrame from './TrackFrame';
 import Weight from './Weight';
-import type { ReactElement, SVGProps } from 'react';
-import type { StateMap } from './Frame';
-import { ZERO_STATE } from './State';
 
 describe('Frame', () => {
   test('defaults to the origin, at rest, with nothing attached', () => {

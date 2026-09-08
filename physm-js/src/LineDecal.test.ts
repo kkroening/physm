@@ -20,5 +20,4 @@ describe('LineDecal', () => {
     // Stroke width follows `sqrt(|det|)`, so a 10x zoom thickens by 10.
     expect(moved.lineWidth).toBeCloseTo(20, 9);
   });
-
 });

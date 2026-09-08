@@ -13,7 +13,7 @@ export interface CircleDecalOptions {
 
 /** A filled disc at a frame-relative point. */
 export default class CircleDecal extends Decal {
-  override readonly kind: DecalKind = 'circle';
+  override readonly kind = 'circle' as const satisfies DecalKind;
   readonly position: Vec3;
   readonly radius: number;
   readonly color: string;
@@ -36,5 +36,4 @@ export default class CircleDecal extends Decal {
       color: this.color,
     });
   }
-
 }

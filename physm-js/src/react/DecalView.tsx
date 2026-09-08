@@ -12,6 +12,18 @@ export interface DecalViewProps {
   xformMatrix: Mat3;
 }
 
+/**
+ * Every decal there is.
+ *
+ * The switch below narrows over this rather than over `kind` alone, so each
+ * branch is type-checked instead of asserted -- and so *adding a class* is the
+ * compile error, not merely adding a `kind` string. A new subclass reusing an
+ * existing kind would otherwise satisfy the exhaustiveness check, be cast to
+ * the wrong class, and draw `NaN` coordinates: the silent omission this whole
+ * arrangement exists to prevent, by the one route a `kind`-only check misses.
+ */
+type AnyDecal = BoxDecal | CircleDecal | LineDecal;
+
 function BoxDecalView({
   decal,
   xformMatrix,
@@ -20,7 +32,9 @@ function BoxDecalView({
   xformMatrix: Mat3;
 }): ReactElement {
   const scale = mat3.scaleFactor(xformMatrix);
-  const corners = decal.corners.map((corner) => mat3.apply(xformMatrix, corner));
+  const corners = decal.corners.map((corner) =>
+    mat3.apply(xformMatrix, corner),
+  );
 
   if (decal.solid) {
     // The fourth corner is the upper-left one, which is where an SVG `rect`
@@ -118,16 +132,17 @@ export default function DecalView({
   decal,
   xformMatrix,
 }: DecalViewProps): ReactElement {
-  switch (decal.kind) {
+  // The one remaining cast. `Frame.decals` is `Decal[]`, and closing that set
+  // would put the list of every decal into `Decal.ts` -- a call that belongs
+  // with the description/instance split rather than here.
+  const shape = decal as AnyDecal;
+
+  switch (shape.kind) {
     case 'box':
-      return <BoxDecalView decal={decal as BoxDecal} xformMatrix={xformMatrix} />;
+      return <BoxDecalView decal={shape} xformMatrix={xformMatrix} />;
     case 'circle':
-      return (
-        <CircleDecalView decal={decal as CircleDecal} xformMatrix={xformMatrix} />
-      );
+      return <CircleDecalView decal={shape} xformMatrix={xformMatrix} />;
     case 'line':
-      return (
-        <LineDecalView decal={decal as LineDecal} xformMatrix={xformMatrix} />
-      );
+      return <LineDecalView decal={shape} xformMatrix={xformMatrix} />;
   }
 }

@@ -18,5 +18,4 @@ describe('CircleDecal', () => {
     expect(moved.position).toEqual([4, 8, 1]);
     expect(moved.radius).toBeCloseTo(12, 9);
   });
-
 });

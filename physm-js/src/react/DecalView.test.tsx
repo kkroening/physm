@@ -3,7 +3,6 @@ import BoxDecal from './../BoxDecal';
 import CircleDecal from './../CircleDecal';
 import DecalView from './DecalView';
 import LineDecal from './../LineDecal';
-import React from 'react';
 import { render } from '@testing-library/react';
 import type Decal from './../Decal';
 import type { Mat3 } from './../Mat3';
@@ -36,6 +35,24 @@ function attr(element: Element, name: string): number {
   return Number(element.getAttribute(name));
 }
 
+/**
+ * The paint attributes, as the DOM spells them.
+ *
+ * Asserted alongside the geometry because they are the half a move like this
+ * loses silently: dropping `stroke` or `fill` does not shift a shape, it
+ * removes it from the picture entirely, and every geometry assertion still
+ * passes. `class` and `stroke-width` are the DOM's names for the JSX's
+ * `className` and `strokeWidth`.
+ */
+function paintOf(element: Element): Record<string, string | null> {
+  return {
+    class: element.getAttribute('class'),
+    fill: element.getAttribute('fill'),
+    stroke: element.getAttribute('stroke'),
+    strokeWidth: element.getAttribute('stroke-width'),
+  };
+}
+
 describe('DecalView', () => {
   test('draws a circle at the transformed centre, not the local one', () => {
     const circle = drawn(
@@ -47,6 +64,17 @@ describe('DecalView', () => {
     expect(attr(circle, 'cx')).toBeCloseTo(11, 9);
     expect(attr(circle, 'cy')).toBeCloseTo(22, 9);
     expect(attr(circle, 'r')).toBeCloseTo(3, 9);
+  });
+
+  test('a circle carries its class and fill', () => {
+    // A colour that is not the default, so a hardcoded `black` would fail here
+    // rather than pass by coincidence.
+    const circle = drawn(new CircleDecal({ color: 'rebeccapurple' }));
+
+    expect(paintOf(circle)).toMatchObject({
+      class: 'plot__circle',
+      fill: 'rebeccapurple',
+    });
   });
 
   test('draws a line between the transformed endpoints', () => {
@@ -64,6 +92,22 @@ describe('DecalView', () => {
     ]).toEqual([100, 200, 103, 204]);
   });
 
+  test('a line carries its class, stroke and scaled stroke width', () => {
+    // Non-default colour and width, under a scaling transform: `lineWidth`
+    // times `scaleFactor` is the only place the view scale reaches a stroke,
+    // and 2 x 5 distinguishes it from either factor alone.
+    const line = drawn(
+      new LineDecal({ endPos: [1, 0], lineWidth: 2, color: 'tomato' }),
+      mat3.scaling(5, 5),
+    );
+
+    expect(paintOf(line)).toMatchObject({
+      class: 'plot__line',
+      stroke: 'tomato',
+      strokeWidth: '10',
+    });
+  });
+
   test('draws a solid box as one rect', () => {
     const rect = drawn(new BoxDecal({ width: 4, height: 2 }));
 
@@ -77,6 +121,21 @@ describe('DecalView', () => {
 
     expect(group.tagName).toBe('g');
     expect(group.querySelectorAll('line')).toHaveLength(4);
+  });
+
+  test("an outlined box's edges carry class, stroke and scaled width", () => {
+    const group = drawn(
+      new BoxDecal({ solid: false, lineWidth: 3, color: 'seagreen' }),
+      mat3.scaling(4, 4),
+    );
+
+    for (const edge of group.querySelectorAll('line')) {
+      expect(paintOf(edge)).toMatchObject({
+        class: 'plot__line',
+        stroke: 'seagreen',
+        strokeWidth: '12',
+      });
+    }
   });
 
   test('centred and quadrant-one boxes differ by half a side', () => {
