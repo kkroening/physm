@@ -12,11 +12,36 @@ The scene graph and the solvers are plain TypeScript: a `Scene` can be built,
 stepped and queried with no renderer present, which is what makes it usable from
 a worker, a test, or Node.
 
-Drawing lives in **[`src/react`](src/react/)**; `App.jsx` and `index.jsx` are the
-app shell that mounts it. [`SceneView`](src/react/SceneView.tsx) is the entry point: give it a
-scene, a state map and a view transform and it renders the SVG. Below it,
-[`DecalView`](src/react/DecalView.tsx) maps a decal's `kind` to an element, so
-knowing how to draw a circle lives in the renderer rather than on `CircleDecal`.
+**[`src/react`](src/react/)** is the React binding, in two halves that meet at
+[`Scene`](src/react/Scene.tsx).
+
+*Drawing.* [`SceneView`](src/react/SceneView.tsx) takes a scene, a state map and
+a view transform and renders the SVG. Below it,
+[`DecalView`](src/react/DecalView.tsx) maps a decal to an element, so knowing how
+to draw a circle lives in the renderer rather than on `CircleDecal`.
+
+*Authoring.* A rig can be written as JSX instead of assembled by hand:
+
+```jsx
+<Scene gravity={10}>
+  <TrackFrame id="cart" resistance={5}>
+    <BoxDecal width={4} height={2} />
+    <Weight mass={250} />
+    <RopeChain segments={5} />
+  </TrackFrame>
+  <CoincidenceConstraint frame1="chainL4" frame2="chainR4" position1={[1.4, 0]} />
+</Scene>
+```
+
+The authoring components render nothing; they register what they describe, and
+`Scene` builds a real `Scene` from the registrations, which is checked against
+the same rig assembled by hand. A repeated structure is
+then an ordinary React component — `RopeChain` built from `RopeSegment`s —
+rather than a loop that appends to an array. Assembly takes two renders, because
+a `Frame` takes its children as constructor arguments, so `Scene` reports the
+built scene through `onSceneChange` rather than returning it.
+
+`App.jsx` and `index.jsx` are the app shell that mounts all this.
 
 ## Prerequisites
 

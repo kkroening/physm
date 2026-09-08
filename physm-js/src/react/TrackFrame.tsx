@@ -1,0 +1,63 @@
+import CoreTrackFrame from './../TrackFrame';
+import { ParentKeyContext, useSceneNode } from './sceneNodes';
+import { useId } from 'react';
+import type { FrameId } from './../Frame';
+import type { ReactElement, ReactNode } from 'react';
+
+export interface TrackFrameProps {
+  children?: ReactNode;
+  id?: FrameId;
+  position?: number | readonly number[];
+  angle?: number;
+  initialState?: number | readonly number[];
+  resistance?: number;
+}
+
+/** A prismatic joint: one coordinate, sliding along `angle`. */
+export default function TrackFrame({
+  children,
+  id,
+  position,
+  angle,
+  initialState,
+  resistance,
+}: TrackFrameProps): ReactElement {
+  const key = useId();
+
+  useSceneNode(
+    key,
+    {
+      slot: 'frame',
+      build: ({ decals, weights, frames }) =>
+        new CoreTrackFrame({
+          decals,
+          weights,
+          frames,
+          // An omitted id defaults to this component's own key, not to a
+          // fresh random one: the scene is rebuilt on every registration
+          // change, and a regenerated id would silently stop matching a
+          // caller's state map. `getPosMatrixMap` forgives an absent frame
+          // by reading its `initialState`, so the rig would snap back to
+          // `t = 0` with no error at all.
+          id: id ?? key,
+          ...(position === undefined ? {} : { position }),
+          ...(angle === undefined ? {} : { angle }),
+          ...(initialState === undefined ? {} : { initialState }),
+          ...(resistance === undefined ? {} : { resistance }),
+        }),
+    },
+    [
+      id,
+      JSON.stringify(position),
+      angle,
+      JSON.stringify(initialState),
+      resistance,
+    ],
+  );
+
+  return (
+    <ParentKeyContext.Provider value={key}>
+      {children}
+    </ParentKeyContext.Provider>
+  );
+}
