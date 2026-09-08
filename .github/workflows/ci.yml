@@ -191,7 +191,7 @@ jobs:
       # is not committed. Both wasm targets are built before `npm ci` so the link
       # resolves to a real directory rather than dangling until the first build.
       # The two targets are not interchangeable: `pkg` (bundler) is what the browser
-      # imports, `nodepkg` (nodejs) is what Solver.test.js imports.
+      # imports, `nodepkg` (nodejs) is what Solver.test.ts imports.
       #
       # These are not the only wasm builds in the run: package.json's `pretest` and
       # `prebuild` hooks fire the same commands again, so wasm-pack runs four times,
