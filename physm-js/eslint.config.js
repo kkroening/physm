@@ -1,13 +1,16 @@
 import js from '@eslint/js';
 import globals from 'globals';
+import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
   { ignores: ['dist/**', 'coverage/**'] },
   js.configs.recommended,
+
+
   {
-    files: ['**/*.{js,jsx,mjs}'],
+    files: ['**/*.{js,jsx,mjs,ts,tsx}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -32,8 +35,23 @@ export default [
       'no-constant-condition': 'warn',
     },
   },
+  // Scoped to TypeScript, so the recommended TS rules do not promote the
+  // pre-existing `.js` warnings below into errors.
+  ...tseslint.config({
+    files: ['**/*.ts', '**/*.tsx'],
+    extends: [...tseslint.configs.recommended],
+    rules: {
+      // The base rule cannot see type-only usage; the TypeScript-aware one can.
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_' },
+      ],
+    },
+  }),
+
   {
-    files: ['**/*.test.{js,jsx}', 'src/setupTests.js', 'src/testutils.js'],
+    files: ['**/*.test.{js,jsx,ts,tsx}', 'src/setupTests.js', 'src/testutils.js'],
     languageOptions: { globals: { ...globals.vitest } },
   },
 ];

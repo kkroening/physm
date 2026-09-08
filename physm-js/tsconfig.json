@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Vite strips types with esbuild and never checks them, so `tsc` runs as a
+    // separate CI step and emits nothing.
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+
+    // The port is incremental: `.js` files coexist with `.ts` ones and are not
+    // type-checked until they become `.ts`. Both flags come out when the last
+    // `.js` file does.
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src", "vite.config.js", "eslint.config.js"]
+}

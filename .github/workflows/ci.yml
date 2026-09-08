@@ -209,10 +209,18 @@ jobs:
       # Warnings do not block, but the floor is frozen: restoring lint after five
       # unlinted years surfaced 48 pre-existing unused imports, and without the cap
       # warning 49 would land green — a result reported rather than asserted, which
-      # is the same failure this file exists to fix. Ratchet the number down as the
-      # debt is paid. The react-hooks rules are configured as errors regardless.
+      # is the same failure this file exists to fix. The react-hooks rules are
+      # configured as errors regardless.
+      #
+      # Ratchet it down as the debt is paid, which the TypeScript port does a file
+      # at a time: porting `daglet` alone took it from 48 to 43.
       - name: Lint
-        run: npm run lint -- --max-warnings 48
+        run: npm run lint -- --max-warnings 43
+
+      # Vite strips types with esbuild and never checks them, so without this the
+      # annotations are decorative.
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Test
         run: npm test
