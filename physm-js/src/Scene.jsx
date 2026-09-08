@@ -54,8 +54,14 @@ export default class Scene {
   addConstraint(constraint = required('constraint')) {
     /**
      * Add a loop-closure constraint, mirroring `Scene::add_constraint` in
-     * physm-rs. Chainable, and safe to call after construction: nothing derived
-     * in the constructor depends on the constraint list.
+     * physm-rs. Chainable, and callable after construction because the
+     * constructor's derived tables -- the sort order, the parent map, the root
+     * paths -- are functions of the frames alone.
+     *
+     * That is a description of today, not an invariant to preserve. The
+     * scene-build consistency step in `docs/constraints.md` §7 has to project
+     * `q̇₀` onto `J q̇ = 0`, which means reading the constraint list at build
+     * time; whoever adds it should expect to change this.
      */
     this.constraints.push(constraint);
     return this;

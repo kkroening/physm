@@ -1794,8 +1794,7 @@ mod tests {
     /// Cart on a track, two 2-link arms hanging from it — a miniature of the rope rig.
     /// `tip_separation` places the arms so the free ends start that far apart.
     fn get_branched_frames() -> Vec<FrameBox> {
-        let arm = |side: &str, x: f64, q_sign: f64| {
-            let _ = q_sign;
+        let arm = |side: &str, x: f64| {
             Box::new(
                 RotationalFrame::new(format!("{}0", side))
                     .set_position(Position([x, 0.]))
@@ -1810,8 +1809,8 @@ mod tests {
         vec![Box::new(
             TrackFrame::new("cart".into())
                 .add_weight(Weight::new(20.))
-                .add_child(arm("left", -3., 1.))
-                .add_child(arm("right", 3., -1.)),
+                .add_child(arm("left", -3.))
+                .add_child(arm("right", 3.)),
         )]
     }
 
@@ -1836,14 +1835,12 @@ mod tests {
     /// Builds a `ConstraintCtx` at an arbitrary state. Configuration-only unless
     /// `with_motion`, which is the point of seam 4.
     fn make_ctx<'a>(
-        frames: &[&FrameBox],
         index_path_map: &'a FrameIndexPathMap,
         states: &[State],
         indices: (usize, usize),
         motion: Option<&'a (Vec<Mat3>, Vec<Mat3>)>,
         config: &'a (Vec<Mat3>, Vec<Mat3>),
     ) -> ConstraintCtx<'a> {
-        let _ = frames;
         ConstraintCtx {
             frame_count: states.len(),
             index_a: indices.0,
@@ -1874,7 +1871,7 @@ mod tests {
             for &seed in [0.3, -1.1, 2.2].iter() {
                 let states = get_branched_states(seed);
                 let config = super::get_config_kinematics(&frames, &index_path_map, &states);
-                let ctx = make_ctx(&frames, &index_path_map, &states, indices, None, &config);
+                let ctx = make_ctx(&index_path_map, &states, indices, None, &config);
                 let analytic = constraint.jacobian_rows(&ctx);
 
                 let h = 1e-6;
@@ -1883,7 +1880,7 @@ mod tests {
                         let mut s: Vec<State> = states.to_vec();
                         s[i].q += sign * h;
                         let c = super::get_config_kinematics(&frames, &index_path_map, &s);
-                        let ctx = make_ctx(&frames, &index_path_map, &s, indices, None, &c);
+                        let ctx = make_ctx(&index_path_map, &s, indices, None, &c);
                         constraint.value(&ctx)
                     };
                     let plus = bump(1.);
@@ -1935,7 +1932,7 @@ mod tests {
                 // Cd(q, qd) = J(q) . qd, from `jacobian_rows` only.
                 let c_dot = |s: &[State]| -> Vec<f64> {
                     let config = super::get_config_kinematics(&frames, &index_path_map, s);
-                    let ctx = make_ctx(&frames, &index_path_map, s, indices, None, &config);
+                    let ctx = make_ctx(&index_path_map, s, indices, None, &config);
                     constraint
                         .jacobian_rows(&ctx)
                         .iter()
@@ -1978,7 +1975,8 @@ mod tests {
         //
         // The assertion is on the *order*, not a magic threshold: refining the step
         // by 4x must cut the drift by at least 100x. Measured 246x for both types
-        // -- 4^4 to two figures -- which says the drift is RK4 truncation and the
+        // -- within 4% of 4^4, which is as close as an order estimate from two
+        // step sizes lands -- which says the drift is RK4 truncation and the
         // constraint machinery contributes none of its own. A wrong bias term does
         // not merely drift faster, it stops being fourth-order.
         let scene_frames = get_branched_frames();
@@ -1993,7 +1991,7 @@ mod tests {
 
             let value_of = |s: &[State]| -> Vec<f64> {
                 let config = super::get_config_kinematics(&frames, &index_path_map, s);
-                let ctx = make_ctx(&frames, &index_path_map, s, indices, None, &config);
+                let ctx = make_ctx(&index_path_map, s, indices, None, &config);
                 constraint.value(&ctx)
             };
 
@@ -2096,15 +2094,21 @@ mod tests {
     }
 
     #[test]
-    fn test_unconstrained_scene_is_bit_identical() {
-        // A scene with no constraints must take exactly the path it took before.
+    fn test_unconstrained_scene_skips_the_augmentation() {
+        // The `row_count == 0` early return has to be the path taken, rather than
+        // an (n + 0) augmented matrix being assembled and happening to agree.
+        //
+        // The stronger claim -- that the numbers are unchanged -- is pinned by
+        // `test_augmented_system_is_symmetric_and_sized`, which compares the (1,1)
+        // block against this same assembly entry by entry, and by
+        // `test_get_system_of_equations`, which pins the values themselves.
         let states = get_sample_states();
         let scene_frames = get_sample_frames();
         let frames = super::sort_frames(&scene_frames);
         let index_path_map = super::get_index_path_map(&frames);
         let gravity = Vec3::new(0., -10., 0.);
         let ext: Vec<f64> = iter::repeat(2.).take(frames.len()).collect();
-        let (mat, _) = super::get_system_of_equations(
+        let (mat, force_vector) = super::get_system_of_equations(
             &frames,
             &index_path_map,
             &[],
@@ -2114,6 +2118,7 @@ mod tests {
             &ext,
         );
         assert_eq!(mat.shape(), (frames.len(), frames.len()));
+        assert_eq!(force_vector.len(), frames.len());
     }
 
     #[test]

@@ -120,7 +120,17 @@ pub struct DistanceConstraint {
 }
 
 impl DistanceConstraint {
+    /// Panics on a non-positive `length`, which is the degeneracy the type's doc
+    /// comment describes rather than an input to validate: this constructor is
+    /// reached from Rust code, where a zero target is a bug at the call site.
+    /// `from_json_value` returns an `Error` for the same condition, because
+    /// there the length is untrusted input and deserves a message.
     pub fn new(frame1: FrameId, frame2: FrameId, length: f64) -> Self {
+        assert!(
+            length > 0.,
+            "DistanceConstraint length must be positive; got {}",
+            length
+        );
         Self {
             frame1,
             frame2,

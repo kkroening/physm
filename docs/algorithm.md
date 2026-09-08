@@ -317,7 +317,7 @@ Three things follow, and each is load-bearing:
   \dot J_d\,\dot q \;=\; A_a x_P - A_b x_Q
   ```
 
-  — the same $`V_i`$ from sweep 2 and $`A_i`$ from sweep 5, non-zero only on the union of the
+  — the same $`V_i`$ from sweep 2 and $`A_i`$ from sweep 4, non-zero only on the union of the
   two root paths. Nothing new is computed; a constraint *reads* the sweeps.
 
   $`J_d`$ is **not** $J$, and keeping them apart matters. Each constraint type builds its own

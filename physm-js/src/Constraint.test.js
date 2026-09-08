@@ -1,3 +1,4 @@
+import * as tf from './tfjs';
 import JsSolver from './JsSolver';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
@@ -73,10 +74,18 @@ const constraintKinds = [
   },
 ];
 
-function getConstrainedSolver({ kind, seed = 0, rungeKutta = false } = {}) {
-  const scene = getBranchedScene({ seed, spacing: kind.spacing }).addConstraint(
-    kind.createConstraint(),
-  );
+function getConstrainedSolver({
+  kind,
+  seed = 0,
+  rungeKutta = false,
+  spacingOffset = 0,
+} = {}) {
+  // A non-zero `spacingOffset` moves the poles apart without telling the
+  // constraint, which is how a scene gets a deliberate `C₀ ≠ 0`.
+  const scene = getBranchedScene({
+    seed,
+    spacing: kind.spacing + spacingOffset,
+  }).addConstraint(kind.createConstraint());
   return new JsSolver(scene, { rungeKutta });
 }
 
@@ -203,30 +212,58 @@ describe('Constraint', () => {
       }
     });
 
-    test(`${kind.name}: constraint drift stays bounded over a trajectory`, () => {
-      // The formulation is index-1: it holds `C̈` at zero, so `C(t) = C₀ + Ċ₀t`
-      // exactly, and nothing pulls a violation back. Starting consistent --
-      // `C₀ = 0` by geometry, `Ċ₀ = 0` because the rig starts at rest -- what
-      // is left is integration error alone, and this pins how much of it there
-      // is: over these two seconds it reaches 9e-6 for the distance form and
-      // 2e-6 -- one float32 ulp -- for the coincidence one, so the bound below
-      // sits about an order of magnitude clear. When stabilization lands, this
-      // is what it has to beat.
-      const solver = getConstrainedSolver({ kind, rungeKutta: true });
+    test(`${kind.name}: constraint value is conserved over a trajectory`, () => {
+      // The formulation is index-1: it holds `C̈` at zero, and nothing pulls a
+      // violation back, so `C(t) = C₀ + Ċ₀t` exactly. Starting at rest makes
+      // `Ċ₀` zero, which leaves `C` *conserved* -- and what moves it after
+      // that is numerical error alone.
+      //
+      // `C₀` is deliberately non-zero. Conservation, not satisfaction, is the
+      // property under test: a version of this that only checked `C ≈ 0` from
+      // a consistent start would pass unconditionally against an
+      // implementation that snapped `C` to zero every step -- and projection
+      // is one of the three stabilizers `docs/constraints.md` §7 lists, so
+      // that is a plausible future implementation rather than a strawman.
+      //
+      // The *order* of convergence is not asserted here, because at float32 it
+      // is not observable. Measured over an 8x range of step sizes, the drift
+      // does not move:
+      //
+      //     steps    120       240       480       960
+      //     distance 1.024e-5  1.024e-5  1.029e-5  1.217e-5
+      //     coincid. 9.537e-7  9.537e-7  9.537e-7  9.537e-7
+      //
+      // -- and 9.537e-7 is exactly one float32 ulp (2⁻²⁰). RK4 truncation sits
+      // entirely below the representation floor, so refining the step buys
+      // nothing and eventually costs a little, as roundoff accumulates over
+      // more of it. `test_constraint_drift_is_conserved` in
+      // `physm-rs/src/solver.rs` is where the order gets asserted; f64 has the
+      // resolution for it, and the ratio there is 246x per 4x refinement.
+      //
+      // What this test pins is the floor itself, an order of magnitude clear.
+      const solver = getConstrainedSolver({
+        kind,
+        rungeKutta: true,
+        spacingOffset: 1.5,
+      });
       const constraint = solver.scene.constraints[0];
       const readC = () => {
         const ctx = solver._getConfigKinematics(solver.getStateMap());
         const value = constraint.value(ctx);
         solver._disposeConstraintCtx(ctx);
-        return Math.max(...value.map(Math.abs));
+        return value;
       };
-      expect(readC()).toBeLessThan(1e-5); // consistent at t = 0
+
+      const initial = readC();
+      expect(Math.max(...initial.map(Math.abs))).toBeGreaterThan(1);
       let worst = 0;
       for (let step = 0; step < 120; step++) {
         solver.tick(1 / 60);
-        worst = Math.max(worst, readC());
+        readC().forEach((value, row) => {
+          worst = Math.max(worst, Math.abs(value - initial[row]));
+        });
       }
-      expect(worst).toBeLessThan(1e-2);
+      expect(worst).toBeLessThan(1e-4);
     });
 
     test(`${kind.name}: bias refuses a configuration-only context`, () => {
@@ -251,6 +288,91 @@ describe('Constraint', () => {
         type: kind.name,
       });
     });
+  });
+
+  test('a shared ancestor contributes V_i d, which only vanishes if prismatic', () => {
+    // Every other fixture here hangs its two branches off the cart, which is a
+    // `TrackFrame` -- so the shared-ancestor column comes out zero, and the
+    // reason *why* goes untested. `docs/algorithm.md` §5 says the column
+    // collapses to `V_i d` and vanishes only because a prismatic `V_i` has no
+    // rotational part; interposing a rotational boom is what tells the two
+    // explanations apart.
+    const scene = new Scene({
+      frames: [
+        new TrackFrame({
+          id: 'cart',
+          initialState: [0, 0],
+          weights: [new Weight(20)],
+          frames: [
+            new RotationalFrame({
+              id: 'boom',
+              initialState: [0.35, 0],
+              weights: [new Weight(6, { position: [4, 0] })],
+              frames: [
+                new RotationalFrame({
+                  id: 'pole1',
+                  initialState: [POLE_ANGLE, 0],
+                  weights: [new Weight(4, { position: [POLE_LENGTH, 0] })],
+                }),
+                new RotationalFrame({
+                  id: 'pole2',
+                  initialState: [Math.PI - POLE_ANGLE, 0],
+                  position: [POLE_SPACING, 0],
+                  weights: [new Weight(7, { position: [POLE_LENGTH, 0] })],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    }).addConstraint(
+      // The coincidence form, deliberately: for the distance form the
+      // shared-ancestor entry is `dᵀ V_i d`, which is zero for any skew `V_i`,
+      // so it cannot distinguish the two ancestors either.
+      new CoincidenceConstraint({
+        frame1: 'pole1',
+        frame2: 'pole2',
+        position1: [POLE_LENGTH, 0],
+        position2: [POLE_LENGTH, 0],
+      }),
+    );
+    const solver = new JsSolver(scene);
+    const constraint = scene.constraints[0];
+    const ctx = solver._getConfigKinematics(scene.getInitialStateMap());
+    const rows = constraint.jacobianRows(ctx);
+    const columnOf = (frameId) => {
+      const index = scene.sortedFrames.findIndex(
+        (frame) => frame.id === frameId,
+      );
+      return [rows[0][index], rows[1][index]];
+    };
+
+    // Computed straight from the sweep, independently of the constraint.
+    const expected = tf.tidy(() => {
+      const at = (frameId) =>
+        ctx.velMatMap
+          .get('boom')
+          .matMul(
+            ctx.posMatMap.get(frameId).matMul(constraint.position1),
+          )
+          .dataSync();
+      const p = at('pole1');
+      const q = at('pole2');
+      return [p[0] - q[0], p[1] - q[1]];
+    });
+
+    const boom = columnOf('boom');
+    boom.forEach((entry, axis) => expect(entry).toBeCloseTo(expected[axis], 4));
+    // A revolute generator acts on a direction as a quarter turn, so it carries
+    // the separation over without changing its length -- which is `TIP_GAP`,
+    // the boom having rotated both tips rigidly. Not a threshold: the column's
+    // magnitude is predicted exactly.
+    expect(Math.hypot(...boom)).toBeCloseTo(TIP_GAP, 4);
+
+    // ...while the prismatic ancestor above it still cancels exactly.
+    columnOf('cart').forEach((entry) => expect(entry).toBeCloseTo(0, 6));
+
+    solver._disposeConstraintCtx(ctx);
   });
 
   test('an unconstrained scene still assembles the plain n-by-n system', () => {

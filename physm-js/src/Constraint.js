@@ -59,9 +59,15 @@ export default class Constraint {
    * Rows of `J_d = ∂d/∂q`, one `[x, y]` pair per frame, indexed by frame id.
    *
    * `(J_d)_i = [i ⪯ a] V_i x_P − [i ⪯ b] V_i x_Q`, non-zero only on the union
-   * of the two root paths — and the two contributions cancel on their shared
-   * prefix, which is what makes a rope slung between two arms of the same cart
-   * exert no net force on the cart.
+   * of the two root paths.
+   *
+   * On the shared prefix both indicators fire, so the column collapses to
+   * `V_i d` — a function of the gap alone, wherever the two points sit. For a
+   * *prismatic* ancestor `V_i` has no rotational part and that is exactly
+   * zero, which is why a rope slung between two arms of the same cart exerts
+   * no net generalized force on the cart. For a *revolute* one it does not
+   * vanish, and should not: the two equal-and-opposite constraint forces act
+   * at different points and leave a couple.
    */
   _separationJacobian(
     ctx = required('ctx'),
