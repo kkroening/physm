@@ -102,22 +102,15 @@ function getChain(side, rootPosition) {
 const chainTipId = (side) => `chain${side < 0 ? 'L' : 'R'}${chainSegmentCount - 1}`;
 const chainTip = [chainSegmentLength, 0];
 
-// How far a chain reaches from the pole it hangs off -- asked of a throwaway
-// scene containing just that chain, rather than worked out on paper. The poles
-// then sit exactly that far to either side of the cart's centreline, so the two
-// chains meet on it.
+// Round numbers, chosen to look right. They are *not* required to make the two
+// chains meet, and they don't: at this spacing the left chain's end lands some
+// way from the right one's. The constraint solves for where on the right chain
+// the left one attaches, so the loop closes exactly whatever these are set to.
 //
-// This is the whole reason `Scene` answers questions: the alternative is to
-// re-derive the arc's chord by hand every time a segment count or a sag angle
-// changes, and to have no way of noticing when the derivation and the scene
-// have drifted apart.
-const chainReach = (() => {
-  const probe = new Scene({ frames: [getChain(-1, [0, 0])] });
-  const reach = probe.getWorldPosition(chainTipId(-1), chainTip);
-  probe.frames.forEach((frame) => frame.dispose());
-  return reach;
-})();
-const poleTips = [-1, 1].map((side) => [side * chainReach[0], poleHeight]);
+// That is the difference between a rig that has to be derived and one that can
+// be dragged around. Nothing here has to be recomputed when the segment count,
+// the sag angle or the pole height changes.
+const poleTips = [-1, 1].map((side) => [side * 5.5, poleHeight]);
 
 const cart = new TrackFrame({
   id: 'cart',
@@ -157,13 +150,13 @@ const scene = new Scene({
     }),
   ],
 }).addConstraint(
-  // No length and no check to write: `addConstraint` measures the gap, and
-  // refuses the scene outright if the two chains do not actually meet.
+  // Only one attachment point is named. Where the *left* chain's end sits on
+  // the right chain is solved for out of the pose, so there is no geometry to
+  // get right and nothing to reject.
   new CoincidenceConstraint({
     frame1: chainTipId(-1),
     frame2: chainTipId(1),
     position1: chainTip,
-    position2: chainTip,
   }),
 );
 

@@ -117,29 +117,14 @@ export default class JsSolver extends Solver {
   }
 
   _getWeightPosMap(posMatMap = required('posMatMap')) {
-    /**
-     * Transform all the weight positions of all the frames into global
-     * positions, indexed by frame and mass reference.
-     */
-    return new Map(
-      this.scene.sortedFrames.map((frame) => [
-        frame.id,
-        frame.weights.map((weight) =>
-          posMatMap.get(frame.id).matMul(weight.position),
-        ),
-      ]),
-    );
+    return this.scene.getWeightPosMap(posMatMap);
   }
 
   _isFrameDescendent(
     descendentFrame = required('descendentFrame'),
     ancestorFrame = required('ancestorFrame'),
   ) {
-    return (
-      this.scene.frameIdPathMap
-        .get(descendentFrame.id)
-        .indexOf(ancestorFrame.id) !== -1
-    );
+    return this.scene.isFrameDescendent(descendentFrame.id, ancestorFrame.id);
   }
 
   _getDescendentFrame(
@@ -163,54 +148,24 @@ export default class JsSolver extends Solver {
     );
   }
 
+  // The mass matrix is the scene's pullback metric, a function of `q` alone.
+
   _getCoefficientMatrixEntry(
     rowIndex = required('rowIndex'),
     colIndex = required('colIndex'),
     velMatMap = required('velMatMap'),
     weightPosMap = required('weightPosMap'),
   ) {
-    const frame1 = this.scene.sortedFrames[rowIndex];
-    const frame2 = this.scene.sortedFrames[colIndex];
-    const velMat1 = velMatMap.get(frame1.id);
-    const velMat2 = velMatMap.get(frame2.id);
-    const baseFrame = this._getDescendentFrame(frame1, frame2);
-    const descendentFrames = baseFrame
-      ? this._getDescendentFrames(baseFrame)
-      : [];
-    let result = 0;
-    for (let frame3 of descendentFrames) {
-      for (let index = 0; index < frame3.weights.length; index++) {
-        const weight = frame3.weights[index];
-        const pos = weightPosMap.get(frame3.id)[index];
-        const vel1 = velMat1.matMul(pos);
-        const vel2 = velMat2.matMul(pos);
-        const dot = tf.matMul(vel2, vel1, true);
-        result += weight.mass * dot.dataSync()[0];
-        tf.dispose([vel1, vel2, dot]);
-      }
-    }
-    return result;
+    return this.scene.getMassMatrixEntry(
+      rowIndex,
+      colIndex,
+      velMatMap,
+      weightPosMap,
+    );
   }
 
-  _getCoefficientMatrix(
-    velMatMap = required('velMatMap'),
-    weightPosMap = required('weightPosMap'),
-  ) {
-    const numFrames = this.scene.sortedFrames.length;
-    const array = Array(numFrames);
-    for (let rowIndex = 0; rowIndex < numFrames; rowIndex++) {
-      const columns = Array(numFrames);
-      for (let colIndex = 0; colIndex < numFrames; colIndex++) {
-        columns[colIndex] = this._getCoefficientMatrixEntry(
-          rowIndex,
-          colIndex,
-          velMatMap,
-          weightPosMap,
-        );
-      }
-      array[rowIndex] = columns;
-    }
-    return tf.tensor2d(array);
+  _getCoefficientMatrix(stateMap = required('stateMap')) {
+    return this.scene.getMassMatrix(stateMap);
   }
 
   _getForceVectorEntry(
@@ -377,7 +332,7 @@ export default class JsSolver extends Solver {
     //     ms.map((m) => [...m.dataSync()]),
     //   ),
     // );
-    let aMat = this._getCoefficientMatrix(velMatMap, weightPosMap);
+    let aMat = this._getCoefficientMatrix(stateMap);
     let bVec = this._getForceVector(
       velMatMap,
       velSumMatMap,

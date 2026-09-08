@@ -244,10 +244,35 @@ the velocity half of the projection strategy below, run once rather than per ste
 warning, because acceleration-level enforcement preserves $`C_0 \neq 0`$ exactly and forever: the
 constraint would silently hold the wrong separation and never converge toward the authored one.
 
-> **Built**, in `physm-js`: `Scene.addConstraint` measures the gap the scene places and either
-> adopts it as the `length` or rejects a stated one that disagrees, and `Scene.getInitialStateMap`
-> returns $`\dot q_0`$ projected. Both solvers seed from that one method, so they cannot disagree
-> about what the initial state is.
+> **Built**, in `physm-js` — and *solving* rather than rejecting, which turned out to be the
+> better half of this section's advice. Each constraint type leaves one thing unspecified, and
+> `Scene.addConstraint` fills it in from the pose the scene is actually in:
+>
+> | type | free parameter | solved to |
+> | --- | --- | --- |
+> | `DistanceConstraint` | `length` | the gap between the two attachment points |
+> | `CoincidenceConstraint` | `position2` | $`M_2^{-1}M_1 r_1`$ |
+>
+> So the author places the frames wherever they belong and names *one* attachment point, and the
+> constraint holds at $`t = 0`$ by construction. There is no geometry to get right, and so nothing
+> to reject. Rejection survives only for a value the author does supply, which is opting back into
+> being responsible for it.
+>
+> **The rejecting form was written first and was the wrong instinct** *(Karl, 2026-09-07)*. It
+> forces the author to solve the geometry and then grades their answer, which is backwards when the
+> answer is derivable — and it is unworkable for a scene nobody typed. An interactive builder
+> cannot ask someone dragging two chains together to place them coincident to float32 precision,
+> and "move the frames until the points meet" is not advice a generator can act on.
+>
+> `Scene.getInitialStateMap` returns $`\dot q_0`$ projected, and both solvers seed from that one
+> method, so they cannot disagree about what the initial state is. **The projection is orthogonal
+> in the scene's own metric** $`g`$ — $`\dot q \leftarrow \dot q - g^{-1}J^{\mathsf T}(Jg^{-1}J^{\mathsf T})^{-1}J\dot q`$
+> — not in the Euclidean one. A plain least-norm correction minimises $`\lVert\Delta\dot q\rVert_2`$,
+> which adds a prismatic coordinate's metres per second to a revolute one's radians per second and
+> so depends on the unit lengths were authored in; measured, the same rig in millimetres, metres and
+> kilometres gave three different answers. The metric version minimises $`\tfrac12\Delta\dot q^{\mathsf T}g\Delta\dot q`$,
+> the kinetic energy of the correction — Gauss's principle of least constraint — and an energy does
+> not care what anybody authored lengths in.
 >
 > **And only there**, for the reason two paragraphs up: `physm-rs` frames do not carry an initial
 > state at all — they never parse `initialState`, and the wasm boundary receives $`(q, \dot q)`$ on

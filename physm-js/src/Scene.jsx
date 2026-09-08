@@ -5,7 +5,7 @@ import { coercePositionVector } from './utils';
 import { invertXformMatrix } from './utils';
 import { required } from './utils';
 import { solveLinearSystem } from './utils';
-import { CONSISTENCY_TOLERANCE } from './Constraint';
+import { consistencyTolerance } from './Constraint';
 import { ZERO_POS } from './utils';
 import { ZERO_STATE } from './utils';
 
@@ -22,7 +22,11 @@ export default class Scene {
     this.decals = decals;
     this.frames = frames;
     this.springs = springs;
-    this.constraints = constraints;
+    // Constraints are added below rather than assigned: `addConstraint` is
+    // where a constraint is checked against the frame set and solved against
+    // the pose, and a second door into this list would be one nobody has to
+    // opt out of.
+    this.constraints = [];
     this.gravity = gravity;
 
     const getFrameChildren = (frame) => frame.frames;
@@ -55,6 +59,9 @@ export default class Scene {
       visitNode: (frame, parentPaths) =>
         parentPaths.length ? [...parentPaths[0], frame.id] : [frame.id],
     });
+    // ...only now, with the derived tables built, is there a pose to solve
+    // constraints against.
+    constraints.forEach((constraint) => this.addConstraint(constraint));
   }
 
   getPosMatrixMap(stateMap = null) {
@@ -62,16 +69,17 @@ export default class Scene {
      * The local->global position transformation matrix of every frame, indexed
      * by frame id — the scene's pose, as a function of its state.
      *
-     * A frame missing from `stateMap` is read at its rest coordinate rather
+     * A frame missing from `stateMap` is read at its own `initialState` rather
      * than throwing, which is what makes this answerable about a scene that is
-     * still being assembled. Omit `stateMap` entirely for the initial state.
+     * still being assembled — and which makes a partial map agree with an
+     * omitted one, since omitting it is the same as mentioning nothing.
      *
      * The caller owns the returned tensors and must dispose them.
      */
     stateMap = stateMap || this.getInitialStateMap({ project: false });
     const posMatMap = new Map();
     for (let frame of this.sortedFrames) {
-      const [q] = stateMap.get(frame.id) || ZERO_STATE;
+      const [q] = stateMap.get(frame.id) || frame.initialState;
       const parentId = this.frameIdParentMap.get(frame.id);
       const localPosMat = frame.getLocalPosMatrix(q);
       const globalPosMat = parentId
@@ -94,14 +102,48 @@ export default class Scene {
      * Pass `posMatMap` to answer several of these against one pose without
      * recomputing it; otherwise one is computed and disposed internally.
      */
+    // Checked before anything is allocated: `tf.tidy` only reclaims what is
+    // created inside it, so a throw past this point would orphan the pose map.
+    if (!this.frameMap.has(frameId)) {
+      throw new Error(`No such frame in scene: ${frameId}`);
+    }
+    const owned = posMatMap ? null : this.getPosMatrixMap(stateMap);
+    const result = tf.tidy(() => [
+      ...(posMatMap || owned)
+        .get(frameId)
+        .matMul(coercePositionVector(position))
+        .dataSync()
+        .slice(0, 2),
+    ]);
+    owned && tf.dispose([...owned.values()]);
+    return result;
+  }
+
+  getLocalPosition(
+    frameId = required('frameId'),
+    worldPosition = ZERO_POS,
+    { stateMap = null, posMatMap = null } = {},
+  ) {
+    /**
+     * The inverse of `getWorldPosition`: where a world point sits in a frame's
+     * own coordinates.
+     *
+     * This is what makes a coincidence constraint constructible without the
+     * author solving any geometry. Pin frame `b` to a chosen point on frame
+     * `a`, and the attachment on `b` is `M_b⁻¹ M_a r_a` — exact, always
+     * defined, and satisfied at `t = 0` by construction rather than by check.
+     */
+    if (!this.frameMap.has(frameId)) {
+      throw new Error(`No such frame in scene: ${frameId}`);
+    }
     const owned = posMatMap ? null : this.getPosMatrixMap(stateMap);
     const result = tf.tidy(() => {
-      const posMat = (posMatMap || owned).get(frameId);
-      if (!posMat) {
-        throw new Error(`No such frame in scene: ${frameId}`);
-      }
+      const invPosMat = invertXformMatrix((posMatMap || owned).get(frameId));
       return [
-        ...posMat.matMul(coercePositionVector(position)).dataSync().slice(0, 2),
+        ...invPosMat
+          .matMul(coercePositionVector(worldPosition))
+          .dataSync()
+          .slice(0, 2),
       ];
     });
     owned && tf.dispose([...owned.values()]);
@@ -113,45 +155,66 @@ export default class Scene {
     position1 = ZERO_POS,
     frameId2 = required('frameId2'),
     position2 = ZERO_POS,
-    { stateMap = null } = {},
+    { stateMap = null, posMatMap = null } = {},
   ) {
     /**
-     * The gap between two frame-relative positions: `{ vector, distance }`,
-     * where `vector` points from the first to the second.
+     * The gap between two frame-relative positions: `{ vector, distance }`.
      *
-     * This is the measurement a `DistanceConstraint` is built around, which is
-     * why it is a method rather than something every caller derives.
+     * `vector` is the constraint's own `d = x₁ − x₂` — first *minus* second,
+     * matching `Constraint._separation` rather than reading left-to-right. Two
+     * opposite conventions under one word is worse than either, and `d` is the
+     * one with things depending on it: it is what `jacobianRows` contracts
+     * against, and it is `CoincidenceConstraint.value` verbatim.
      */
-    const posMatMap = this.getPosMatrixMap(stateMap);
-    const p = this.getWorldPosition(frameId1, position1, { posMatMap });
-    const q = this.getWorldPosition(frameId2, position2, { posMatMap });
-    tf.dispose([...posMatMap.values()]);
-    const vector = [q[0] - p[0], q[1] - p[1]];
+    // Both ids checked before anything is allocated: `getWorldPosition` throws
+    // for an unknown one, and a throw after the pose map exists would orphan it.
+    for (let frameId of [frameId1, frameId2]) {
+      if (!this.frameMap.has(frameId)) {
+        throw new Error(`No such frame in scene: ${frameId}`);
+      }
+    }
+    const owned = posMatMap ? null : this.getPosMatrixMap(stateMap);
+    const shared = posMatMap || owned;
+    const p = this.getWorldPosition(frameId1, position1, { posMatMap: shared });
+    const q = this.getWorldPosition(frameId2, position2, { posMatMap: shared });
+    owned && tf.dispose([...owned.values()]);
+    const vector = [p[0] - q[0], p[1] - q[1]];
     return { vector, distance: Math.hypot(...vector) };
   }
 
   addConstraint(
     constraint = required('constraint'),
-    { allowInitialViolation = false } = {},
+    { allowInitialViolation = false, posMatMap = null } = {},
   ) {
     /**
      * Add a loop-closure constraint, mirroring `Scene::add_constraint` in
-     * physm-rs. Chainable, and it must be called after the frames it names are
-     * in the scene, because this is where the constraint is measured against
-     * them.
+     * physm-rs. Must be called after the frames it names are in the scene,
+     * because this is where the constraint is *solved against* them.
      *
-     * That measurement is the position half of the consistency step in
-     * `docs/constraints.md` §7: an unset `length` adopts the gap the scene
-     * actually places, and an explicit one that disagrees with it is rejected
-     * here rather than becoming a permanent, silent violation. The velocity
-     * half lives in `getInitialStateMap`.
+     * Each constraint type leaves one thing unspecified, and this is where it
+     * gets filled in from the pose the scene is actually in:
      *
-     * `allowInitialViolation` skips the check and keeps the authored `length`.
-     * It exists for tests of the formulation itself — `C` being *conserved*
-     * rather than *small* is only observable from a scene that starts
-     * violated. It is not an escape hatch for a scene that failed the check:
-     * nothing downstream will repair the violation, so what it buys is a rig
-     * that is permanently wrong instead of one that refused to build.
+     * | type | free parameter | resolved to |
+     * | --- | --- | --- |
+     * | `DistanceConstraint` | `length` | the gap between the two attachments |
+     * | `CoincidenceConstraint` | `position2` | `M₂⁻¹ M₁ r₁` |
+     *
+     * That is the position half of `docs/constraints.md` §7, and solving beats
+     * checking: an author places the frames wherever they belong and names one
+     * attachment point, and the constraint holds at `t = 0` by construction.
+     * There is no geometry to get right, so there is nothing to reject — which
+     * matters most for a scene nobody typed, where "move the frames until the
+     * points coincide" is not advice anything can act on.
+     *
+     * A value the author *does* supply is still checked against the pose,
+     * because a stated one that disagrees is a violation this formulation
+     * conserves rather than corrects.
+     *
+     * `allowInitialViolation` keeps an authored value that disagrees, and
+     * suppresses the velocity projection in `getInitialStateMap` too, so the
+     * flag means one thing: this scene is inconsistent on purpose. The tests
+     * for this formulation need it — `C(t) = C₀ + Ċ₀t` is only observable from
+     * a scene where those are non-zero.
      */
     const [frameId1, frameId2] = [constraint.frameId1, constraint.frameId2];
     for (let frameId of [frameId1, frameId2]) {
@@ -162,24 +225,41 @@ export default class Scene {
         );
       }
     }
-    // An unset length is measured either way: the constraint has no answer for
-    // `C` without one, and a length nobody authored is a length nothing can
-    // disagree with — so there is no violation to allow.
-    const unresolved = constraint.length === null;
-    if (unresolved || !allowInitialViolation) {
-      const { distance } = this.getSeparation(
-        frameId1,
-        constraint.localPosition1,
-        frameId2,
-        constraint.localPosition2,
+    const owned = posMatMap ? null : this.getPosMatrixMap();
+    const shared = posMatMap || owned;
+
+    if (constraint.inferPosition2) {
+      // Solve for the attachment on frame 2 that puts it on frame 1's chosen
+      // point. Exact, and defined however far apart the two frames happen to
+      // be -- the constraint absorbs the gap instead of the author closing it.
+      constraint.setPosition2(
+        this.getLocalPosition(
+          frameId2,
+          this.getWorldPosition(frameId1, constraint.localPosition1, {
+            posMatMap: shared,
+          }),
+          { posMatMap: shared },
+        ),
       );
-      if (allowInitialViolation) {
-        constraint.length = distance;
-      } else {
-        constraint.resolveLength(distance);
-      }
     }
+
+    // `CoincidenceConstraint` has no `length`, so `undefined === null` is false
+    // and this reduces to the authored-value check it never needs.
+    if (constraint.length === null || !allowInitialViolation) {
+      const p = this.getWorldPosition(frameId1, constraint.localPosition1, {
+        posMatMap: shared,
+      });
+      const q = this.getWorldPosition(frameId2, constraint.localPosition2, {
+        posMatMap: shared,
+      });
+      // The tolerance scales with how far from the origin the scene works,
+      // since that is what sets float32's resolution here.
+      const scale = Math.max(...p.map(Math.abs), ...q.map(Math.abs), 1);
+      constraint.resolveGeometry(Math.hypot(p[0] - q[0], p[1] - q[1]), scale);
+    }
+    owned && tf.dispose([...owned.values()]);
     this.constraints.push(constraint);
+    constraint.allowInitialViolation = allowInitialViolation;
     return this;
   }
 
@@ -226,7 +306,7 @@ export default class Scene {
     stateMap = stateMap || this.getInitialStateMap({ project: false });
     return new Map(
       this.sortedFrames.map((frame) => {
-        const [q] = stateMap.get(frame.id) || ZERO_STATE;
+        const [q] = stateMap.get(frame.id) || frame.initialState;
         const parentId = this.frameIdParentMap.get(frame.id);
         const localVelMat = frame.getLocalVelMatrix(q);
         const relVelMat = localVelMat.matMul(invPosMatMap.get(frame.id));
@@ -268,6 +348,100 @@ export default class Scene {
     tf.dispose([...ctx.posMatMap.values(), ...ctx.velMatMap.values()]);
   }
 
+  getWeightPosMap(posMatMap = required('posMatMap')) {
+    /**
+     * Every point mass in world coordinates, grouped by the frame carrying it.
+     * The caller owns the returned tensors.
+     */
+    return new Map(
+      this.sortedFrames.map((frame) => [
+        frame.id,
+        frame.weights.map((weight) =>
+          posMatMap.get(frame.id).matMul(weight.position),
+        ),
+      ]),
+    );
+  }
+
+  isFrameDescendent(
+    descendentId = required('descendentId'),
+    ancestorId = required('ancestorId'),
+  ) {
+    return this.frameIdPathMap.get(descendentId).indexOf(ancestorId) !== -1;
+  }
+
+  getMassMatrixEntry(
+    rowIndex = required('rowIndex'),
+    colIndex = required('colIndex'),
+    velMatMap = required('velMatMap'),
+    weightPosMap = required('weightPosMap'),
+  ) {
+    /**
+     * One entry of the metric: `g_ij = Σ_w m_w ⟨V_i x_w, V_j x_w⟩`, summed over
+     * the weights both coordinates can move — which is the subtree below
+     * whichever of the two is the descendant. Zero when they are incomparable,
+     * since no weight is under both.
+     */
+    const frame1 = this.sortedFrames[rowIndex];
+    const frame2 = this.sortedFrames[colIndex];
+    const baseId = this.isFrameDescendent(frame1.id, frame2.id)
+      ? frame1.id
+      : this.isFrameDescendent(frame2.id, frame1.id)
+        ? frame2.id
+        : null;
+    if (baseId === null) {
+      return 0;
+    }
+    const velMat1 = velMatMap.get(frame1.id);
+    const velMat2 = velMatMap.get(frame2.id);
+    let result = 0;
+    for (let frame of this.sortedFrames) {
+      if (!this.isFrameDescendent(frame.id, baseId)) {
+        continue;
+      }
+      frame.weights.forEach((weight, index) => {
+        const pos = weightPosMap.get(frame.id)[index];
+        result +=
+          weight.mass *
+          tf.tidy(
+            () =>
+              tf.matMul(velMat2.matMul(pos), velMat1.matMul(pos), true)
+                .dataSync()[0],
+          );
+      });
+    }
+    return result;
+  }
+
+  getMassMatrix(stateMap = null) {
+    /**
+     * The mass matrix `g` at a pose — which `docs/algorithm.md` §5 identifies
+     * as the **mass-weighted pullback metric**, `g_ij = Σ m_w ⟨V_i x_w, V_j x_w⟩`.
+     *
+     * It is a metric on configuration space and a function of `q` alone, which
+     * is what puts it here rather than on the solver: the solver *uses* it to
+     * turn forces into accelerations, but the object itself is geometry. The
+     * projection below needs it for exactly that reason — orthogonality only
+     * means something relative to a metric, and this is the scene's.
+     */
+    const posMatMap = this.getPosMatrixMap(stateMap);
+    const invPosMatMap = this.getInvPosMatrixMap(posMatMap);
+    const velMatMap = this.getVelMatrixMap(posMatMap, invPosMatMap, stateMap);
+    const weightPosMap = this.getWeightPosMap(posMatMap);
+    const array = this.sortedFrames.map((unused1, rowIndex) =>
+      this.sortedFrames.map((unused2, colIndex) =>
+        this.getMassMatrixEntry(rowIndex, colIndex, velMatMap, weightPosMap),
+      ),
+    );
+    tf.dispose([
+      ...posMatMap.values(),
+      ...invPosMatMap.values(),
+      ...velMatMap.values(),
+      ...weightPosMap.values(),
+    ]);
+    return tf.tensor2d(array);
+  }
+
   _getProjectedVelocities(stateMap = required('stateMap')) {
     /**
      * The velocity half of the consistency step (`docs/constraints.md` §7):
@@ -280,9 +454,20 @@ export default class Scene {
      * stabilizer is meant to fix: the predicted behaviour arrives on schedule
      * and confirms the wrong diagnosis.
      *
-     * The correction is the least-norm one, `q̇ ← q̇ − Jᵀ(JJᵀ)⁻¹J q̇`, so a
-     * consistent `q̇₀` is left exactly alone and an inconsistent one moves as
-     * little as the constraint allows.
+     * The correction is `q̇ ← q̇ − g⁻¹Jᵀ(Jg⁻¹Jᵀ)⁻¹J q̇` — orthogonal with respect
+     * to the scene's own metric `g`, not to the Euclidean one.
+     *
+     * That distinction is the whole of it. A plain least-norm correction
+     * minimises `‖Δq̇‖₂`, which adds a `TrackFrame`'s metres per second to a
+     * `RotationalFrame`'s radians per second and so has no physical meaning:
+     * measured, the same rig authored in millimetres, metres and kilometres
+     * gets three different answers, one of which stops the pendulum dead. The
+     * metric version minimises `½Δq̇ᵀgΔq̇` instead — the kinetic energy of the
+     * correction, which is Gauss's principle of least constraint — and being
+     * an energy it does not care what unit anybody authored lengths in.
+     *
+     * It is also the same object the solver applies every step: `Δq̇ = g⁻¹Jᵀλ`
+     * is a generalized *force* along `Jᵀ`, not a velocity along it.
      */
     const qd = this.sortedFrames.map(
       (frame) => (stateMap.get(frame.id) || ZERO_STATE)[1],
@@ -295,20 +480,36 @@ export default class Scene {
     const residual = rows.map((row) =>
       row.reduce((total, entry, index) => total + entry * qd[index], 0),
     );
-    if (Math.max(...residual.map(Math.abs)) <= CONSISTENCY_TOLERANCE) {
+    if (
+      Math.max(...residual.map(Math.abs)) <=
+      consistencyTolerance(Math.max(...rows.flat().map(Math.abs), 1))
+    ) {
       return qd; // already consistent — don't perturb it with a needless solve
     }
-    // Solve `J Jᵀ λ = J q̇`, then subtract `Jᵀλ`. The Gram matrix is small —
-    // one row per constraint row — and positive definite exactly when `J` has
-    // full row rank, which is the condition the augmented system needs anyway.
+    // Solve `(J g⁻¹ Jᵀ) λ = J q̇`, then subtract `g⁻¹Jᵀλ`. The middle matrix is
+    // small -- one row per constraint row -- and positive definite exactly when
+    // `J` has full row rank, which is the condition the augmented system needs
+    // anyway.
+    const massMatrix = this.getMassMatrix(stateMap);
     const correction = tf.tidy(() => {
       const jMat = tf.tensor2d(rows);
+      // `g⁻¹Jᵀ`, column by column, rather than forming the inverse.
+      const invMassJT = tf.concat(
+        rows.map((row) =>
+          solveLinearSystem(
+            massMatrix,
+            tf.tensor2d(row.map((entry) => [entry])),
+          ),
+        ),
+        1,
+      );
       const lambda = solveLinearSystem(
-        jMat.matMul(jMat, false, true),
+        jMat.matMul(invMassJT),
         tf.tensor2d(residual.map((entry) => [entry])),
       );
-      return [...jMat.transpose().matMul(lambda).dataSync()];
+      return [...invMassJT.matMul(lambda).dataSync()];
     });
+    massMatrix.dispose();
     return qd.map((entry, index) => entry - correction[index]);
   }
 
@@ -323,7 +524,15 @@ export default class Scene {
     const stateMap = new Map(
       this.sortedFrames.map((frame) => [frame.id, getInitialState(frame)]),
     );
-    if (!project || !this.constraints.length) {
+    // A constraint added with `allowInitialViolation` says the scene is
+    // inconsistent on purpose, and that has to cover the velocity half as well
+    // -- otherwise `Ċ₀ ≠ 0` is unreachable, and the *linear* half of
+    // `C(t) = C₀ + Ċ₀t` becomes unobservable in the same change that made the
+    // constant half easier to test.
+    const intentional = this.constraints.some(
+      (constraint) => constraint.allowInitialViolation,
+    );
+    if (!project || intentional || !this.constraints.length) {
       return stateMap;
     }
     // Both solvers seed from here, so projecting once at the source is what

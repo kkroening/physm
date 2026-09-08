@@ -8,6 +8,64 @@ import Scene from './Scene';
 import { checkTfMemory } from './testutils';
 import { DEFAULT_GRAVITY } from './Scene';
 
+describe('Scene queries', () => {
+  const build = () =>
+    new Scene({
+      frames: [
+        new Frame({
+          id: 'root',
+          initialState: [0, 0],
+          frames: [new Frame({ id: 'child', position: [3, 4] })],
+        }),
+      ],
+    });
+
+  test('tensors are not orphaned, including on the error paths', () => {
+    // These methods hand ownership of a pose map to the caller, and `tf.tidy`
+    // only reclaims what is created inside it -- so a throw between allocating
+    // one and disposing it would leak one tensor per frame in the scene.
+    const scene = build();
+    checkTfMemory(() => scene.getWorldPosition('child', [1, 2]));
+    checkTfMemory(() => scene.getLocalPosition('child', [1, 2]));
+    checkTfMemory(() => scene.getSeparation('root', [0, 0], 'child', [1, 2]));
+    checkTfMemory(() => {
+      expect(() => scene.getWorldPosition('nope')).toThrow(/No such frame/);
+      expect(() => scene.getLocalPosition('nope')).toThrow(/No such frame/);
+      expect(() => scene.getSeparation('root', [0, 0], 'nope')).toThrow(
+        /No such frame/,
+      );
+    });
+  });
+
+  test('getLocalPosition inverts getWorldPosition', () => {
+    const scene = build();
+    const local = [1.5, -2.25];
+    const world = scene.getWorldPosition('child', local);
+    expect(scene.getLocalPosition('child', world)).toEqual([
+      expect.closeTo(local[0], 4),
+      expect.closeTo(local[1], 4),
+    ]);
+  });
+
+  test('an omitted state map and an empty one agree', () => {
+    // The two fallbacks have to be the same fallback: a frame nobody mentioned
+    // is read at its own `initialState`, whether the map is empty or absent.
+    const scene = new Scene({
+      frames: [
+        new Frame({
+          id: 'root',
+          initialState: [0, 0],
+          position: [7, 0],
+          frames: [new Frame({ id: 'child', position: [3, 4] })],
+        }),
+      ],
+    });
+    expect(scene.getWorldPosition('child', [1, 2], { stateMap: new Map() })).toEqual(
+      scene.getWorldPosition('child', [1, 2]),
+    );
+  });
+});
+
 describe('Scene class', () => {
   test('constructor with default arguments', () => {
     const scene = checkTfMemory(() => new Scene());

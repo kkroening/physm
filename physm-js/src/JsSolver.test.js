@@ -337,7 +337,7 @@ describe('JsSolver', () => {
         weightPosMap,
       );
     const coefficientMatrix = checkTfMemory(() =>
-      solver._getCoefficientMatrix(velMatMap, weightPosMap),
+      solver._getCoefficientMatrix(stateMap),
     );
     expect(coefficientMatrix.shape).toEqual([numFrames, numFrames]);
     const data = coefficientMatrix.arraySync();
