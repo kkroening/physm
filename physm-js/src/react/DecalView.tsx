@@ -1,5 +1,4 @@
 import * as mat3 from './../Mat3';
-import * as vec3 from './../Vec3';
 import type BoxDecal from './../BoxDecal';
 import type CircleDecal from './../CircleDecal';
 import type Decal from './../Decal';
@@ -36,19 +35,18 @@ function BoxDecalView({
     mat3.apply(xformMatrix, corner),
   );
 
-  if (decal.solid) {
-    // The fourth corner is the upper-left one, which is where an SVG `rect`
-    // wants its origin.
-    const [x, y] = corners[3] ?? vec3.ORIGIN;
+  const points = corners.map(([x, y]) => `${x},${y}`).join(' ');
 
-    return (
-      <rect
-        x={x}
-        y={y}
-        width={decal.width * scale}
-        height={decal.height * scale}
-      />
-    );
+  if (decal.solid) {
+    // The same four corners the outlined branch draws. They already carry the
+    // full view transform, so this is exact under rotation, reflection and a
+    // non-uniform scale alike -- none of which an axis-aligned `rect` sized
+    // `width` by `height` times `scaleFactor` can express.
+    //
+    // No `fill`: a solid box paints in the SVG default rather than in its own
+    // `color`, which is inconsistent with the outlined branch and deliberate.
+    // See `docs/issues/0004.md`.
+    return <polygon points={points} />;
   }
 
   return (
