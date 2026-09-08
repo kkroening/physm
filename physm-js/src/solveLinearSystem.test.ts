@@ -8,7 +8,10 @@ import {
 } from './solveLinearSystem';
 
 /** `A x`, so a solution can be checked by substitution rather than by expectation. */
-function apply(rows: readonly (readonly number[])[], x: readonly number[]): number[] {
+function apply(
+  rows: readonly (readonly number[])[],
+  x: readonly number[],
+): number[] {
   return rows.map((row) =>
     row.reduce((sum, entry, index) => sum + entry * (x[index] ?? 0), 0),
   );

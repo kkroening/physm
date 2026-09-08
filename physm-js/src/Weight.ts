@@ -25,7 +25,10 @@ export default class Weight {
   readonly position: Vec3;
   readonly drag: number;
 
-  constructor(mass = 1, { position = vec3.ORIGIN, drag = 0 }: WeightOptions = {}) {
+  constructor(
+    mass = 1,
+    { position = vec3.ORIGIN, drag = 0 }: WeightOptions = {},
+  ) {
     this.mass = mass;
     this.position = vec3.coerce(position);
     this.drag = drag;

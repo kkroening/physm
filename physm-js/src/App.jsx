@@ -99,11 +99,11 @@ function getChain(side, rootPosition) {
         frames: childSegment ? [childSegment] : [],
         resistance: chainSegmentResistance,
       });
-
     }, null);
 }
 
-const chainTipId = (side) => `chain${side < 0 ? 'L' : 'R'}${chainSegmentCount - 1}`;
+const chainTipId = (side) =>
+  `chain${side < 0 ? 'L' : 'R'}${chainSegmentCount - 1}`;
 const chainTip = [chainSegmentLength, 0];
 
 // Round numbers, chosen to look right. They are *not* required to make the two
@@ -491,8 +491,7 @@ function App({ rsWasmModule }) {
     <div className="app__main">
       <div className="plot">
         <h2 className="plot__title">Cart, Poles &amp; Rope</h2>
-        {
-        }
+        {}
         {
           //<p>Keys: {[...pressedKeys].join(', ')}</p>
         }

@@ -32,7 +32,10 @@ describe('RotationalFrame', () => {
     ).toBe(true);
 
     // A quarter turn takes a point on `+x` to `+y`, then offsets it.
-    const tip = mat3.apply(frame.getLocalPosMatrix(Math.PI / 2), vec3.point(2, 0));
+    const tip = mat3.apply(
+      frame.getLocalPosMatrix(Math.PI / 2),
+      vec3.point(2, 0),
+    );
     expect(tip[0]).toBeCloseTo(3, 9);
     expect(tip[1]).toBeCloseTo(-2, 9);
   });
