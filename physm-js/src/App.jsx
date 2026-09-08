@@ -1,6 +1,5 @@
 import './App.css';
 import 'normalize.css';
-import * as mat3 from './Mat3';
 import BoxDecal from './BoxDecal';
 import CircleDecal from './CircleDecal';
 import LineDecal from './LineDecal';
@@ -9,6 +8,7 @@ import React from 'react';
 import RotationalFrame from './RotationalFrame';
 import RsSolver from './RsSolver';
 import Scene from './Scene';
+import getViewXformMatrix from './getViewXformMatrix';
 import SceneView from './react/SceneView';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
@@ -16,6 +16,7 @@ import { CoincidenceConstraint } from './Constraint';
 import { required } from './utils';
 import { useEffect } from 'react';
 import { useRef } from 'react';
+import { useLayoutEffect } from 'react';
 import { useState } from 'react';
 import { InvalidStateMapError } from './Solver';
 
@@ -399,11 +400,55 @@ function simulate(
   return solver.getStateMap();
 }
 
-function getViewXformMatrix(translation, scale) {
-  return mat3.multiply(
-    mat3.multiply(mat3.translation(300, 300), mat3.scaling(scale, -scale)),
-    mat3.translation(translation[0], translation[1]),
-  );
+/**
+ * Track an element's rendered size.
+ *
+ * The plot is `width: 100%; height: 100%` of a flex item, so its size is the
+ * window's, not a constant -- and the view transform has to centre on it. A
+ * `ResizeObserver` rather than a `resize` listener because the element also
+ * changes size when the surrounding layout does, with no window event to hear.
+ *
+ * `useLayoutEffect`, not `useEffect`, and the first measurement is taken
+ * synchronously rather than waited for. An effect runs *after* the browser
+ * paints, so an observer started there cannot report until the second frame --
+ * which would make the first painted frame a view centred on `(0, 0)`, the
+ * element's own corner, with half the scene clipped away. A layout effect runs
+ * before paint and its `setSize` is flushed before paint, so that frame never
+ * reaches the screen.
+ *
+ * No guard on a null ref: `useMouse` and `useTouch` take this same ref and
+ * dereference it bare, so an unmounted element already fails loudly here. A
+ * guard would turn "not mounted yet" into a permanent zero -- the effect runs
+ * once, since a ref's identity never changes -- which renders as a corner-
+ * centred view rather than as an error.
+ */
+function useElementSize(ref) {
+  const [size, setSize] = useState([0, 0]);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    const update = (width, height) =>
+      setSize((current) =>
+        // The *same array* when nothing moved, not an equal one: React skips a
+        // re-render only on `Object.is`, so returning a fresh pair here would
+        // re-render the whole scene on every observer delivery.
+        width === current[0] && height === current[1]
+          ? current
+          : [width, height],
+      );
+
+    update(element.clientWidth, element.clientHeight);
+
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      update(width, height);
+    });
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return size;
 }
 
 function createSolver(
@@ -443,7 +488,8 @@ function App({ rsWasmModule }) {
   const clickLocationDelta = useMouse(svgRef);
   const touchLocationDelta = useTouch(svgRef);
   const [stateMap, setStateMap] = useState(scene.getInitialStateMap());
-  const viewXformMatrix = getViewXformMatrix(translation, scale);
+  const plotSize = useElementSize(svgRef);
+  const viewXformMatrix = getViewXformMatrix(translation, scale, plotSize);
   const solver = useRef(null);
 
   useEffect(() => {
