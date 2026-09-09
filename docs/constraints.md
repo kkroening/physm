@@ -339,8 +339,8 @@ concluding anything about numerical drift.
 | **GGL** — carry velocity-level multipliers, enforcing $`C = 0`$ and $`\dot C = 0`$ explicitly | System shape | No tuning; larger system |
 
 `physm-js` implements the projection row, as `Scene.getStabilizedState`, behind a `stabilize` flag
-on `Solver` that defaults to **off**. The rest of this section records why that row, what it cost,
-and what the flag is for.
+on `Solver` that defaults to **on**. The rest of this section records why that row, what it cost,
+and why it is still a flag.
 
 #### Why projection, and not the tuned alternatives
 
@@ -421,13 +421,20 @@ four times per step — but the position half is a *Newton iteration*, so it pay
 per step even on a state already on the manifold. There is no cheap way to ask "is $`C`$ small?"
 that does not need a scale (see below), so the check is not worth its own code path.
 
-#### Why the flag defaults to off
+#### Why it is a flag, and why the flag defaults on
 
-$`C(t) = C_0 + \dot C_0 t`$ holds *exactly* under this formulation, and that is a diagnostic, not
+**A flag at all**, because $`C(t) = C_0 + \dot C_0 t`$ holding *exactly* is a diagnostic and not
 just a defect: it is what distinguishes a drift caused by inconsistent initial velocities from one
-caused by integration error. Any stabilizer erases the distinction. Keeping it a flag keeps the
-diagnostic — and gives a direct A/B for measuring whether the stabilizer works, which is what the
-table above is.
+caused by integration error. Any stabilizer erases the distinction, and the A/B that the table above
+is made of needs both halves.
+
+**On by default**, because the two failure modes are not symmetric. An unstabilized rig looks
+correct for a minute and then comes apart — quiet, slow, and indistinguishable from a modelling
+mistake, which is the bug report the stabilizer was written for. Stabilizing a scene that did not
+need it costs a solve per step and is visible in a profile.
+
+Turning it off is how the diagnostic is reached, and the tests that rely on it say `stabilize: false`
+rather than inheriting it.
 
 #### Scale, and why the convergence test is on the correction
 

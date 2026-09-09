@@ -7,7 +7,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
-| [0013](0013.md) | Decide whether `stabilize` should default off, rather than leaving it defaulted | RFC | Open |
+| [0013](0013.md) | Decide whether `stabilize` should default off, rather than leaving it defaulted | RFC | Resolved |
 | [0012](0012.md) | Give `physm-rs` its own stabilizer, so `RsSolver` need not step one at a time | Enhancement | Open |
 | [0011](0011.md) | Give the binding a way to name a frame from outside the scene | RFC | Open |
 | [0010](0010.md) | Make a dead export a build signal rather than an eyeball finding | Enhancement | Open |

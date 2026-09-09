@@ -69,6 +69,13 @@ export interface SceneOptions {
 }
 
 export interface AddConstraintOptions {
+  /**
+   * Keep a violation the scene's pose already has, instead of refusing it.
+   *
+   * Pair it with `stabilize: false` on the solver to watch that violation
+   * persist -- the stabilizer is on by default and removes it on the first
+   * tick.
+   */
   allowInitialViolation?: boolean;
   posMatMap?: Map<FrameId, Mat3> | null;
 }

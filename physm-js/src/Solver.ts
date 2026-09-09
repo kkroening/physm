@@ -46,25 +46,19 @@ export default class Solver {
   /**
    * Whether to pull the state back onto the constraint manifold after a tick.
    *
-   * Off by default, and that is deliberate rather than cautious. Unstabilized,
-   * this formulation *conserves* a constraint violation exactly -- `C(t) = C₀ +
-   * Ċ₀t` -- which is a documented, tested property and the diagnostic that
-   * tells a drift caused by inconsistent initial velocities apart from one
-   * caused by integration error. Stabilizing by default would erase the
-   * distinction and leave no way to measure whether the stabilizer works.
+   * On by default. Unstabilized, this formulation *conserves* a violation
+   * exactly -- `C(t) = C₀ + Ċ₀t` -- so a rig looks correct for a minute and
+   * then comes apart, quietly and in a way that looks like a modelling
+   * mistake. The opposite error costs a solve per step and shows up in a
+   * profile.
    *
-   * ⚠️ **The default is a decision deferred, not one made** -- see
-   * `docs/issues/0013.md`. Nothing currently depends on it: every test passes
-   * this flag explicitly in both directions, and the demo passes `true`. The
-   * argument against it is that a forgotten `stabilize` fails quietly -- the rig
-   * looks right for a minute and then comes apart, which is the bug the
-   * stabilizer was added to remove.
-   *
-   * See `Scene.getStabilizedState`.
+   * Turn it off to observe that conservation, which is what distinguishes a
+   * drift caused by inconsistent initial velocities from one caused by
+   * integration error. `Scene.getStabilizedState` does the work.
    */
   readonly stabilize: boolean;
 
-  constructor(scene: Scene, { stabilize = false }: SolverOptions = {}) {
+  constructor(scene: Scene, { stabilize = true }: SolverOptions = {}) {
     this.scene = scene;
     this.stabilize = stabilize;
   }
