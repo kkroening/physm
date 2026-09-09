@@ -153,6 +153,12 @@ impl SolverContext {
         self.solver.runge_kutta = runge_kutta;
     }
 
+    #[wasm_bindgen(js_name = setStabilize)]
+    pub fn set_stabilize(&mut self, stabilize: bool) {
+        log(&format!("[rs] setting stabilize={}", stabilize));
+        self.solver.stabilize = stabilize;
+    }
+
     pub fn dispose(self) {
         log(&"[rs] Dropping solver context");
     }

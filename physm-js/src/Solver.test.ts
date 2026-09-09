@@ -262,11 +262,10 @@ describe('stabilization', () => {
     return violation(solver);
   }
 
-  // Both classes, because they stabilize by different routes and the point of
-  // putting `applyStabilization` on the base class is that they should not be
-  // able to disagree. `JsSolver` integrates in TypeScript and corrects inside
-  // its own loop; `RsSolver` hands `tickCount` to wasm, so stabilizing forces
-  // it to step one at a time and cross the boundary per step.
+  // Both classes, because they now stabilize by *different code*: `JsSolver`
+  // corrects in TypeScript inside its own loop, `RsSolver` in Rust inside the
+  // wasm tick loop. Nothing structural stops those two from disagreeing, so the
+  // agreement is a thing to test rather than a thing to assume.
   const solverKinds = [
     {
       name: 'JsSolver',
@@ -296,16 +295,11 @@ describe('stabilization', () => {
   });
 
   test('RsSolver takes the same number of steps however tickCount is split', async () => {
-    // `RsSolver` hands `tickCount` straight to wasm when unstabilized and steps
-    // one at a time when stabilized, so one call of N has to land where N calls
-    // of one do. Nothing else in the suite passes a `tickCount` above 1 at all,
-    // which left both paths uncovered -- and the stabilized one is what the demo
-    // now runs, since its animation loop computes a `tickCount` from the frame
-    // delta and the flag defaults on.
-    //
-    // Both arms, because the two failures are different: a wrong count reaching
-    // wasm shows up unstabilized, while a wrong loop *accounting* shows up only
-    // when `batchSize` is 1 and the loop actually iterates.
+    // `RsSolver` hands the whole `tickCount` to wasm, so one call of N has to
+    // land where N calls of one do. The stabilized arm is the one that says the
+    // correction inside that call is still per *step* rather than per batch.
+    // Nothing else in the suite passes a `tickCount` above 1 at all, and the demo
+    // passes one computed from the frame delta.
     for (const stabilize of [false, true]) {
       const wasm = await loadRsWasmModule();
       const batched = new RsSolver(getRopeScene(), wasm, {
@@ -338,6 +332,61 @@ describe('stabilization', () => {
         [...b].map(([id, [q, qd]]) => [id, q, qd]),
       );
     }
+  });
+
+  test('the two stabilizers hold a driven rig to the same trajectory', async () => {
+    // The agreement between two *implementations* of projection, one in
+    // TypeScript and one in Rust, on a rig driven hard enough that the
+    // stabilizer is doing continuous work rather than nothing.
+    //
+    // The cross-validation suite above cannot cover this: it pins
+    // `stabilize: false` on every arm precisely so it compares integrators.
+    const js = new JsSolver(getRopeScene(), { rungeKutta: true });
+    const rs = new RsSolver(getRopeScene(), await loadRsWasmModule(), {
+      rungeKutta: true,
+    });
+
+    expect(js.stabilize).toBe(true);
+    expect(rs.stabilize).toBe(true);
+
+    const deltaTime = 1 / 400;
+    // Separate accumulators for `q` and `q̇`. The divergence this test was written
+    // for lived in the velocity half and reached position only through
+    // `deltaTime` and four thousand steps of integration -- so a velocity
+    // difference that cancels over a drive cycle would leave almost no position
+    // signature. And they get their own bounds because holding a `q` and a `q̇` to
+    // one threshold is the unit conflation the per-coordinate convergence floor
+    // exists to avoid.
+    let worstPosition = 0;
+    let worstVelocity = 0;
+    for (let step = 0; step < Math.round(10 / deltaTime); step++) {
+      const sign =
+        Math.sin(2 * Math.PI * 0.35 * step * deltaTime) >= 0 ? 1 : -1;
+      const force = new Map([['cart', sign * 600]]);
+      js.tick(deltaTime, 1, force);
+      rs.tick(deltaTime, 1, force);
+      const a = js.getStateMap();
+      const b = rs.getStateMap();
+      for (const [frameId, [q, qd]] of a) {
+        const [otherQ, otherQd] = b.get(frameId)!;
+        worstPosition = Math.max(worstPosition, Math.abs(q - otherQ));
+        worstVelocity = Math.max(worstVelocity, Math.abs(qd - otherQd));
+      }
+    }
+
+    // The rig moved, so this is two trajectories rather than two rigs at rest.
+    expect(
+      Math.max(
+        ...[...js.getStateMap()].map(([frameId, [q]]) =>
+          Math.abs(q - getRopeScene().getInitialStateMap().get(frameId)![0]),
+        ),
+      ),
+    ).toBeGreaterThan(0.1);
+
+    expect(worstPosition).toBeLessThan(1e-8);
+    expect(worstVelocity).toBeLessThan(1e-6);
+    expect(violation(js)).toBeLessThan(1e-10);
+    expect(violation(rs)).toBeLessThan(1e-10);
   });
 
   solverKinds.forEach((kind) => {

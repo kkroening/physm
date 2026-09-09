@@ -20,6 +20,7 @@ export interface RsWasmModule {
 
 export interface SolverContext {
   setRungeKutta(rungeKutta: boolean): void;
+  setStabilize(stabilize: boolean): void;
   tick(
     stateBuffer: Float64Array,
     deltaTime: number,
@@ -50,6 +51,9 @@ export default class RsSolver extends Solver {
     const sceneJson = JSON.stringify(scene.toJsonObj());
     this.context = new rsWasmModule.SolverContext(sceneJson);
     this.context.setRungeKutta(rungeKutta);
+    // Stabilization happens on the Rust side, inside the tick loop, so
+    // `tickCount` still crosses the boundary once however this is set.
+    this.context.setStabilize(this.stabilize);
   }
 
   /**
@@ -99,33 +103,16 @@ export default class RsSolver extends Solver {
       ),
     );
 
-    // Unstabilized, `tickCount` goes straight to wasm and the whole batch
-    // integrates without crossing back. The stabilizer lives in TypeScript, so
-    // stabilizing means stepping one at a time and paying a boundary crossing
-    // per step -- worth it because the alternative is correcting once per batch
-    // and letting drift accumulate across however many steps a caller passed,
-    // which is a different amount of stabilization for the same physics.
-    const batchSize = this.stabilize ? 1 : tickCount;
-    let done = 0;
-    // `do`, not `while`: `tickCount` of zero still crosses into wasm and still
-    // validates, which is what this did before it had a loop at all.
-    do {
-      const size = Math.min(batchSize, tickCount - done);
-      this.liveContext.tick(
-        this.stateBuffer,
-        deltaTime,
-        size,
-        this.extForceBuffer,
-      );
-      for (const entry of this.stateBuffer) {
-        if (isNaN(entry)) {
-          throw new InvalidStateMapError();
-        }
+    this.liveContext.tick(
+      this.stateBuffer,
+      deltaTime,
+      tickCount,
+      this.extForceBuffer,
+    );
+    for (const entry of this.stateBuffer) {
+      if (isNaN(entry)) {
+        throw new InvalidStateMapError();
       }
-      done += size;
-      if (size > 0) {
-        this.applyStabilization();
-      }
-    } while (done < tickCount);
+    }
   }
 }
