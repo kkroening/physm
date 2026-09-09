@@ -421,13 +421,30 @@ four times per step — but the position half is a *Newton iteration*, so it pay
 per step even on a state already on the manifold. There is no cheap way to ask "is $`C`$ small?"
 that does not need a scale (see below), so the check is not worth its own code path.
 
-#### Why the flag defaults to off
+#### Why it is a flag, and why the flag defaults on
 
-$`C(t) = C_0 + \dot C_0 t`$ holds *exactly* under this formulation, and that is a diagnostic, not
+**A flag at all**, because $`C(t) = C_0 + \dot C_0 t`$ holding *exactly* is a diagnostic and not
 just a defect: it is what distinguishes a drift caused by inconsistent initial velocities from one
-caused by integration error. Any stabilizer erases the distinction. Keeping it a flag keeps the
-diagnostic — and gives a direct A/B for measuring whether the stabilizer works, which is what the
-table above is.
+caused by integration error. Any stabilizer erases the distinction, and the A/B that the table above
+is made of needs both halves.
+
+**On by default**, because the two failure modes are not symmetric. An unstabilized rig looks
+correct for a minute and then comes apart — quiet, slow, and indistinguishable from a modelling
+mistake, which is the bug report the stabilizer was written for. Stabilizing a scene that did not
+need it costs a solve per step and is visible in a profile.
+
+The diagnostic survives that, because a default is the wrong place to keep it. The handful of tests
+that rely on the unstabilized behaviour now say `stabilize: false` in as many words, which is more
+legible than inheriting it *and* immune to the default moving again. The deciding case is the one
+that does not exist yet: an interactive builder assembles rigs with nobody to know the flag exists,
+and *"the author must opt in to the constraints holding"* is a worse contract than *"the author must
+opt out to measure the drift"*.
+
+⚠️ **The default costs `RsSolver` its batched path.** Stabilizing means crossing into wasm once per
+step rather than handing the whole `tickCount` over, so the demo now pays a boundary crossing per
+step by default. That is the trade until [0012](issues/0012.md) puts the stabilizer on the Rust
+side; it was measured at about 2× wall clock on this rig, and correctness by default is the right
+side of it. Settled in [0013](issues/0013.md).
 
 #### Scale, and why the convergence test is on the correction
 

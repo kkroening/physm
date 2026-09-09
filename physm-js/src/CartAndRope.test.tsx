@@ -283,7 +283,10 @@ describe('CartAndRope under drive', () => {
     // of a segment, which is small on paper and plainly visible on screen. It
     // is also unbounded, growing with how long the drive runs.
     const scene = assemble();
-    const solver = new JsSolver(scene, { rungeKutta: true });
+    // Explicitly off: this test is *about* the unstabilized behaviour, so it
+    // has to say so rather than inherit it from a default that has already
+    // moved once (`docs/issues/0013.md`).
+    const solver = new JsSolver(scene, { rungeKutta: true, stabilize: false });
 
     expect(gap(scene, solver)).toBeLessThan(1e-9);
 

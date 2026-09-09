@@ -122,24 +122,39 @@ function describeCrossValidation(
       return await import('../../physm-rs/nodepkg/physm_rs.js');
     }
 
+    // Every arm pins `stabilize: false`, and not because stabilizing breaks the
+    // comparison -- measured, it leaves the two implementations agreeing to
+    // 1.4e-12 against 1.7e-13, both float64 noise. It is that this suite exists
+    // to compare the two *integrators*, and the stabilizer is one piece of
+    // TypeScript both of them call, so including it can only add arithmetic
+    // neither side does differently. Explicit rather than inherited, since the
+    // default has already moved once (`docs/issues/0013.md`).
     const solverInfos = [
       {
         name: 'JsSolver with rungeKutta=false',
-        createSolver: () => new JsSolver(scene, { rungeKutta: false }),
+        createSolver: () =>
+          new JsSolver(scene, { rungeKutta: false, stabilize: false }),
       },
       {
         name: 'JsSolver with rungeKutta=true',
-        createSolver: () => new JsSolver(scene, { rungeKutta: true }),
+        createSolver: () =>
+          new JsSolver(scene, { rungeKutta: true, stabilize: false }),
       },
       {
         name: 'RsSolver with rungeKutta=false',
         createSolver: async () =>
-          new RsSolver(scene, await loadRsWasmModule(), { rungeKutta: false }),
+          new RsSolver(scene, await loadRsWasmModule(), {
+            rungeKutta: false,
+            stabilize: false,
+          }),
       },
       {
         name: 'RsSolver with rungeKutta=true',
         createSolver: async () =>
-          new RsSolver(scene, await loadRsWasmModule(), { rungeKutta: true }),
+          new RsSolver(scene, await loadRsWasmModule(), {
+            rungeKutta: true,
+            stabilize: false,
+          }),
       },
     ];
 
@@ -272,8 +287,65 @@ describe('stabilization', () => {
     },
   ];
 
+  test('stabilization is on unless a caller turns it off', async () => {
+    // The default itself, which nothing else pins: the two tests below build
+    // their solvers with an explicit flag, so they would go on passing whichever
+    // way this points. `docs/issues/0013.md` records why it points here -- an
+    // unstabilized rig looks right for a minute and then comes apart, which is
+    // a worse thing to get by not thinking than a solve per step.
+    expect(new JsSolver(getRopeScene()).stabilize).toBe(true);
+    expect(
+      new RsSolver(getRopeScene(), await loadRsWasmModule()).stabilize,
+    ).toBe(true);
+  });
+
+  test('RsSolver takes the same number of steps however tickCount is split', async () => {
+    // `RsSolver` hands `tickCount` straight to wasm when unstabilized and steps
+    // one at a time when stabilized, so one call of N has to land where N calls
+    // of one do. Nothing else in the suite passes a `tickCount` above 1 at all,
+    // which left both paths uncovered -- and the stabilized one is what the demo
+    // now runs, since its animation loop computes a `tickCount` from the frame
+    // delta and the flag defaults on.
+    //
+    // Both arms, because the two failures are different: a wrong count reaching
+    // wasm shows up unstabilized, while a wrong loop *accounting* shows up only
+    // when `batchSize` is 1 and the loop actually iterates.
+    for (const stabilize of [false, true]) {
+      const wasm = await loadRsWasmModule();
+      const batched = new RsSolver(getRopeScene(), wasm, {
+        rungeKutta: true,
+        stabilize,
+      });
+      const stepped = new RsSolver(getRopeScene(), wasm, {
+        rungeKutta: true,
+        stabilize,
+      });
+      const initial = getRopeScene().getInitialStateMap();
+
+      batched.tick(1 / 400, 200, null);
+      for (let step = 0; step < 200; step++) {
+        stepped.tick(1 / 400, 1, null);
+      }
+
+      const a = batched.getStateMap();
+      const b = stepped.getStateMap();
+
+      // That the rig actually moved, so this is not two identical initial
+      // states agreeing for the least interesting reason.
+      expect(
+        Math.max(
+          ...[...a].map(([id, [q]]) => Math.abs(q - initial.get(id)![0])),
+        ),
+      ).toBeGreaterThan(0.01);
+
+      expect([...a].map(([id, [q, qd]]) => [id, q, qd])).toEqual(
+        [...b].map(([id, [q, qd]]) => [id, q, qd]),
+      );
+    }
+  });
+
   solverKinds.forEach((kind) => {
-    test(`${kind.name}: off by default, and the drift it leaves is real`, async () => {
+    test(`${kind.name}: unstabilized, the drift the drive leaves is real`, async () => {
       const solver = await kind.create(false);
 
       expect(solver.stabilize).toBe(false);
@@ -286,7 +358,7 @@ describe('stabilization', () => {
       expect(drive(solver, 25)).toBeGreaterThan(1e-5);
     });
 
-    test(`${kind.name}: stabilized, the same drive leaves nothing`, async () => {
+    test(`${kind.name}: stabilized -- the default -- the same drive leaves nothing`, async () => {
       const solver = await kind.create(true);
 
       expect(solver.stabilize).toBe(true);

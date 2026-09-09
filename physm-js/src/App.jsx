@@ -331,15 +331,12 @@ function createSolver(
 ) {
   //console.log('[js] Creating solver');
   //const solver = new JsSolver(scene, { rungeKutta: false });
-  // `stabilize` costs a wasm boundary crossing per step -- `RsSolver` cannot
-  // batch `tickCount` while correcting from this side -- and the demo is what
-  // the stabilizer was added for. Driven at the frequency that walks the
-  // pendulum in circles, the two rope chains visibly come apart within a minute
-  // without it. See `docs/constraints.md` §7.
-  const solver = new RsSolver(scene, rsWasmModule, {
-    rungeKutta: true,
-    stabilize: true,
-  });
+  // Stabilization is on by default and this demo is why: driven at the
+  // frequency that walks the pendulum in circles, the two rope chains visibly
+  // come apart within a minute without it. It costs a wasm boundary crossing
+  // per step, since `RsSolver` cannot batch `tickCount` while the correction
+  // runs on this side. See `docs/constraints.md` §7.
+  const solver = new RsSolver(scene, rsWasmModule, { rungeKutta: true });
   window.solver = solver; // (for debugging)
   //console.log('[js] Solver:', solver);
   return solver;

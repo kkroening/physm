@@ -46,25 +46,30 @@ export default class Solver {
   /**
    * Whether to pull the state back onto the constraint manifold after a tick.
    *
-   * Off by default, and that is deliberate rather than cautious. Unstabilized,
-   * this formulation *conserves* a constraint violation exactly -- `C(t) = C₀ +
-   * Ċ₀t` -- which is a documented, tested property and the diagnostic that
-   * tells a drift caused by inconsistent initial velocities apart from one
-   * caused by integration error. Stabilizing by default would erase the
-   * distinction and leave no way to measure whether the stabilizer works.
+   * **On by default, because the two failure modes are not symmetric.**
+   * Unstabilized, this formulation *conserves* a constraint violation exactly --
+   * `C(t) = C₀ + Ċ₀t` -- so a rig looks correct for a minute and then comes
+   * apart. That is quiet, slow, and indistinguishable from a modelling mistake;
+   * it is the bug report the stabilizer was written for. Stabilizing a scene
+   * that did not need it costs a solve per step and is visible in a profile.
    *
-   * ⚠️ **The default is a decision deferred, not one made** -- see
-   * `docs/issues/0013.md`. Nothing currently depends on it: every test passes
-   * this flag explicitly in both directions, and the demo passes `true`. The
-   * argument against it is that a forgotten `stabilize` fails quietly -- the rig
-   * looks right for a minute and then comes apart, which is the bug the
-   * stabilizer was added to remove.
+   * The argument for defaulting off was that the unstabilized behaviour is a
+   * *diagnostic* -- it is what tells a drift caused by inconsistent initial
+   * velocities apart from one caused by integration error. That is true and the
+   * diagnostic is worth keeping, but a default is the wrong place to keep it:
+   * the tests that rely on it say `stabilize: false` in as many words, which is
+   * both more legible and immune to the default moving again.
    *
-   * See `Scene.getStabilizedState`.
+   * The deciding case is the one that does not exist yet. An interactive scene
+   * builder assembles rigs with nobody to know this flag exists -- and "the
+   * author must opt in to the constraints holding" is a worse contract than
+   * "the author must opt out to measure the drift".
+   *
+   * Settled in `docs/issues/0013.md`; see `Scene.getStabilizedState`.
    */
   readonly stabilize: boolean;
 
-  constructor(scene: Scene, { stabilize = false }: SolverOptions = {}) {
+  constructor(scene: Scene, { stabilize = true }: SolverOptions = {}) {
     this.scene = scene;
     this.stabilize = stabilize;
   }
