@@ -1,6 +1,6 @@
-# 8 · The constraint-first horizon
+# 9 · The constraint-first horizon
 
-<sub>[← Prev: 7 · Play](./07-play.md) · [↑ Index](../0014.md) · [Next: 9 · Staging →](./09-staging.md)</sub>
+<sub>[← Prev: 8 · Play](./08-play.md) · [↑ Index](../0014.md) · [Next: 10 · Staging →](./10-staging.md)</sub>
 
 This page is short on purpose. The CAD-like direction — model flatly, relate by
 constraint, let the runtime work out the hierarchy — is not what is being built,
@@ -23,7 +23,7 @@ and it is worth noticing that it happened without anyone aiming at it.
 ## What the design here already admits
 
 - **The document is a tree of elements, but the *scene* is not a tree.** Named
-  references ([page 4](./04-metadata.md#references-have-to-become-names)) are
+  references ([page 5](./05-metadata.md#references-have-to-become-names)) are
   already edges the tree cannot express, and the editor already needs an index
   from name to node to keep them honest. More edges is more of the same job.
 - **Constraint types are open.** `Distance` and `Coincidence` are two entries in
@@ -57,10 +57,9 @@ comes up between "the parent-child edge means X" and "a constraint means X",
 prefer the constraint, because it is the representation that survives the shift.
 
 Concretely, that is already the argument for
-[named references over `ref` handles](./04-metadata.md#references-have-to-become-names)
+[named references over `ref` handles](./05-metadata.md#references-have-to-become-names)
 — which is being done for the editor's own reasons and happens to be the same
 direction.
 
 ---
-
-<sub>[← Prev: 7 · Play](./07-play.md) · [↑ Index](../0014.md) · [Next: 9 · Staging →](./09-staging.md)</sub>
+<sub>[← Prev: 8 · Play](./08-play.md) · [↑ Index](../0014.md) · [Next: 10 · Staging →](./10-staging.md)</sub>

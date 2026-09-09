@@ -1,6 +1,6 @@
-# 4 · Component metadata
+# 5 · Component metadata
 
-<sub>[← Prev: 3 · The tree view](./03-tree.md) · [↑ Index](../0014.md) · [Next: 5 · Code generation →](./05-codegen.md)</sub>
+<sub>[← Prev: 4 · The tree view](./04-tree.md) · [↑ Index](../0014.md) · [Next: 6 · Code generation →](./06-codegen.md)</sub>
 
 ## Reflection is closed, and not narrowly
 
@@ -65,7 +65,7 @@ export const RopeChain = defineComponent({
   name: 'RopeChain',
   category: 'rope',
   props: {
-    anchor: point({ label: 'Anchor', identifying: true }),
+    anchor: point({ label: 'Anchor', summary: true }),
     mirror: flag({ default: false }),
     segmentCount: int({ min: 1, max: 64, default: 5 }),
   },
@@ -74,6 +74,10 @@ export const RopeChain = defineComponent({
   render: ({ anchor, mirror, segmentCount, children }) => /* … */,
 });
 ```
+
+`summary: true` marks a prop worth showing in the tree row's dimmed suffix. It
+is a display hint and nothing more — identity is the key path
+([page 4](./04-tree.md#identity-and-what-a-row-is-called)), never a prop value.
 
 `props` is one declaration serving three consumers: the editor reads it for the
 properties pane and the library, `render`'s parameter type is **inferred** from
@@ -139,8 +143,22 @@ both.
 editor should refuse the delete, or delete both, or leave the constraint visibly
 broken — but it must *notice*, which means the document needs an index from name
 to node and codegen needs to keep names stable. This is the first place the model
-is more than a tree, and [page 8](./08-horizon.md) is about what happens when
+is more than a tree, and [page 9](./09-horizon.md) is about what happens when
 that stops being the exception.
+
+## Editor-created components declare it too
+
+A component the editor extracted needs metadata like any other, and it is
+**generated rather than written**: a zero-prop prefab starts with an empty
+`props`, and each *promote to prop*
+([page 3](./03-focus.md#what-an-extracted-component-takes-for-props)) adds an
+entry with the promoted value as its default.
+
+The kind comes from the value being promoted — a `[number, number]` promotes to
+`point`, a bare number to `number` — with the user able to narrow it afterwards
+to `int` or `angle` or a range. Guessing the kind and letting it be corrected is
+better than asking first, because the guess is right most of the time and the
+question interrupts the operation people actually came to do.
 
 ## Plain components still work
 
@@ -156,5 +174,4 @@ requires rewriting everything before anything works is a migration that does not
 happen.
 
 ---
-
-<sub>[← Prev: 3 · The tree view](./03-tree.md) · [↑ Index](../0014.md) · [Next: 5 · Code generation →](./05-codegen.md)</sub>
+<sub>[← Prev: 4 · The tree view](./04-tree.md) · [↑ Index](../0014.md) · [Next: 6 · Code generation →](./06-codegen.md)</sub>

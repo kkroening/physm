@@ -1,6 +1,6 @@
-# 5 · Code generation
+# 6 · Code generation
 
-<sub>[← Prev: 4 · Component metadata](./04-metadata.md) · [↑ Index](../0014.md) · [Next: 6 · Scene view and properties →](./06-editing.md)</sub>
+<sub>[← Prev: 5 · Component metadata](./05-metadata.md) · [↑ Index](../0014.md) · [Next: 7 · Scene view and properties →](./07-editing.md)</sub>
 
 ## The easy half
 
@@ -28,46 +28,66 @@ cheap:
   alternative is reimplementing line-breaking decisions that already have an
   owner and a CI check.
 
-## Identity, and why nodes need ids
+## Two kinds of name, and they are not the same kind
 
-Two independent needs, both landing on the same mechanism:
+Easy to conflate, and they answer different questions:
 
-- **Frames need ids for constraints and controls.** `<Coincidence frame1="…">`
-  names one; so do the demo's arrow keys ([0011](../0011.md)).
-- **Simulation state survives an edit by frame id** — see
-  [page 7](./07-play.md).
+- **`key`** — *which sibling is this?* Structural, scoped to one parent, and the
+  document's identity mechanism
+  ([page 4](./04-tree.md#identity-and-what-a-row-is-called)). Emitted only when
+  explicit; an implicit key is the child index, and there is nothing to write.
+- **`id`** — *what is this frame called, scene-wide?* A user-facing name that
+  constraints and controls point at: `<Coincidence frame1="left-tip">`, and the
+  demo's arrow keys ([0011](../0011.md)). Emitted whenever set, and set by a
+  person rather than generated.
 
-So an authored frame carries a stable id from the moment it is created, and
-codegen emits it. Generated ids should be readable and derived from the
-component (`rope-chain-1`, not `n7`) — they end up in the source, and a person
-reading the emitted file should be able to tell what a constraint is pointing at.
+The editor should **not** invent ids for every frame. An emitted file where each
+of sixty frames carries `id="frame-37"` is noise, and the ids nobody references
+are the ones most likely to end up wrong. Ids appear where something names them.
 
-**Ids must never be renumbered on re-emit.** A stable id that changes when a
-sibling is deleted is not a stable id, and the symptom is a constraint that
-silently reattaches to the wrong frame.
+**Neither may be renumbered on re-emit.** A key that shifts when a sibling is
+deleted is not an identity, and the symptom is a constraint that silently
+reattaches to the wrong frame.
 
 ## What the emitted file looks like
 
-Not one giant expression. The unit is a **component**, because that is the unit
-the document already has:
+**One file, every definition in it**, because that is what the document is
+([page 3](./03-focus.md#a-scene-is-a-file-not-a-tree)):
 
 ```tsx
-import { Circle, Line, RotationalFrame, Weight } from "./react";
+import { Circle, Line, RotationalFrame, TrackFrame, Weight } from './react';
 
-export function Pendulum(): ReactElement {
+function Pendulum(): ReactElement {
   return (
-    <RotationalFrame position={[0, 0]} initialState={[-1.5708, 0]}>
+    <RotationalFrame position={[0, 0]} initialState={[-Math.PI / 2, 0]}>
       <Line endPos={[8, 0]} lineWidth={0.22} />
       <Circle position={[8, 0]} radius={0.65} />
       <Weight mass={15} position={[8, 0]} />
     </RotationalFrame>
   );
 }
+
+export function SomeScene(): ReactElement {
+  return (
+    <TrackFrame id="cart">
+      <Pendulum />
+      <Pendulum />
+    </TrackFrame>
+  );
+}
 ```
 
-Imports are derived from the set of component types actually used — the document
-holds function identities, so the emitter knows exactly which module each came
-from, with no name resolution to guess at.
+**Definitions come out in dependency order, scene root last** — a topological
+sort of "who instantiates whom", which terminates because
+[cycles are refused at the gesture](./03-focus.md#three-operations-that-need-rules).
+Only the root is exported; the rest are file-local, because nothing outside the
+file refers to them.
+
+Imports are derived from the component types actually used, split by where they
+came from: the core vocabulary from `./react`, prefabs from their own modules.
+The document holds **function identities**, so the emitter knows exactly which
+module each came from with no name resolution to guess at — and an editor-created
+component needs no import at all, because it is defined a few lines up.
 
 ## What is lost, precisely
 
@@ -114,5 +134,4 @@ the emitter than to retrofit by searching the output afterwards. Worth doing on
 the first pass even though the highlighting itself can come later.
 
 ---
-
-<sub>[← Prev: 4 · Component metadata](./04-metadata.md) · [↑ Index](../0014.md) · [Next: 6 · Scene view and properties →](./06-editing.md)</sub>
+<sub>[← Prev: 5 · Component metadata](./05-metadata.md) · [↑ Index](../0014.md) · [Next: 7 · Scene view and properties →](./07-editing.md)</sub>

@@ -1,6 +1,6 @@
 # 2 · The document is an element tree
 
-<sub>[← Prev: 1 · Overview](./01-overview.md) · [↑ Index](../0014.md) · [Next: 3 · The tree view →](./03-tree.md)</sub>
+<sub>[← Prev: 1 · Overview](./01-overview.md) · [↑ Index](../0014.md) · [Next: 3 · Components and focus →](./03-focus.md)</sub>
 
 ## JSX is a data literal, not a call
 
@@ -27,10 +27,14 @@ registry. `props` is exactly what was written. Children are in `props.children`.
 Nothing has run, nothing has mounted, and no DOM was involved.
 
 **So the round-trip is already there.** A scene module exporting
-`export const scene = <CartAndRope />` can be imported by the editor, and what
-comes back is a tree the editor can walk, display, mutate and print. The
-compiler and the ordinary `import` do all the work; there is no parser to write
-and no AST library to depend on.
+`export function SomeScene() { return <TrackFrame …>…</TrackFrame>; }` can be
+imported by the editor, and calling it once yields a tree the editor can walk,
+display, mutate and print. The compiler and the ordinary `import` do all the
+work; there is no parser to write and no AST library to depend on.
+
+This page is about one such tree. A real document holds
+[several of them — one per component definition](./03-focus.md), and that is
+what the editor actually edits; everything below applies within any one of them.
 
 That is what makes the whole project tractable, and it is worth being explicit
 that this is a property of React rather than something being built here.
@@ -86,12 +90,17 @@ TrackFrame#cart
 Coincidence
 ```
 
-**Only the authored tree is editable.** This is the ownership rule, and it is not
-a limitation so much as an observation: there is nowhere to *write* an edit to an
-expanded node. `RopeSegment 3`'s angle is `TURN`, computed inside `RopeChain`
-from props. Changing it in the editor would mean editing `RopeChain`'s body —
-which is source the editor does not own and, by
-[page 1](./01-overview.md#one-way-on-purpose), does not read.
+**Only the authored tree is editable *here*.** This is the ownership rule, and it
+is not a limitation so much as an observation: there is nowhere to *write* an
+edit to an expanded node. `RopeSegment 3`'s angle is `TURN`, computed inside
+`RopeChain` from props. Changing it would mean editing `RopeChain`'s body, and a
+body is not something a document can reach into.
+
+⚠️ **What it is not is a permanent verdict on `RopeChain`.** If the editor
+*defined* `RopeChain`, its body is document data too — a second tree, edited in
+its own right. [Page 3](./03-focus.md#two-ownership-classes-and-only-one-of-them-is-new)
+draws that line properly; within a single definition, the rule above holds
+exactly as stated.
 
 So:
 
@@ -99,7 +108,7 @@ So:
 - **Expanded nodes** — visible, selectable *for inspection*, and read-only.
 
 The tree view distinguishes them visually. Everything on
-[page 3](./03-tree.md) is an application of this one rule.
+[page 4](./04-tree.md) is an application of this one rule.
 
 ## What "expanded" costs
 
@@ -143,5 +152,4 @@ faithful view remains available under the expansion disclosure, where it is
 answering the question it is good at: *where did this actually end up?*
 
 ---
-
-<sub>[← Prev: 1 · Overview](./01-overview.md) · [↑ Index](../0014.md) · [Next: 3 · The tree view →](./03-tree.md)</sub>
+<sub>[← Prev: 1 · Overview](./01-overview.md) · [↑ Index](../0014.md) · [Next: 3 · Components and focus →](./03-focus.md)</sub>

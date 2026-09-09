@@ -1,6 +1,6 @@
-# 9 · Staging
+# 10 · Staging
 
-<sub>[← Prev: 8 · The constraint-first horizon](./08-horizon.md) · [↑ Index](../0014.md) · [Next: 10 · Risks →](./10-risks.md)</sub>
+<sub>[← Prev: 9 · The constraint-first horizon](./09-horizon.md) · [↑ Index](../0014.md) · [Next: 11 · Risks →](./11-risks.md)</sub>
 
 ## The prerequisites are already filed
 
@@ -29,7 +29,7 @@ it against `CartAndRope` and require an identical `Scene` to the mounted route,
 which is a strong differential oracle available for free.
 
 **2 · Metadata, on the core vocabulary only.** `defineComponent` with the prop
-types from [page 4](./04-metadata.md), applied to `TrackFrame`,
+types from [page 5](./05-metadata.md), applied to `TrackFrame`,
 `RotationalFrame`, `Weight`, `Line`, `Circle`, `Box`, `Anchor`. Nine components,
 no composites. Nothing visible yet, and the types must be derived from the schema
 from the first day — retrofitting that later means touching every declaration.
@@ -40,36 +40,54 @@ original. **That test is the spine of the project**: it is the round-trip
 property stated as an assertion, and it can exist before any UI does.
 
 **4 · Tree view and properties, read-only.** Load `<CartAndRope />`, show the
-authored tree with expansion, show props. No editing. This is the first step that
-looks like the thing, and it will teach more about the expansion presentation
-than any amount of further design.
+authored tree with expansion, show props. No editing, one tab, no focus. This is
+the first step that looks like the thing, and it will teach more about the
+expansion presentation than any amount of further design.
 
 **5 · Editing.** Property edits, then insert-from-library, then delete, then
 drag-reorder. Undo from the start — retrofitting undo onto a mutable document is
 the classic rewrite, and a document that is replaced rather than mutated makes it
 nearly free.
 
-**6 · Scene view: gizmos, then picking, then dragging.** In that order. Gizmos
-alone make the tree comprehensible; picking without gizmos does not work at all
-([page 6](./06-editing.md#the-empty-frame-problem)).
+**6 · The module, focus and extraction.** The document becomes a set of
+definitions ([page 3](./03-focus.md)); tabs; extract-to-component; promote to
+prop. **This is the step that decides whether the editor is worth using**, since
+without it a rig is a flat pile of primitives with no way to name a repeated
+part — so it should land as early as step 5 allows rather than being treated as
+an advanced feature.
 
-**7 · Play.** Reuse the demo's loop. State-carrying across edits comes after it
+Codegen from step 3 needs its module form here, which is why step 3's round-trip
+test is the thing to extend rather than rewrite.
+
+**7 · Scene view: gizmos, then picking, then dragging.** In that order. Gizmos
+alone make the tree comprehensible; picking without gizmos does not work at all
+([page 7](./07-editing.md#the-empty-frame-problem)).
+
+**8 · Play.** Reuse the demo's loop. State-carrying across edits comes after it
 runs at all.
 
-**8 · Code pane.** Last, because it is the pane you can most easily do without —
-"Export" writing a file is 90% of its value, and the highlighting needs source
-ranges the emitter should already be recording from step 3.
+**9 · Code pane.** Last, because it is the pane you can most easily do without —
+"Export" writing a file is 90% of its value. Its focus-following highlight
+([page 3](./03-focus.md#what-is-global-and-what-belongs-to-a-tab)) needs source
+ranges the emitter should already be recording from step 3, and a scroll-once
+rule that is easier to get right than it looks.
 
 ## What the MVP is
 
-Steps 1–5, plus gizmos from step 6. Concretely: **load a scene, see its tree,
-select a node, change its props, add and delete and reorder nodes, and export
-TSX that rebuilds to the same scene.**
+Steps 1–6, plus gizmos from step 7. Concretely: **load a scene, see its tree,
+select a node, change its props, add and delete and reorder nodes, extract a
+subtree into a reusable component and instantiate it again, and export TSX that
+rebuilds to the same scene.**
 
 No picking, no dragging, no play, no code pane. That is a tool someone would
 use — laying a rig out through the tree and the properties pane is slower than
 direct manipulation but entirely workable, and it is the version whose every
 piece is required by the versions after it.
+
+**Step 6 is inside the line rather than just outside it**, and that is a
+deliberate call. An editor that cannot name a repeated part produces a rig
+nobody wants to maintain, which makes the export — the whole point — worthless.
+Extraction is what turns primitives into structure.
 
 ## Deliberately deferred
 
@@ -77,9 +95,13 @@ piece is required by the versions after it.
   [page 1](./01-overview.md#one-way-on-purpose).
 - **Editing inside a composite's expansion.** Never — there is nowhere to write
   it ([page 2](./02-document.md#authored-versus-expanded)).
-- **Multi-select, copy/paste, prefabs.** After the single-selection model is
-  proven.
-- **Anything from [page 8](./08-horizon.md).**
+- **Multi-select, copy/paste.** After the single-selection model is proven.
+- **Inlining a component back into its callers.** The nice answer to
+  [deleting one that has instances](./03-focus.md#three-operations-that-need-rules);
+  refusing is the correct MVP.
+- **Simulating a focused component in isolation.** It needs a decision about
+  what the world outside it is doing ([page 8](./08-play.md#the-pipeline)).
+- **Anything from [page 9](./09-horizon.md).**
 
 ## What would make me stop
 
@@ -96,5 +118,4 @@ Both are checkable within the first two steps, before any UI exists. That is the
 best property this plan has.
 
 ---
-
-<sub>[← Prev: 8 · The constraint-first horizon](./08-horizon.md) · [↑ Index](../0014.md) · [Next: 10 · Risks →](./10-risks.md)</sub>
+<sub>[← Prev: 9 · The constraint-first horizon](./09-horizon.md) · [↑ Index](../0014.md) · [Next: 11 · Risks →](./11-risks.md)</sub>

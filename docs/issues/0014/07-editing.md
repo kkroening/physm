@@ -1,6 +1,6 @@
-# 6 · Scene view and properties
+# 7 · Scene view and properties
 
-<sub>[← Prev: 5 · Code generation](./05-codegen.md) · [↑ Index](../0014.md) · [Next: 7 · Play →](./07-play.md)</sub>
+<sub>[← Prev: 6 · Code generation](./06-codegen.md) · [↑ Index](../0014.md) · [Next: 8 · Play →](./08-play.md)</sub>
 
 ## The empty-frame problem
 
@@ -27,7 +27,7 @@ With that, picking is ordinary:
 A click selects the **nearest authored ancestor** of whatever was hit, because
 that is the node the user can act on. Clicking a rope segment selects
 `RopeChain`; a modifier key selects the expanded node itself for inspection.
-This is the same walk [page 3](./03-tree.md#selection) describes from the tree
+This is the same walk [page 4](./04-tree.md#selection) describes from the tree
 side, and it is what keeps picking useful on a rig built mostly from composites.
 
 **The tree remains the failsafe.** Everything selectable in the scene is
@@ -78,7 +78,25 @@ offer on a composite-heavy rig.
 
 ## The component library
 
-The bottom strip lists every component with metadata, grouped by category.
+Sits between the code pane and the property editor, below the tree and the scene,
+and is **global** — the same list wherever you are focused
+([page 3](./03-focus.md#what-is-global-and-what-belongs-to-a-tab)). Three
+sources, and they behave identically once listed:
+
+- **Core vocabulary** — `TrackFrame`, `Weight`, `Line`, `Circle`, `Box`,
+  `Anchor`, the constraints.
+- **Prefabs** — shipped with `physm`, or from a component-library module later.
+- **This module's own components** — everything extracted so far, available to
+  instantiate anywhere, including in a component extracted after it.
+
+Double-clicking an entry from the third group **focuses** it rather than
+inserting it, which is the non-hierarchical way to open a tab and the reason
+[focus is tabs rather than a stack](./03-focus.md#focus-is-tabs-not-a-stack).
+
+⚠️ **A component that is an ancestor of the focused one is greyed out**, because
+instantiating it would close a cycle and the editor cannot write a body that
+terminates one. Refused at the gesture, not diagnosed afterwards.
+
 Adding one means picking the insertion point, and the rule that makes this
 predictable is the one already in the tree: **the metadata's slot kind decides
 where a component may go.**
@@ -93,5 +111,4 @@ Insertion goes **inside the selection** if it accepts children, otherwise
 matching rather than inventing.
 
 ---
-
-<sub>[← Prev: 5 · Code generation](./05-codegen.md) · [↑ Index](../0014.md) · [Next: 7 · Play →](./07-play.md)</sub>
+<sub>[← Prev: 6 · Code generation](./06-codegen.md) · [↑ Index](../0014.md) · [Next: 8 · Play →](./08-play.md)</sub>

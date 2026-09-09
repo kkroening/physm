@@ -4,23 +4,30 @@
 
 ## The shape
 
-Five regions. Left to right along the middle: **hierarchy**, **code**, **scene**,
-**properties**; the **component library** runs along the bottom.
-
 ```
-┌──────────┬──────────────┬─────────────────────┬──────────────┐
-│          │              │                     │              │
-│   tree   │  code (ro)   │        scene        │  properties  │
-│          │              │                     │              │
-├──────────┴──────────────┴─────────────────────┴──────────────┤
-│  library:  Weight · Line · Circle · Box · Anchor · Pendulum   │
-└──────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│  SomeScene · RopeChain · ▸Pendulum                                    │
+├──────────────┬──────────────────┬─────────────────────┬───────────────┤
+│              │                  │                     │               │
+│  code (ro)   │       tree       │        scene        │   properties  │
+│              │                  │                     │               │
+│              ├──────────────────┴─────────────────────┤               │
+│              │  library: Weight · Line · RopeChain …  │               │
+└──────────────┴────────────────────────────────────────┴───────────────┘
 ```
 
-Four of the five are views onto one thing — the **document** — and the fifth is a
-palette of what can be added to it. Selection is shared: a node picked in the
-tree is the node the properties pane edits, the node the code pane highlights,
-and the node the scene pane outlines.
+**The split is not four panes; it is two scopes.** The tab bar, the code pane and
+the component library are **global** — they show the whole module, whatever you
+are looking at. The tree, the scene and the properties pane form the
+**component editor**, and they move together to whichever component the active
+tab focuses.
+
+[Page 3](./03-focus.md) is about that second axis, which is the one that does not
+follow from anything else in this design.
+
+Selection is shared within a tab: a node picked in the tree is the node the
+properties pane edits, the node the scene pane outlines, and the node the code
+pane highlights.
 
 ## One way, on purpose
 
@@ -52,12 +59,24 @@ degrades gracefully rather than failing.
   vocabulary of frames, decals, weights and constraints, plus composites built
   from them. A component that renders a `<div>` is out of scope.
 - **Not a physics authoring tool for constraints-first modelling.** That
-  direction is real and [page 8](./08-horizon.md) takes it seriously, but the
+  direction is real and [page 9](./09-horizon.md) takes it seriously, but the
   editor being built is hierarchical.
 - **Not a replacement for writing scenes by hand.** The demo rig is 280 lines of
   deliberate, commented TSX with named constants and a recursive chain. No
   editor is going to produce that, and it should not try. The editor is for
   laying out a rig quickly and for the parts that are genuinely spatial.
+
+## Both levels, not a choice between them
+
+An editor that only showed `<CartAndRope />` — one node, one prop — would have
+nothing to click. One that only showed the materialized frame tree would make
+every rig a flat pile of sixty frames.
+
+**It should be neither, and the mechanism is on [page 3](./03-focus.md):** you
+expand as far down as you want to *look*, and you focus a component to *edit* it.
+Those are separate gestures answering separate questions, and having both is what
+lets one editor serve a rig described in two composites and a rig assembled from
+primitives.
 
 ## The principles the rest of this hangs on
 
@@ -68,10 +87,12 @@ degrades gracefully rather than failing.
    resolves the recursion question, the expansion question and most of the
    selection question at once.
 3. **Metadata is declared, not discovered.** Not a compromise —
-   [page 4](./04-metadata.md).
+   [page 5](./05-metadata.md).
 4. **The generated source is what a person would have written.** Not a
    serialization format that happens to be valid TSX.
+5. **Looking and editing are different gestures.** Expansion shows what a
+   component produced; focus opens what it *is*. Conflating them is what forces
+   an editor to pick a single altitude.
 
 ---
-
 <sub>[↑ Index](../0014.md) · [Next: 2 · The document is an element tree →](./02-document.md)</sub>
