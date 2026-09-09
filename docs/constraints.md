@@ -449,8 +449,30 @@ constraint, and it is the same operator the velocity consistency step already us
 
 A chain pulled taut is collinear, which is exactly when $`Jg^{-1}J^{\mathsf T}`$ loses rank — and a
 hard-driven rope is exactly when a chain goes taut. Throwing there would turn the stabilizer into a
-crash in the one configuration it was added for, so an unsolvable step leaves the state where it is
-and the next step tries again from a pose that has moved off the singularity.
+crash in the one configuration it was added for, so an unsolvable step stops the iteration and the
+next one tries again from a pose that has moved off the singularity.
+
+**What a skip returns is three cases, not one**, and the difference is easy to state wrongly:
+
+| Where it went singular | What comes back |
+| --- | --- |
+| The first Newton step | The input state, unchanged |
+| A later Newton step | The positions already corrected, with the **input's** velocities |
+| Only the velocity half | The corrected positions, again with the input's velocities |
+
+The middle row is the one worth explaining. It is tempting to re-project the velocities at the pose
+actually reached — $`J`$ moved with $`q`$, after all, which is the whole reason the velocity half
+exists. It achieves nothing: the velocity half solves at that same $`q`$, so it re-forms that same
+gram, fails the same way, and arrives back at the same answer one factorization later. So the
+invariant is the weak one — **a returned velocity is either projected at the returned pose or is the
+one that came in**, never projected at some third pose — and the next tick corrects both.
+
+**Only a singular failure is skipped.** An over-determined scene — more constraint rows than
+coordinates — throws up front, mirroring the check the velocity-consistency step already makes,
+because it also produces a singular gram and would otherwise be skipped quietly on every step
+forever. Anything else thrown by the solve propagates: a stabilizer that silently stops stabilizing
+is indistinguishable from the bug it was added to fix, and measured, that is exactly what a bare
+`catch` produced — the demo back at its unstabilized drift with nothing reported.
 
 #### What became of the four seams
 

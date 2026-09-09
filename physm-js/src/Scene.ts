@@ -749,11 +749,23 @@ export default class Scene {
    * unsolvable step stops the iteration and the next one tries again from a
    * pose that has moved off the singularity.
    *
-   * The invariant that survives that: **the returned state's velocities are
-   * projected at its own pose, unless no correction was applied at all** -- in
-   * which case the input map comes back untouched. A failure part-way through
-   * still re-projects, because `J` moved with the positions that did get
-   * corrected, which is the whole reason the velocity half exists.
+   * **What a skip returns**, which is three cases and not one:
+   *
+   * - **Singular on the first Newton step** -- the input map, unchanged and by
+   *   identity. Nothing moved, so there is nothing to describe.
+   * - **Singular later** -- the positions already corrected, with the input's
+   *   velocities. *Not* re-projected: the velocity half would solve at the same
+   *   `q` that just defeated the position solve, so it fails the same way.
+   *   Those velocities belong to the pose the caller passed in, and the next
+   *   tick corrects both from a pose that has moved off the singularity.
+   * - **Singular only in the velocity half** -- the corrected positions with,
+   *   again, the input's velocities. Reachable when `C` was solvable and
+   *   `J q̇` was not, which needs the early-out in `_getProjectedVelocities`
+   *   not to have fired.
+   *
+   * So the one thing that holds in every case is weaker than it looks: **a
+   * returned velocity is either projected at the returned pose or is the one
+   * that came in.** It is never projected at some third pose.
    *
    * Only a *singular* failure is skipped. An over-determined scene throws up
    * front, and anything else thrown by the solve propagates: a stabilizer that
@@ -825,15 +837,16 @@ export default class Scene {
           throw error;
         }
 
-        // Taut, or otherwise rank-deficient. Nothing has moved yet on the first
-        // iteration, so the input goes back untouched; later, the positions
-        // already corrected fall through to the velocity half, which
-        // re-projects them at the pose they actually reached.
-        if (iteration === 0) {
-          return stateMap;
-        }
-
-        break;
+        // Taut, or otherwise rank-deficient. Nothing has moved yet on the
+        // first iteration, so the input goes back untouched; later, the
+        // positions already corrected are kept and the velocities are left to
+        // the next tick.
+        //
+        // Falling through to the velocity half instead would achieve nothing:
+        // it re-solves at this same `q`, so it re-forms this same gram and
+        // throws this same error, and arrives back here one factorization
+        // later with the identical answer.
+        return iteration === 0 ? stateMap : stateFrom(q);
       }
 
       q = q.map((entry, index) => entry - at(correction, index, 'correction'));

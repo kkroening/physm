@@ -7,7 +7,7 @@ import type { FrameId, StateMap } from './Frame';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint } from './Constraint';
-import { DimensionError } from './solveLinearSystem';
+import { DimensionError, SingularMatrixError } from './solveLinearSystem';
 import { DEFAULT_GRAVITY } from './Scene';
 
 describe('Scene queries', () => {
@@ -510,6 +510,69 @@ describe('Scene.getStabilizedState', () => {
     scene.getMassMatrix = () => truncated.slice(1);
 
     expect(() => scene.getStabilizedState(stateMap)).toThrow(DimensionError);
+  });
+
+  test('a failure in the velocity half propagates too', () => {
+    // The other half of the same policy, and it needs its own scene surgery:
+    // the position solve has to *succeed* for the velocity `catch` to be
+    // reached at all, so truncating the mass matrix -- which is how the test
+    // above gets a structural failure -- kills the position half first and
+    // never gets here.
+    //
+    // The path is not hypothetical. `_getProjectedVelocities` builds its
+    // right-hand side with `dotRows(row, qd)`, which the position half never
+    // runs; a length mismatch there is exactly the "Jacobian was assembled
+    // wrong" failure, and it can only surface on this `catch`.
+    const { scene, stateMap } = getViolatedScene();
+    scene._getProjectedVelocities = () => {
+      throw new TypeError('structural');
+    };
+
+    expect(() => scene.getStabilizedState(stateMap)).toThrow(TypeError);
+  });
+
+  test('a failure part-way through keeps the positions and the input velocities', () => {
+    // The skip has three outcomes, and this is the one in the middle: the
+    // Newton step walked into a singularity after already correcting something.
+    //
+    // What it must *not* do is re-project. The velocity half would solve at the
+    // same `q` that just defeated the position solve, so it fails identically
+    // and arrives back at this same answer one factorization later -- which is
+    // what a `break` here bought, before this test existed to say so.
+    const { scene, stateMap } = getViolatedScene();
+    const solve = scene._solveMetricCorrection.bind(scene);
+    let calls = 0;
+    scene._solveMetricCorrection = (...args) => {
+      calls += 1;
+      if (calls > 1) {
+        throw new SingularMatrixError('collinear');
+      }
+
+      return solve(...args);
+    };
+
+    const stabilized = scene.getStabilizedState(stateMap);
+
+    // Exactly two solve calls: the one that worked, and the one that did not.
+    // A third would mean the velocity half ran -- the wasted factorization this
+    // branch exists to avoid.
+    expect(calls).toBe(2);
+
+    // The positions moved, so a correction really was kept rather than
+    // discarded wholesale.
+    expect(
+      Math.max(
+        ...scene.sortedFrames.map((frame) =>
+          Math.abs(stabilized.get(frame.id)![0] - stateMap.get(frame.id)![0]),
+        ),
+      ),
+    ).toBeGreaterThan(0.01);
+
+    // And the velocities came back verbatim, which is the half of the contract
+    // that is easy to state wrongly.
+    expect(
+      scene.sortedFrames.map((frame) => stabilized.get(frame.id)![1]),
+    ).toEqual(scene.sortedFrames.map((frame) => stateMap.get(frame.id)![1]));
   });
 
   test('an over-determined scene throws rather than skipping', () => {
