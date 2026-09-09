@@ -295,16 +295,11 @@ describe('stabilization', () => {
   });
 
   test('RsSolver takes the same number of steps however tickCount is split', async () => {
-    // `RsSolver` hands `tickCount` straight to wasm when unstabilized and steps
-    // one at a time when stabilized, so one call of N has to land where N calls
-    // of one do. Nothing else in the suite passes a `tickCount` above 1 at all,
-    // which left both paths uncovered -- and the stabilized one is what the demo
-    // now runs, since its animation loop computes a `tickCount` from the frame
-    // delta and the flag defaults on.
-    //
-    // Both arms, because the two failures are different: a wrong count reaching
-    // wasm shows up unstabilized, while a wrong loop *accounting* shows up only
-    // when `batchSize` is 1 and the loop actually iterates.
+    // `RsSolver` hands the whole `tickCount` to wasm, so one call of N has to
+    // land where N calls of one do. The stabilized arm is the one that says the
+    // correction inside that call is still per *step* rather than per batch.
+    // Nothing else in the suite passes a `tickCount` above 1 at all, and the demo
+    // passes one computed from the frame delta.
     for (const stabilize of [false, true]) {
       const wasm = await loadRsWasmModule();
       const batched = new RsSolver(getRopeScene(), wasm, {
@@ -355,7 +350,15 @@ describe('stabilization', () => {
     expect(rs.stabilize).toBe(true);
 
     const deltaTime = 1 / 400;
-    let worst = 0;
+    // Separate accumulators for `q` and `q̇`. The divergence this test was written
+    // for lived in the velocity half and reached position only through
+    // `deltaTime` and four thousand steps of integration -- so a velocity
+    // difference that cancels over a drive cycle would leave almost no position
+    // signature. And they get their own bounds because holding a `q` and a `q̇` to
+    // one threshold is the unit conflation the per-coordinate convergence floor
+    // exists to avoid.
+    let worstPosition = 0;
+    let worstVelocity = 0;
     for (let step = 0; step < Math.round(10 / deltaTime); step++) {
       const sign =
         Math.sin(2 * Math.PI * 0.35 * step * deltaTime) >= 0 ? 1 : -1;
@@ -364,8 +367,10 @@ describe('stabilization', () => {
       rs.tick(deltaTime, 1, force);
       const a = js.getStateMap();
       const b = rs.getStateMap();
-      for (const [frameId, [q]] of a) {
-        worst = Math.max(worst, Math.abs(q - b.get(frameId)![0]));
+      for (const [frameId, [q, qd]] of a) {
+        const [otherQ, otherQd] = b.get(frameId)!;
+        worstPosition = Math.max(worstPosition, Math.abs(q - otherQ));
+        worstVelocity = Math.max(worstVelocity, Math.abs(qd - otherQd));
       }
     }
 
@@ -378,7 +383,8 @@ describe('stabilization', () => {
       ),
     ).toBeGreaterThan(0.1);
 
-    expect(worst).toBeLessThan(1e-8);
+    expect(worstPosition).toBeLessThan(1e-8);
+    expect(worstVelocity).toBeLessThan(1e-6);
     expect(violation(js)).toBeLessThan(1e-10);
     expect(violation(rs)).toBeLessThan(1e-10);
   });

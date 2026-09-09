@@ -414,8 +414,7 @@ projection at all, and for a mutant bleeding 2% of every velocity every step. A 
 seven figures that cannot come out wrong is not evidence, and looks more like evidence than a
 statistic that can.
 
-**About twice the wall clock**, on this rig. 10 000 steps of the demo through `RsSolver`: 347 ms
-unstabilized, 726 ms stabilized. Both halves solve an $`m \times m`$ system where $m$ is the
+**A solve per step**, which the table under *"Two implementations"* below prices on the demo rig. Both halves solve an $`m \times m`$ system where $m$ is the
 constraint row count — small beside the $`(n+m) \times (n+m)`$ saddle-point solve RK4 already does
 four times per step — but the position half is a *Newton iteration*, so it pays at least one solve
 per step even on a state already on the manifold. There is no cheap way to ask "is $`C`$ small?"
@@ -542,8 +541,13 @@ loop means a whole `tickCount` still crosses the boundary once. On the demo rig,
 | correcting from TypeScript, per step | 347 ms | 726 ms |
 | correcting in Rust | 359 ms | 402 ms |
 
-So stabilization costs about 1.15× rather than 2.1×, and batching no longer changes the answer —
+So stabilization costs about 1.12× rather than 2.1×, and batching no longer changes the answer —
 `tickCount` of 100 and 100 ticks of 1 leave the rig in the same state either way.
+
+⚠️ Both unstabilized cells time the same code path — unstabilized `RsSolver` hands `tickCount`
+straight to wasm before and after — so their 3.5% spread is this table's own noise, and it is wider
+than the difference between reading the stabilized ratio within its row or across rows. Three
+significant figures would be more than the measurement supports.
 
 ## 8. What the solver has to tolerate
 

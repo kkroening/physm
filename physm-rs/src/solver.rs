@@ -628,6 +628,10 @@ fn solve(
 /// `CONSISTENCY_RELATIVE_TOLERANCE` in `physm-js`.
 const STABILIZATION_TOLERANCE: f64 = 1e-5;
 
+/// When a factorization counts as singular, matching
+/// `SINGULAR_RELATIVE_TOLERANCE` in `physm-js`'s `solveLinearSystem`.
+const SINGULAR_RELATIVE_TOLERANCE: f64 = 1e-12;
+
 /// How many Newton steps the position half takes before giving up on this tick.
 const STABILIZATION_MAX_ITERATIONS: usize = 4;
 
@@ -683,6 +687,25 @@ fn get_jacobian_rows(
     (rows, values)
 }
 
+/// Whether a factorization's upper factor is singular, by the *relative* test.
+///
+/// `nalgebra` reports singularity only on a bit-exact zero pivot, and exact rank
+/// deficiency has measure zero in float64 -- so a near-collinear chain factors
+/// "successfully" and then divides by a pivot around `1e-15`, producing
+/// multipliers of order `1e14` that are finite, plausible, and not a correction.
+/// `physm-js` compares each pivot against the largest instead, which is what makes
+/// its taut-chain skip reachable at all; this is the same predicate, so the two
+/// implementations agree on when to skip rather than only on what to compute.
+fn is_singular(upper: &CoefficientMatrix) -> bool {
+    let diagonal = upper.diagonal();
+    let scale = diagonal.iter().map(|entry| entry.abs()).fold(0., f64::max);
+    let worst = diagonal
+        .iter()
+        .map(|entry| entry.abs())
+        .fold(f64::INFINITY, f64::min);
+    scale == 0. || worst <= SINGULAR_RELATIVE_TOLERANCE * scale
+}
+
 /// `g⁻¹Jᵀ(Jg⁻¹Jᵀ)⁻¹ r` — the correction both halves of projection are built from.
 ///
 /// Feed it `J q̇` and subtracting the result makes a velocity consistent; feed it
@@ -701,6 +724,9 @@ fn solve_metric_correction(
     // One factorization of `g` serves every row; re-factorizing per row would be
     // `m` times the work for the same answer.
     let mass_lu = mass_matrix.clone().lu();
+    if is_singular(&mass_lu.u()) {
+        return None;
+    }
     let mut inv_mass_jt = Vec::with_capacity(row_count);
     for row in rows {
         inv_mass_jt.push(mass_lu.solve(&ForceVector::from_row_slice(row))?);
@@ -711,7 +737,11 @@ fn solve_metric_correction(
             gram[(i, j)] = row.iter().zip(column.iter()).map(|(a, b)| a * b).sum();
         }
     }
-    let lambda = gram.lu().solve(&ForceVector::from_row_slice(residual))?;
+    let gram_lu = gram.lu();
+    if is_singular(&gram_lu.u()) {
+        return None;
+    }
+    let lambda = gram_lu.solve(&ForceVector::from_row_slice(residual))?;
     let mut correction = vec![0.0; frame_count];
     for (row, column) in inv_mass_jt.iter().enumerate() {
         for (index, entry) in correction.iter_mut().enumerate() {
@@ -2213,6 +2243,124 @@ mod tests {
                     assert_abs_diff_eq!(c_ddot, 0., epsilon = 1e-4);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_near_singular_gram_skips_rather_than_dividing_by_it() {
+        // A chain pulled taut is collinear, which makes `Jg⁻¹Jᵀ` rank-deficient --
+        // and exact rank deficiency has measure zero in float64, so what actually
+        // arrives is a gram matrix that is *nearly* singular. `nalgebra` reports
+        // singularity only on a bit-exact zero pivot, so without the relative test
+        // this divides by a pivot around `1e-16` and returns multipliers of order
+        // `1e15`: finite, plausible, and not a correction. `RsSolver`'s `NaN`
+        // screen does not catch a large finite value.
+        //
+        // The predicate itself, at the threshold, because that is what the fix
+        // changed. A pivot ratio of `1e-16` is nonzero -- `nalgebra` solves it
+        // happily -- and four orders inside the tolerance, so this does not.
+        let near_singular =
+            CoefficientMatrix::from_diagonal(&ForceVector::from_row_slice(&[1., 1e-16]));
+        assert!(super::is_singular(&near_singular));
+
+        // And that it is not simply refusing everything: `1e-6` is well-conditioned
+        // by this test and must go through.
+        let healthy = CoefficientMatrix::from_diagonal(&ForceVector::from_row_slice(&[1., 1e-6]));
+        assert!(!super::is_singular(&healthy));
+
+        // Wired into the solve, not merely defined -- and at a perturbation that
+        // only the *relative* test catches. Two rows `3e-7` apart give the gram a
+        // second pivot of `9.0e-14`: nonzero, so `nalgebra` solves it and returns
+        // multipliers of order `1e13`, and four orders inside the tolerance, so
+        // this skips. Exactly duplicated rows would not discriminate, since that
+        // pivot comes out bit-exactly zero and `nalgebra` catches it too.
+        let mass_matrix = CoefficientMatrix::identity(3, 3);
+        let near_collinear = vec![vec![1., 0., 0.], vec![1., 3e-7, 0.]];
+        assert!(
+            super::solve_metric_correction(&mass_matrix, &near_collinear, &[1., -1.]).is_none()
+        );
+
+        let independent = vec![vec![1., 0., 0.], vec![0., 1., 0.]];
+        assert!(super::solve_metric_correction(&mass_matrix, &independent, &[1., -1.]).is_some());
+    }
+
+    #[test]
+    fn test_stabilization_drives_the_violation_to_zero() {
+        // The counterpart to `test_constraint_drift_is_conserved`, and the reason
+        // that one now says `stabilize: false`.
+        //
+        // The fixture starts with velocities, so `Ċ₀` is non-zero and the
+        // unstabilized violation grows *linearly* rather than by integration
+        // error -- which is the index-1 property that test pins, and a far larger
+        // signal than truncation drift. That makes this a strong contrast rather
+        // than a subtle one, which is the right shape for a first test of a path
+        // nothing else in `cargo test` reaches.
+        //
+        // The direction is what this pins, and a trajectory comparison against
+        // `physm-js` cannot: two implementations agreeing says nothing about
+        // whether either of them moves `C` toward zero.
+        let scene_frames = get_branched_frames();
+        let frames = super::sort_frames(&scene_frames);
+        let index_path_map = super::get_index_path_map(&frames);
+
+        let makers: [fn() -> ConstraintBox; 2] = [distance_constraint, coincidence_constraint];
+        for make in makers.iter() {
+            let constraint = make();
+            let indices =
+                super::get_constraint_frame_indices(&frames, std::slice::from_ref(&constraint))[0];
+            let worst_value = |states: &[State]| -> f64 {
+                let config = super::get_config_kinematics(&frames, &index_path_map, states);
+                let ctx = make_ctx(&index_path_map, states, indices, None, &config);
+                constraint
+                    .value(&ctx)
+                    .iter()
+                    .map(|entry| entry.abs())
+                    .fold(0., f64::max)
+            };
+
+            let run = |stabilize: bool| -> f64 {
+                let mut states = get_branched_states(0.4);
+                let scene = get_branched_frames()
+                    .into_iter()
+                    .fold(Scene::new(), |scene, frame| scene.add_frame(frame))
+                    .add_constraint(make());
+                let solver = Solver {
+                    stabilize,
+                    ..Solver::new(scene)
+                };
+                let delta_time = 1. / 400.;
+                for step in 0..1200 {
+                    // A square wave on the cart, so the rig is driven rather than
+                    // settling: idling is easy mode, and a drift measured there is
+                    // one any stabilizer and no stabilizer both pass.
+                    let mut external_forces = vec![0.; frames.len()];
+                    let phase = (step as f64) * delta_time * 0.35 * 2. * PI;
+                    external_forces[super::get_id_index_map(&frames)[&"cart".to_string()]] =
+                        if phase.sin() >= 0. { 60. } else { -60. };
+                    solver.tick_mut(&mut states, &external_forces, delta_time);
+                }
+                worst_value(&states)
+            };
+
+            let plain = run(false);
+            let stabilized = run(true);
+
+            // That the drive actually put the rig off the manifold, so the bound
+            // below is about the correction rather than about nothing happening.
+            assert!(
+                plain > 1.,
+                "unstabilized violation was {:e}, too small for this to test anything",
+                plain
+            );
+            // Measured: 4.38 unstabilized against 1.6e-15 stabilized for
+            // `DistanceConstraint`, and 6.33 against 3.3e-16 for
+            // `CoincidenceConstraint`.
+            assert!(
+                stabilized < 1e-12,
+                "stabilized violation was {:e}, against {:e} unstabilized",
+                stabilized,
+                plain
+            );
         }
     }
 

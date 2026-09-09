@@ -54,7 +54,8 @@ export default class Solver {
    *
    * Turn it off to observe that conservation, which is what distinguishes a
    * drift caused by inconsistent initial velocities from one caused by
-   * integration error. `Scene.getStabilizedState` does the work.
+   * integration error. Each solver runs its own projection: `Scene.getStabilizedState`
+   * for `JsSolver`, `stabilize_mut` inside the wasm tick loop for `RsSolver`.
    */
   readonly stabilize: boolean;
 
