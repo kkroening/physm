@@ -9,7 +9,7 @@ foreclose it.**
 
 ## The hybrid already exists
 
-`<Coincidence frame1="leftTip" frame2="rightTip" />` is a document node that
+`<Coincidence frame1="left-tip" frame2="right-tip" />` is a document node that
 names two frames and is a child of neither. It is a **flat edge in a
 hierarchical document**, and it is already there, already emitted, already
 solved. The constraint machinery this repo just finished building is exactly the

@@ -2,44 +2,77 @@
 
 <sub>[← Prev: 9 · The constraint-first horizon](./09-horizon.md) · [↑ Index](../0014.md) · [Next: 11 · Risks →](./11-risks.md)</sub>
 
-## The prerequisites are already filed
+## What the tracker already wants, and what this adds to it
 
 Before any editor pane exists, the binding has to hand over an element tree
-rather than a mount. Three open issues, none of which was raised with an editor
-in mind:
+rather than a mount. Three open issues bear on that, and they do **not** bear on
+it equally — the honest accounting matters, because "three fixes already wanted"
+is a much cheaper-sounding claim than the truth:
 
-| Issue                                            | What it gives the editor                                                                                               |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| [0006](../0006.md) — assemble without a renderer | The document model itself, and a `Scene` the editor can build while showing the document in its own React tree         |
-| [0005](../0005.md) — siblings in tree order      | Correct paint order and correct `sortedFrames`; an editor that cannot express "move this before that" is not an editor |
-| [0011](../0011.md) — name a frame from outside   | Named references in place of `ref` handles, without which constraints cannot be authored or emitted                    |
+| Issue | What it gives the editor | Whose scope |
+| --- | --- | --- |
+| [0005](../0005.md) — siblings in tree order | Correct paint order and `sortedFrames`; an editor that cannot express "move this before that" is not an editor | **Shared.** Its stated endpoint is a custom reconciler, and reading the element tree gets sibling order either way |
+| [0006](../0006.md) — assemble without a renderer | The document model itself | **Shared, but only under one resolution.** Its own proposal is `buildScene` over a *test renderer*, which mounts — satisfying 0006 while giving the editor nothing |
+| [0011](../0011.md) — name a frame from outside | Named ids in place of `ref` handles, without which constraints cannot be authored or emitted | **The editor's, mostly.** 0011's first option is "written ids are correct at the boundary; add a sentence, not code", and for hand-written code that is genuinely fine |
 
-**Doing these three is most of the risk of the whole project**, and they are
-worth doing whether or not the editor follows: 0006 is the one that restores the
-"no renderer needed" property the JSX binding cost, and 0005 is a live
-correctness bug.
+**On 0006 there is an argument that does not depend on the editor**, and it is
+the one worth making: a test-renderer resolution still mounts, and mounting is
+what loses sibling order — so it would close 0006 while leaving 0005 unfixed by
+construction. The tree walk closes both. That is a better reason to prefer it
+than "the editor needs it".
+
+**On 0011 there is no such argument.** `<Anchor ref={tip}>` works and reads well
+in hand-written code; it is the *editor* that cannot serialize a `useRef`. So
+this is the editor arguing for a particular resolution of an open question —
+a normal thing for an RFC to do, and not the same as inheriting finished work.
+
+⚠️ **So the earlier framing of "three fixes the tracker already wanted" was
+overstated by about one and a half of them.** What survives is smaller and still
+worth something: **0005 and 0006 are worth doing on their own merits, and the
+tree walk is the one route that closes both.**
 
 ## An order that produces something usable early
 
 Each step should leave something you would actually run.
 
+**0 · De-ref the demo.** `CartAndRope` calls `useRef`, so a tree walk cannot
+evaluate it — it throws
+([page 2](./02-document.md#what-expanded-costs)). Replacing those refs with
+declared ids is a prerequisite of step 1 rather than a consequence of it, and it
+is the naming work [0011](../0011.md) covers.
+
 **1 · Read the tree instead of mounting it.** `buildScene(element)` — walk the
 element tree, evaluate composites, produce a `Scene`. Closes 0006 and 0005. Test
-it against `CartAndRope` and require an identical `Scene` to the mounted route,
-which is a strong differential oracle available for free.
+it against the de-ref'd `CartAndRope` and require an identical `Scene` to the
+mounted route: a strong differential oracle, though not a free one — step 0 is
+what it costs.
+
+⚠️ **`buildScene(element)` is 0006's name for something else.** 0006 proposes it
+over a test renderer or `react-dom/server` — which mounts, and so tolerates
+hooks and keeps the ordering problem. Here it is a plain tree walk, which is what
+buys the document model and is also the one route a hook can break. Same
+signature, different thing, and the difference is exactly step 0.
 
 **2 · Metadata, on the core vocabulary only.** `defineComponent` with the prop
-types from [page 5](./05-metadata.md), applied to `TrackFrame`,
-`RotationalFrame`, `Weight`, `Line`, `Circle`, `Box`, `Anchor`. Nine components,
-no composites. Nothing visible yet, and the types must be derived from the schema
-from the first day — retrofitting that later means touching every declaration.
+types from [page 5](./05-metadata.md), applied to all nine components
+`react/index.ts` exports: `TrackFrame`, `RotationalFrame`, `Weight`, `Line`,
+`Circle`, `Box`, `Anchor`, **`Coincidence` and `Distance`**. No composites.
+Nothing visible yet, and the types must be derived from the schema from the first
+day — retrofitting that later means touching every declaration.
+
+⚠️ **The last two are the step's real content.** A constraint's ends are
+`anchorRef` props — the one kind on
+[page 5's table](./05-metadata.md#what-the-prop-types-have-to-cover) that reaches
+outside the node being edited, needs the name-to-node index, and
+[page 11](./11-risks.md) counts as a second data structure. Seven components is a
+morning; nine is where referential integrity starts.
 
 **3 · Codegen, headless.** `emit(document) → string`, plus a test that emits a
 document, compiles it, evaluates it, and compares the resulting `Scene` to the
 original. **That test is the spine of the project**: it is the round-trip
 property stated as an assertion, and it can exist before any UI does.
 
-**4 · Tree view and properties, read-only.** Load `<CartAndRope />`, show the
+**4 · Tree view and properties, read-only.** Load the de-ref'd `CartAndRope`, show the
 authored tree with expansion, show props. No editing, one tab, no focus. This is
 the first step that looks like the thing, and it will teach more about the
 expansion presentation than any amount of further design.
@@ -108,8 +141,9 @@ Extraction is what turns primitives into structure.
 Worth writing down in advance, while it is cheap to be honest:
 
 - **If step 1 turns out not to reproduce the mounted `Scene`**, the element-tree
-  premise is wrong and everything above it is unsupported. That test is first for
-  exactly this reason.
+  premise is wrong and everything above it is unsupported. That test is nearly
+  first for exactly this reason — step 0 sits in front of it, and step 0 is small
+  and independently wanted.
 - **If step 3's round-trip test cannot be made to pass** on the demo rig, the
   emitted source is not equivalent to the document, and the editor's one promise
   is broken.

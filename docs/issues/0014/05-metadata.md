@@ -86,8 +86,37 @@ stated twice, so nothing can drift. The technique is the ordinary
 schema-to-type inference that validation libraries use, and it needs no build
 step.
 
-`index` simply is not in `props` — it is an implementation detail of `render`'s
-recursion, and the editor never learns it exists.
+`index` simply is not in `props`. But that raises a question the schema has to
+answer rather than dodge, because `render`'s parameter type is inferred from
+`props`: **how does a declared component recurse, if its accumulator cannot be a
+prop?**
+
+**Through a plain component.** `render` delegates to a private `RopeLink` with no
+`defineComponent` around it, which takes `index` and `segmentCount` as ordinary
+props and nests itself:
+
+```tsx
+function RopeLink({ index, segmentCount, children }: RopeLinkProps): ReactNode {
+  if (index >= segmentCount) return children;
+  return (
+    <RotationalFrame …>
+      <RopeLink index={index + 1} segmentCount={segmentCount}>{children}</RopeLink>
+    </RotationalFrame>
+  );
+}
+```
+
+That needs no new mechanism: it is exactly the *plain component* case below —
+visible when expanded, props shown read-only, never offered in the library. The
+accumulator rides on something the editor already knows not to let anyone edit.
+
+⚠️ **The naive fix does not work, and it is worth seeing why.** Passing `index`
+through `RopeChain` itself would put it in the *element's* props — and
+[page 2](./02-document.md#jsx-is-a-data-literal-not-a-call)'s premise is that the
+editor reads props verbatim off the element. So the editor would meet `index` on
+the first expansion, which is the spinner this whole section exists to prevent.
+Leaving it out of the schema is not enough; it has to leave the declared
+component's props entirely.
 
 ## What the prop types have to cover
 
@@ -126,11 +155,14 @@ appear in a document**: it is not data, it does not survive serialization, and
 [page 2](./02-document.md#the-obstacle-the-current-binding-cannot-use-it) has
 already given up mounting.
 
-The editor needs the declarative form:
+The editor needs the declarative form — spelled `id`, which is what the demo
+already uses for a frame it names (`<TrackFrame id={CART_FRAME_ID}>`) and what
+[page 6](./06-codegen.md#two-kinds-of-name-and-they-are-not-the-same-kind)
+enumerates:
 
 ```tsx
-<Anchor name="rightTip" />
-<Coincidence frame1="leftTip" frame2="rightTip" />
+<Anchor id="right-tip" />
+<Coincidence frame1="left-tip" frame2="right-tip" />
 ```
 
 which is the same problem [0011](../0011.md) raises from the other side — the
@@ -139,7 +171,7 @@ the rig "has to break its own story exactly once". One naming mechanism answers
 both.
 
 **Names introduce a referential-integrity job the tree does not have.** Deleting
-`<Anchor name="rightTip" />` leaves `<Coincidence>` pointing at nothing. The
+`<Anchor id="right-tip" />` leaves `<Coincidence>` pointing at nothing. The
 editor should refuse the delete, or delete both, or leave the constraint visibly
 broken — but it must *notice*, which means the document needs an index from name
 to node and codegen needs to keep names stable. This is the first place the model
@@ -168,10 +200,16 @@ A component with no metadata is not an error. It:
 - **can** be selected, and its props shown read-only;
 - **cannot** appear in the library, and cannot have its props edited.
 
-That matters for adoption: `CartAndRope.tsx` keeps compiling and keeps running
+That matters for adoption: an existing scene module keeps compiling and running
 unchanged, and gains editor support one component at a time. A migration that
 requires rewriting everything before anything works is a migration that does not
 happen.
+
+⚠️ **"Unchanged" has one exception, and the demo hits it.** A component that
+calls a hook cannot be expanded at all — it throws
+([page 2](./02-document.md#what-expanded-costs)) — so `CartAndRope` needs its two
+`useRef`s replaced before the editor can read it. Metadata is optional; purity is
+not.
 
 ---
 <sub>[← Prev: 4 · The tree view](./04-tree.md) · [↑ Index](../0014.md) · [Next: 6 · Code generation →](./06-codegen.md)</sub>

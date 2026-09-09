@@ -71,11 +71,11 @@ So the split is not "core versus composite" and never was. It is **did this
 module define it, or did it import it** — and extraction is how something crosses
 from the second column to the first.
 
-That resolves the question [page 11](./11-risks.md) used to end on. A scene the
-editor generated is editable all the way down, because every composite in it is
-one the editor defined. `CartAndRope.tsx` as written by hand is not, because its
-components are imported functions — but the same rig laid out in the editor
-would be.
+That is what settles the altitude question [page 11](./11-risks.md) raises. A
+scene the editor generated is editable all the way down, because every composite
+in it is one the editor defined. `CartAndRope.tsx` as written by hand is not,
+because its components are imported functions — but the same rig laid out in the
+editor would be.
 
 ## Expansion is for looking; focus is for editing
 
@@ -88,8 +88,9 @@ tractable:
   in a tab, rooted at that component. Available only on editor-owned components,
   because only they have a body to open.
 
-The old design had only expansion, and so had to treat every composite as a black
-box. Both gestures existing is what lets the editor serve
+Expansion alone would force every composite to be a black box, and would make
+"which altitude is this editor for" a question with no good answer. Both gestures
+existing is what lets the editor serve
 [the high-level tree and the fully materialized one at once](./01-overview.md):
 you look at whichever level you want, and you edit at the level that owns the
 thing you want to change.

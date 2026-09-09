@@ -6,13 +6,21 @@ Ordered by how much they would cost, not how likely they are.
 
 ## The ones that would change the design
 
-**Purity is a rule with no enforcement.** [Page 2](./02-document.md#what-expanded-costs)
-requires components to be pure functions of their props, and nothing stops one
-from using a hook. The failure is quiet: the editor shows one tree, the
-simulation runs another, and they disagree in a way that looks like a physics
-bug. *Mitigation:* expand twice in development and compare; a lint rule banning
-hooks in anything with `defineComponent`. Neither is free, and the second is the
-kind of rule that gets disabled.
+**Purity is a rule with no enforcement, and the only rig in the repo breaks it
+today.** [Page 2](./02-document.md#what-expanded-costs) requires components to be
+pure functions of their props; `CartAndRope` calls `useRef`, which throws under a
+tree walk. That instance is cheap to fix — it is step 0 on
+[page 10](./10-staging.md#an-order-that-produces-something-usable-early) — but it
+is evidence about the rule rather than an exception to it: the first scene
+somebody wrote reached for a hook, because a hook was the natural way to express
+what it needed.
+
+The throwing case is the kind one. The quiet case is a component that reads
+`Date.now` or a module-level counter: the editor shows one tree, the simulation
+runs another, and they disagree in a way that looks like a physics bug.
+*Mitigation:* expand twice in development and compare; a lint rule banning hooks
+in anything with `defineComponent`. Neither is free, and the second is the kind
+of rule that gets disabled.
 
 **The emitted source may be unmaintainable enough that nobody uses it.**
 [Page 6](./06-codegen.md#what-is-lost-precisely) is honest that `SWEEP`,
@@ -84,17 +92,19 @@ judgment:
 ## The overall read
 
 **The design is sound and the risk is concentrated where it can be tested
-first.** Both premises the project rests on — that the element tree reproduces
+early.** Both premises the project rests on — that the element tree reproduces
 the mounted scene, and that emitted source rebuilds to the same scene — are
-falsifiable in the first two steps, before a single pane exists.
+falsifiable in the first three steps, before a single pane exists. Not the first
+two: [step 0](./10-staging.md#an-order-that-produces-something-usable-early)
+sits in front of them, because the demo calls a hook and a tree walk cannot
+evaluate it.
 
-**The altitude question is settled, and was worth asking.** An earlier draft
-ended here on *which kind of scene is this for* — the composite-heavy rig with
-nothing to click, or the flat pile of primitives. The answer is **both**, and the
-mechanism is [page 3](./03-focus.md): expansion for looking, focus for editing,
-extraction for moving a rig from the second kind toward the first. That is a
-better resolution than picking a side, and the design got there from the question
-rather than the other way round.
+**The altitude question has an answer, and it was worth asking.** *Which kind of
+scene is this for* — the composite-heavy rig with nothing to click, or the flat
+pile of primitives? **Both**, and the mechanism is [page 3](./03-focus.md):
+expansion for looking, focus for editing, extraction for moving a rig from the
+second kind toward the first. Picking a side would have been the easier design
+and a worse one.
 
 **What remains genuinely uncertain is the product**: whether an editor whose
 output you paste once is worth building. The strongest evidence for is that a rig

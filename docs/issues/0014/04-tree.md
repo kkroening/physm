@@ -11,28 +11,40 @@ root and its body below it. On the scene tab that is the whole scene; on a
 
 Everything below describes one such tree.
 
-## Two axes, not one
+## What decides whether a row is editable
 
-It is tempting to sort nodes into "components" and "primitives". The useful split
-is two independent axes:
+Not the kind of node. A `RotationalFrame` is editable when you dragged it in and
+read-only when `RopeSegment` produced it — so **where it came from** is the axis,
+and it has two parts:
 
-|              | **Core** (`TrackFrame`, `Weight`, `Line`…) | **Composite** (`RopeChain`, `Pendulum`…) |
-| ------------ | ------------------------------------------ | ---------------------------------------- |
-| **Authored** | editable; children editable                | editable; **expansion** read-only        |
-| **Expanded** | read-only                                  | read-only, expandable further            |
+- **In this tree, is it authored or produced?** An authored node is one the
+  focused component's body contains. A produced one appeared by expanding a
+  composite, and there is nowhere to write an edit to it.
+- **For a composite, did this module define it or import it?**
+  ([Page 3](./03-focus.md#two-ownership-classes-and-only-one-of-them-is-new).)
+  An editor-owned definition can be **focused** and edited in its own tab; an
+  imported one cannot, because there is no body to open.
 
-A `RotationalFrame` is editable when you dragged it in and read-only when
-`RopeSegment` produced it. Nothing about the *kind* of node decides; only where
-it came from does.
+Putting those together:
 
-## What `+` does
+| | Authored here | Produced by expansion |
+|---|---|---|
+| **Core node** | editable in place | read-only |
+| **Editor-owned composite** | props editable here; **body editable via focus** | read-only |
+| **Imported composite** | props editable here; body never editable | read-only |
+
+⚠️ **The middle row is the one to read carefully.** "A composite's body is not
+editable" holds for imported components and fails for the ones the editor
+defined — which, after any use of *Extract to component*, is most of them.
+
+## What the disclosure triangle does
 
 One affordance, two meanings, and the ownership colouring is what tells them
 apart — no mode switch, no second control:
 
-- **On a node with authored children**, `+` reveals those children. Editable.
+- **On a node with authored children**, `▸` reveals those children. Editable.
   This is the common case and the one that should feel like a file tree.
-- **On an authored composite**, `+` additionally offers a distinct
+- **On an authored composite**, `▸` additionally offers a distinct
   `⟨expansion⟩` row. Under it is what the component produced: read-only, greyed,
   and expandable further. **Double-click instead** to open its definition in a
   tab and edit it — expansion and focus are the two different questions
@@ -42,7 +54,7 @@ apart — no mode switch, no second control:
 So `RopeChain` in the demo shows:
 
 ```
-▾ RopeChain            anchor=[-5.4, 1]
+▾ RopeChain            anchor=[-5.4, -1]
   ▸ ⟨expansion⟩                              ← read-only, 5 frames deep
   ▾ Pendulum                                 ← authored, editable
 ```
@@ -59,7 +71,7 @@ recursion has nowhere to cause trouble:
 
 - It happens entirely inside the expansion, which is read-only.
 - It terminates, because `index >= SEGMENT_COUNT` returns `children`.
-- The editor sees exactly one node, `RopeChain`, with one prop.
+- The editor sees exactly one node, `RopeChain`, with its declared props.
 
 The tree view expands the recursion lazily and it looks like any other five-deep
 chain. **The one thing the expansion needs is a depth cap** — not because
@@ -99,7 +111,7 @@ automatically on any node the user has reordered.
 **Labels are a display question, not an identity one.** A row reads
 `RopeChain`, and where siblings would be indistinguishable the editor appends
 the disambiguator it already has — the key, or the index. `RopeChain #0` and
-`RopeChain #1` are honest; `RopeChain anchor=[-5.4, 1]` looks more informative
+`RopeChain #1` are honest; `RopeChain anchor=[-5.4, -1]` looks more informative
 and silently claims the prop means something it does not.
 
 A prop or two in a dimmed suffix is still useful *as a summary*, and the

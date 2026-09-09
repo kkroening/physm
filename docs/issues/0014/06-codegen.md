@@ -10,7 +10,7 @@ indentation counter, and it is genuinely as small as it sounds:
 
 ```tsx
 <TrackFrame id="cart" resistance={5}>
-  <RopeChain anchor={[-5.4, 1]}>
+  <RopeChain anchor={[-5.4, -1]}>
     <Pendulum />
   </RopeChain>
 </TrackFrame>
@@ -56,10 +56,11 @@ reattaches to the wrong frame.
 
 ```tsx
 import { Circle, Line, RotationalFrame, TrackFrame, Weight } from './react';
+import type { ReactElement } from 'react';
 
 function Pendulum(): ReactElement {
   return (
-    <RotationalFrame position={[0, 0]} initialState={[-Math.PI / 2, 0]}>
+    <RotationalFrame position={[0, 0]} initialState={[-1.5707963267948966, 0]}>
       <Line endPos={[8, 0]} lineWidth={0.22} />
       <Circle position={[8, 0]} radius={0.65} />
       <Weight mass={15} position={[8, 0]} />
@@ -83,11 +84,22 @@ sort of "who instantiates whom", which terminates because
 Only the root is exported; the rest are file-local, because nothing outside the
 file refers to them.
 
-Imports are derived from the component types actually used, split by where they
-came from: the core vocabulary from `./react`, prefabs from their own modules.
-The document holds **function identities**, so the emitter knows exactly which
-module each came from with no name resolution to guess at — and an editor-created
+⚠️ **That is what the emitter actually produces today**, decimals and all:
+`-1.5707963267948966` is what `-Math.PI / 2` evaluated to, and the *What is lost*
+table below says so. The round-number mitigation would print the nicer form; it
+is not built, and showing its output here would have made the export look better
+than the design admits.
+
+Imports are derived from what the file actually uses, split by where it came
+from: the core vocabulary from `./react`, prefabs from their own modules, and
+**type imports** for the annotations the emitter itself writes. The document
+holds **function identities**, so the emitter knows exactly which module each
+component came from with no name resolution to guess at — and an editor-created
 component needs no import at all, because it is defined a few lines up.
+
+The type import matters more than it looks: `physm-js` runs `tsc --noEmit` in
+CI, so a generated file missing one does not merely look untidy, it fails to
+build.
 
 ## What is lost, precisely
 

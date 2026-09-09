@@ -10,7 +10,7 @@ invocation:
 ```tsx
 const document = (
   <TrackFrame id="cart">
-    <RopeChain anchor={[-5.4, 1]} />
+    <RopeChain anchor={[-5.4, -1]} />
   </TrackFrame>
 );
 ```
@@ -19,7 +19,7 @@ Evaluating that calls **neither** `TrackFrame` **nor** `RopeChain`. It builds tw
 plain objects:
 
 ```js
-{ type: TrackFrame, props: { id: 'cart', children: { type: RopeChain, props: { anchor: [-5.4, 1] } } } }
+{ type: TrackFrame, props: { id: 'cart', children: { type: RopeChain, props: { anchor: [-5.4, -1] } } } }
 ```
 
 `type` is the component function itself — identity, so it can be looked up in a
@@ -116,11 +116,27 @@ Expansion means calling component functions, which means components must be
 **pure functions of their props**: no hooks, no module-level mutable state, no
 `Math.random`, no `Date.now`. Given the same props, the same tree.
 
-This is not an onerous rule — every component in `CartAndRope.tsx` already
-satisfies it — but it is a rule, and a component that breaks it produces an
-editor view that disagrees with what the simulation does. Worth enforcing
-loudly rather than documenting quietly: a development-mode expansion that runs
-twice and compares would catch the whole class.
+⚠️ **The demo does not satisfy it**, and it is worth being precise about how it
+fails. `CartAndRope` calls `useRef` twice, to hold the two rope tips its
+`<Coincidence>` names. Under React 19 a hook resolves off the current dispatcher,
+which is `null` outside a render, so a tree walk calling `CartAndRope()` does not
+get a degraded tree — it **throws**:
+
+```
+TypeError: Cannot read properties of null (reading 'useRef')
+```
+
+That is not an aside. It is the same `ref`-versus-name problem
+[page 5](./05-metadata.md#references-have-to-become-names) describes, arriving as
+a hard blocker rather than an ergonomic one, and
+[page 10](./10-staging.md#what-the-tracker-already-wants-and-what-this-adds-to-it) has to sequence it
+rather than assume it away.
+
+Everything else in the file is pure, so the rule is not onerous — but a
+component that breaks it produces an editor view that disagrees with the
+simulation, or no view at all. Worth enforcing loudly rather than documenting
+quietly: a development-mode expansion that runs twice and compares catches the
+silent half, and the throwing half reports itself.
 
 ## Where the two trees meet
 
