@@ -53,6 +53,13 @@ export default class Solver {
    * caused by integration error. Stabilizing by default would erase the
    * distinction and leave no way to measure whether the stabilizer works.
    *
+   * ⚠️ **The default is a decision deferred, not one made** -- see
+   * `docs/issues/0013.md`. Nothing currently depends on it: every test passes
+   * this flag explicitly in both directions, and the demo passes `true`. The
+   * argument against it is that a forgotten `stabilize` fails quietly -- the rig
+   * looks right for a minute and then comes apart, which is the bug the
+   * stabilizer was added to remove.
+   *
    * See `Scene.getStabilizedState`.
    */
   readonly stabilize: boolean;
