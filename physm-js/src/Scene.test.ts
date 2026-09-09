@@ -7,6 +7,7 @@ import type { FrameId, StateMap } from './Frame';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint } from './Constraint';
+import { DimensionError } from './solveLinearSystem';
 import { DEFAULT_GRAVITY } from './Scene';
 
 describe('Scene queries', () => {
@@ -266,17 +267,96 @@ describe('Scene.getStabilizedState', () => {
     expect(scene.getStabilizedState(stateMap)).toBe(stateMap);
   });
 
-  test('a rank-deficient Jacobian skips rather than throws', () => {
-    // Two constraints saying the same thing about the same pair of points, so
-    // `J` has duplicate rows and `Jg⁻¹Jᵀ` is singular. That is the *shape* of
-    // the case this policy exists for: a chain pulled taut is collinear, which
-    // is exactly when the gram matrix loses rank -- and a hard-driven rope is
-    // exactly when a chain goes taut. Throwing there would turn the stabilizer
-    // into a crash in the one configuration it was added for.
-    //
-    // Duplicated deliberately rather than by posing a rig at a singularity,
-    // because a pose has to be hit to within floating-point tolerance and a
-    // test that has to hit it is a test that stops hitting it.
+  /**
+   * Two poles off a cart, tips meeting, joined by `count` copies of one
+   * coincidence constraint.
+   *
+   * Duplicated deliberately rather than posed at a singularity, because a pose
+   * has to be hit to within floating-point tolerance and a test that has to hit
+   * it is a test that stops hitting it. `elbow` adds a coordinate without
+   * adding a row, which is what separates a rank-deficient scene from an
+   * over-determined one -- and those two now want opposite answers.
+   */
+  function getDuplicatedScene({ elbow = false } = {}): Scene {
+    const scene = new Scene({
+      frames: [
+        new TrackFrame({
+          id: 'cart',
+          weights: [new Weight(5)],
+          frames: [
+            new RotationalFrame({
+              id: 'left',
+              initialState: [0.6, 0],
+              weights: [new Weight(4, { position: [10, 0] })],
+              frames: elbow
+                ? [
+                    new RotationalFrame({
+                      id: 'elbow',
+                      position: [10, 0],
+                      initialState: [0, 0],
+                      weights: [new Weight(3, { position: [10, 0] })],
+                    }),
+                  ]
+                : [],
+            }),
+            new RotationalFrame({
+              id: 'right',
+              position: [2 * 10 * Math.cos(0.6), 0],
+              initialState: [Math.PI - 0.6, 0],
+              weights: [new Weight(4, { position: [10, 0] })],
+            }),
+          ],
+        }),
+      ],
+    });
+    for (let copy = 0; copy < 2; copy++) {
+      scene.addConstraint(
+        // `position2` omitted, so `addConstraint` solves for wherever `right`
+        // has to be touched for the constraint to hold in the authored pose.
+        // Both copies get the same answer, which is the point: identical rows,
+        // singular gram, and no geometry to keep in sync by hand.
+        new CoincidenceConstraint({
+          frame1: elbow ? 'elbow' : 'left',
+          frame2: 'right',
+          position1: [10, 0],
+        }),
+      );
+    }
+
+    return scene;
+  }
+
+  /** The same state, nudged off the manifold so a correction is attempted. */
+  function nudge(scene: Scene): StateMap {
+    return new Map(
+      [...scene.getInitialStateMap()].map(
+        ([frameId, [q, qd]]): [FrameId, [number, number]] => [
+          frameId,
+          [q + 0.05, qd],
+        ],
+      ),
+    );
+  }
+
+  function violation(scene: Scene, stateMap: StateMap): number {
+    const ctx = scene.getConfigKinematics(stateMap);
+
+    return Math.max(
+      ...scene.constraints.flatMap((constraint) =>
+        constraint.value(ctx).map(Math.abs),
+      ),
+    );
+  }
+
+  /**
+   * A three-coordinate rig with one coincidence constraint, posed off the
+   * manifold and moving in a way the constraint does not admit.
+   *
+   * Both violations at once, and deliberately: the position half and the
+   * velocity half correct different quantities, and a rig that violates only
+   * one of them cannot tell which half did the work.
+   */
+  function getViolatedScene(): { scene: Scene; stateMap: StateMap } {
     const scene = new Scene({
       frames: [
         new TrackFrame({
@@ -290,46 +370,161 @@ describe('Scene.getStabilizedState', () => {
             }),
             new RotationalFrame({
               id: 'right',
-              initialState: [Math.PI - 0.6, 0],
-              // The pivots sit exactly `2L cos θ` apart, so the two tips meet
-              // and the constraint holds at `t = 0` without pre-straining.
               position: [2 * 10 * Math.cos(0.6), 0],
-              weights: [new Weight(4, { position: [10, 0] })],
+              initialState: [Math.PI - 0.6, 0],
+              weights: [new Weight(7, { position: [10, 0] })],
             }),
           ],
         }),
       ],
-    });
-    for (let copy = 0; copy < 2; copy++) {
-      scene.addConstraint(
-        new CoincidenceConstraint({
-          frame1: 'left',
-          frame2: 'right',
-          position1: [10, 0],
-          position2: [10, 0],
-        }),
-      );
-    }
-    const stateMap = new Map(
-      [...scene.getInitialStateMap()].map(
-        ([frameId, [q, qd]]): [FrameId, [number, number]] => [
-          frameId,
-          [q + 0.05, qd],
-        ],
+    }).addConstraint(
+      new CoincidenceConstraint({
+        frame1: 'left',
+        frame2: 'right',
+        position1: [10, 0],
+      }),
+    );
+
+    return {
+      scene,
+      stateMap: new Map([
+        ['cart', [0, 0]],
+        ['left', [0.6 + 0.08, 0.5]],
+        ['right', [Math.PI - 0.6, -0.2]],
+      ]),
+    };
+  }
+
+  /** `max|C|`, the quantity the position half drives to zero. */
+  function positionResidual(scene: Scene, stateMap: StateMap): number {
+    const ctx = scene.getConfigKinematics(stateMap);
+
+    return Math.max(
+      ...scene.constraints.flatMap((constraint) =>
+        constraint.value(ctx).map(Math.abs),
       ),
     );
+  }
+
+  /** `max|J q̇|`, the quantity the velocity half drives to zero. */
+  function velocityResidual(scene: Scene, stateMap: StateMap): number {
+    const ctx = scene.getConfigKinematics(stateMap);
+    const qd = scene.sortedFrames.map(
+      (frame) => stateMap.get(frame.id)?.[1] ?? 0,
+    );
+
+    return Math.max(
+      ...scene.constraints
+        .flatMap((constraint) => constraint.jacobianRows(ctx))
+        .map((row) =>
+          Math.abs(
+            row.reduce((total, entry, index) => total + entry * qd[index]!, 0),
+          ),
+        ),
+    );
+  }
+
+  test('one call corrects the position and the velocity', () => {
+    // Both residuals in one test, because the solvers only ever see the fixed
+    // point of thousands of calls -- where the position half alone converges
+    // to within three orders of the noise floor the acceptance bounds sit at,
+    // and a missing velocity half is invisible. A single call is where the two
+    // halves are still distinguishable.
+    const { scene, stateMap } = getViolatedScene();
+
+    // That the rig starts violated in both senses, so neither assertion below
+    // can pass by having nothing to do.
+    expect(positionResidual(scene, stateMap)).toBeGreaterThan(0.1);
+    expect(velocityResidual(scene, stateMap)).toBeGreaterThan(0.1);
+
+    const stabilized = scene.getStabilizedState(stateMap);
+
+    // Measured: `1.9e-10` and `1.3e-15`, from `0.64` and `4.27`.
+    //
+    // The two land in different places, and the gap is the convergence test
+    // rather than a weaker position solve: it stops on the *correction* falling
+    // below `1e-5` of a coordinate, and Newton being quadratic puts `C` at
+    // roughly the square of that. The velocity half has no iteration to stop,
+    // so it goes to the last bit. Nine orders is a long way inside either
+    // bound; what these two pin is that both halves ran.
+    expect(positionResidual(scene, stabilized)).toBeLessThan(1e-8);
+    expect(velocityResidual(scene, stabilized)).toBeLessThan(1e-12);
+  });
+
+  test('maxIterations bounds the Newton iteration', () => {
+    // `C` is nonlinear, so one linearized step lands near the manifold rather
+    // than on it, and the difference is what "this is a Newton step and it
+    // iterates" means. Nothing else pins it: `applyStabilization` runs once per
+    // integration step, so a solver iterating once per tick converges just as
+    // well over 4000 ticks as one iterating four times.
+    //
+    // This is also the only caller `StabilizationOptions` has -- without it,
+    // `tolerance` and `maxIterations` are unreachable surface.
+    const { scene, stateMap } = getViolatedScene();
+
+    const once = scene.getStabilizedState(stateMap, { maxIterations: 1 });
+    const settled = scene.getStabilizedState(stateMap);
+
+    // Measured, from `0.64`: `2.5e-2` after one step, `5.0e-5` after two,
+    // `1.9e-10` after three, and no further -- the error squaring each time,
+    // which is quadratic convergence doing what it says, until the correction
+    // test stops it. Eight orders between one step and the default four.
+    expect(positionResidual(scene, once)).toBeGreaterThan(1e-3);
+    expect(positionResidual(scene, settled)).toBeLessThan(1e-8);
+  });
+
+  test('a rank-deficient Jacobian skips rather than throws', () => {
+    // Two constraints saying the same thing about the same pair of points, so
+    // `J` has duplicate rows and `Jg⁻¹Jᵀ` is singular -- while the row count
+    // itself is fine, four rows against four coordinates. That is the shape of
+    // the case this policy exists for: a chain pulled taut is collinear, which
+    // is exactly when the gram matrix loses rank, and a hard-driven rope is
+    // exactly when a chain goes taut. Throwing there would turn the stabilizer
+    // into a crash in the one configuration it was added for.
+    const scene = getDuplicatedScene({ elbow: true });
+    const stateMap = nudge(scene);
 
     // Nudged off the manifold, so the stabilizer has a correction to attempt
     // and reaches the solve rather than returning early.
-    const ctx = scene.getConfigKinematics(stateMap);
-    expect(
-      Math.max(
-        ...scene.constraints.flatMap((constraint) =>
-          constraint.value(ctx).map(Math.abs),
-        ),
-      ),
-    ).toBeGreaterThan(1e-3);
+    expect(violation(scene, stateMap)).toBeGreaterThan(1e-3);
 
+    // Identity, not equality: only the skip path returns the input object, so
+    // this pins that the throw was caught rather than that the answer was zero.
     expect(scene.getStabilizedState(stateMap)).toBe(stateMap);
+  });
+
+  test('a structural failure propagates rather than becoming a silent no-op', () => {
+    // The failure mode that makes the skip policy dangerous. Skipping is right
+    // for a singular gram and wrong for everything else, and a `catch` with no
+    // filter cannot tell them apart: a `dotRows` length mismatch, an indexed
+    // accessor, a future bug in `jacobianRows` would all be swallowed, leaving
+    // the stabilizer doing nothing and reporting nothing.
+    //
+    // That is worse than a crash, because it looks exactly like the bug the
+    // stabilizer was added to remove -- the rig comes apart on schedule, and
+    // the flag that was supposed to stop it is on.
+    const { scene, stateMap } = getViolatedScene();
+
+    // A mass matrix one row short: the shape a wrongly-sized assembly has.
+    const truncated = scene.getMassMatrix(stateMap);
+    scene.getMassMatrix = () => truncated.slice(1);
+
+    expect(() => scene.getStabilizedState(stateMap)).toThrow(DimensionError);
+  });
+
+  test('an over-determined scene throws rather than skipping', () => {
+    // The same duplication without the elbow: four rows against three
+    // coordinates. That is not a configuration the rig can move out of -- it is
+    // how the scene was authored, and it will be just as broken on every
+    // subsequent step. Skipping quietly would buy nothing and cost the author
+    // the one message that says what they did.
+    const scene = getDuplicatedScene();
+
+    expect(scene.constraints.length * 2).toBeGreaterThan(
+      scene.sortedFrames.length,
+    );
+    expect(() => scene.getStabilizedState(nudge(scene))).toThrow(
+      /over-determined/,
+    );
   });
 });

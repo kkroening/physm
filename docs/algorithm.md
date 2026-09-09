@@ -402,12 +402,16 @@ of intent rather than a shortfall: the frames stay a forest *because* the DAG's 
 better expressed as constraints, and a frame with two parents is authoring sugar that desugars
 into a coincidence constraint between the two candidate poses.
 
-What has not been built is **stabilization**. The formulation is index-1: it holds $`\ddot C`$
-at zero, so $`C(t) = C_0 + \dot C_0 t`$ exactly, and any inconsistency in the initial
-conditions is a gap that never closes — while floating-point error accumulates linearly on top
-of it. Baumgarte feedback, post-step projection and the GGL formulation are all compatible with
-what is there, and [`constraints.md` §7](constraints.md#7-drift-and-how-it-gets-fixed)
-compares them; today a scene has to start consistent and stay short.
+**Stabilization** is now built, in `physm-js` only: `Scene.getStabilizedState` projects the
+state back onto the constraint manifold after each step, behind a `stabilize` flag on `Solver`
+that defaults to off. Unstabilized the formulation is still index-1 — it holds $`\ddot C`$ at
+zero, so $`C(t) = C_0 + \dot C_0 t`$ exactly, and any inconsistency in the initial conditions
+is a gap that never closes while floating-point error accumulates linearly on top of it. That
+is why an *unstabilized* scene has to start consistent and stay short.
+[`constraints.md` §7](constraints.md#7-drift-and-how-it-gets-fixed) records why post-step
+projection was chosen over Baumgarte feedback and the GGL formulation, and what it costs.
+`physm-rs` has no stabilizer of its own; `RsSolver` reaches the JavaScript one by stepping one
+tick at a time.
 
 ### The assembly used to be quadratic in the wrong thing — *resolved*
 

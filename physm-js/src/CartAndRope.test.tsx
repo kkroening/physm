@@ -211,10 +211,12 @@ describe('CartAndRope under drive', () => {
    * Not an arbitrary number and not idling. Left alone, this rig drifts by
    * about 2.5e-7 over thirty seconds, and so does every rig -- steady state is
    * easy mode, and measuring it is how a stabilizer gets declared unnecessary.
-   * Driven, the drift depends sharply on *how* it is driven: a slow shove gives
-   * 4e-2, key-mashing at 2 Hz gives 2e-4, and a square wave near 0.35 Hz -- the
-   * frequency that walks the pendulum round and round, the way a cart-pole is
-   * swung up by hand -- gives four orders more than either.
+   * Driven, the drift depends sharply on *how* it is driven, and 0.35 Hz is
+   * roughly where this rig resonates -- the frequency that walks the pendulum
+   * round and round, the way a cart-pole is swung up by hand. Measured over 25
+   * seconds: 2.25e-1 here, against 2.54e-4 for key-mashing at 2 Hz and 5.20e-5
+   * for a slow shove at 0.05 Hz -- about 900x the fast end and 4300x the slow
+   * one.
    */
   function drive(solver: JsSolver): void {
     for (let step = 0; step < Math.round(10 / DELTA_TIME); step++) {
@@ -227,6 +229,45 @@ describe('CartAndRope under drive', () => {
       );
     }
   }
+
+  test('stabilizing costs the free swing no measurable energy', () => {
+    // Projection's velocity half removes the component of `q̇` along `Jᵀ`, which
+    // is a removal of kinetic energy and a fair thing to be suspicious of: a
+    // stabilizer that held the constraint by quietly damping the rig would pass
+    // every other test here.
+    //
+    // The statistic is the *top* of the pendulum's arc, and which end matters.
+    // `max|q|` looks like the obvious choice and is inert: the rod is released
+    // at `-π/2`, which is straight down, so `max|q|` is its release angle to
+    // the last digit however much energy is removed -- measured, it reads
+    // `1.570782` for the honest projection, for no projection, and for a
+    // mutant bleeding 2% of every velocity every step. The height it swings
+    // *to* is where energy shows.
+    const topOfArc = (stabilize: boolean): number => {
+      const scene = assemble();
+      const solver = new JsSolver(scene, { rungeKutta: true, stabilize });
+      const rod = [...solver.getStateMap().keys()].at(-1)!;
+      let top = -Infinity;
+      for (let step = 0; step < Math.round(20 / DELTA_TIME); step++) {
+        solver.tick(DELTA_TIME, 1, null);
+        top = Math.max(top, solver.getStateMap().get(rod)![0]);
+      }
+
+      return top;
+    };
+
+    const plain = topOfArc(false);
+    const stabilized = topOfArc(true);
+
+    // The rod really swung up from where it was released, so there is an arc to
+    // compare rather than a rig hanging still.
+    expect(plain).toBeGreaterThan(-Math.PI / 2 + 0.5);
+
+    // Measured: `-0.827175643` and `-0.827175642`, agreeing to nine figures.
+    // The 2%/step bleeder reaches `-1.043022240`, which is what makes this
+    // bound something the claim could fail.
+    expect(Math.abs(stabilized - plain)).toBeLessThan(1e-6);
+  });
 
   test('the resonant drive separates the two chains', () => {
     // The visible symptom, and the reason there is a stabilizer at all: after a

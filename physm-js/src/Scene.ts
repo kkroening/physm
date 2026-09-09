@@ -87,6 +87,17 @@ export interface PoseQueryOptions {
   posMatMap?: Map<FrameId, Mat3> | null;
 }
 
+/**
+ * `g⁻¹Jᵀ(Jg⁻¹Jᵀ)⁻¹` could not be formed at this configuration.
+ *
+ * Its own class rather than a bare `Error` so a caller can tell it apart from a
+ * bug. `getStabilizedState` has to skip this one and keep going -- a taut chain
+ * is collinear, and collinear is exactly when the gram matrix loses rank -- and
+ * a `catch` with no filter would swallow a wrongly assembled Jacobian on the
+ * same path, turning the stabilizer into a silent no-op instead of a crash.
+ */
+export class SingularCorrectionError extends Error {}
+
 export interface StabilizationOptions {
   tolerance?: number;
   maxIterations?: number;
@@ -685,7 +696,7 @@ export default class Scene {
         throw error;
       }
 
-      throw new Error(
+      throw new SingularCorrectionError(
         'No initial-velocity correction is determined for this scene. Either ' +
           'the constraint rows are not independent -- two constraints saying ' +
           'the same thing about one pair of frames, or a rig posed at a ' +
@@ -735,7 +746,19 @@ export default class Scene {
    * collinear, which is exactly when `Jg⁻¹Jᵀ` loses rank -- and a hard-driven
    * rope is exactly when that happens. Refusing to step would turn the
    * stabilizer into a crash in the one configuration it was added for, so an
-   * unsolvable step leaves the state alone and the next one tries again.
+   * unsolvable step stops the iteration and the next one tries again from a
+   * pose that has moved off the singularity.
+   *
+   * The invariant that survives that: **the returned state's velocities are
+   * projected at its own pose, unless no correction was applied at all** -- in
+   * which case the input map comes back untouched. A failure part-way through
+   * still re-projects, because `J` moved with the positions that did get
+   * corrected, which is the whole reason the velocity half exists.
+   *
+   * Only a *singular* failure is skipped. An over-determined scene throws up
+   * front, and anything else thrown by the solve propagates: a stabilizer that
+   * silently stops stabilizing is indistinguishable from the bug it was added
+   * to fix.
    */
   getStabilizedState(
     stateMap: StateMap,
@@ -746,6 +769,23 @@ export default class Scene {
   ): StateMap {
     if (!this.constraints.length) {
       return stateMap;
+    }
+
+    // Up front, and by row count rather than by a failed solve. An
+    // over-determined scene also produces a singular gram, so without this it
+    // would arrive at the `catch` below wearing the taut chain's costume --
+    // and get skipped silently, on every step, forever. `_getProjectedVelocities`
+    // makes the same check for the same reason.
+    const rowCount = this.constraints.reduce(
+      (total, constraint) => total + constraint.rowCount,
+      0,
+    );
+    if (rowCount > this.sortedFrames.length) {
+      throw new Error(
+        `Scene is over-determined: ${rowCount} constraint rows against ` +
+          `${this.sortedFrames.length} coordinates. Some of these constraints ` +
+          'cannot hold at the same time.',
+      );
     }
 
     let q = this.sortedFrames.map(
@@ -774,11 +814,26 @@ export default class Scene {
       let correction: number[];
       try {
         correction = this._solveMetricCorrection(stateFrom(q), rows, value);
-      } catch {
-        // Taut, or otherwise rank-deficient. Leave the state where it is and
-        // let the next step try again from a pose that has moved off the
-        // singularity.
-        return iteration === 0 ? stateMap : stateFrom(q);
+      } catch (error) {
+        // Only the singular case is skippable. Anything else thrown in there --
+        // a `dotRows` length mismatch, an indexed accessor, a future bug in
+        // `jacobianRows` -- means the Jacobian was assembled wrong, and
+        // swallowing that would leave the stabilizer doing nothing while
+        // reporting nothing. The rig would come apart exactly as it does
+        // unstabilized, which is the symptom this method exists to remove.
+        if (!(error instanceof SingularMatrixError)) {
+          throw error;
+        }
+
+        // Taut, or otherwise rank-deficient. Nothing has moved yet on the first
+        // iteration, so the input goes back untouched; later, the positions
+        // already corrected fall through to the velocity half, which
+        // re-projects them at the pose they actually reached.
+        if (iteration === 0) {
+          return stateMap;
+        }
+
+        break;
       }
 
       q = q.map((entry, index) => entry - at(correction, index, 'correction'));
@@ -806,7 +861,14 @@ export default class Scene {
     let projected: number[];
     try {
       projected = this._getProjectedVelocities(stateFrom(q), this.constraints);
-    } catch {
+    } catch (error) {
+      // Same filter, one class further out: `_getProjectedVelocities`
+      // re-diagnoses a singular gram into advice about scene scale, so that is
+      // the shape a skippable failure arrives in here.
+      if (!(error instanceof SingularCorrectionError)) {
+        throw error;
+      }
+
       return stateFrom(q);
     }
 

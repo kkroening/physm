@@ -349,17 +349,22 @@ and damping. A spring has to be scaled against the masses it pulls on and agains
 that integrates it, so a setting that works on one rig at one $`\Delta t`$ is wrong on another —
 and it never *restores* the constraint, it only makes the violation decay.
 
-**Measured, there is no single setting to reach for.** On the demo rig the drift spans five orders
-depending on nothing but how the cart is being driven — 25 seconds of a square wave, $`\Delta t =
-1/400`$, RK4:
+**Measured, there is no single setting to reach for.** On the demo rig the drift spans more than
+three orders depending on nothing but how the cart is being driven — 25 seconds of a square wave,
+$`\Delta t = 1/400`$, RK4:
 
 | Drive | $`\lVert C\rVert`$, unstabilized | stabilized |
 | --- | --- | --- |
 | idle, 30 s | $`2.5 \times 10^{-7}`$ | — |
+| 0.05 Hz | $`5.2 \times 10^{-5}`$ | — |
 | 0.15 Hz | $`8.0 \times 10^{-3}`$ | $`2.0 \times 10^{-13}`$ |
 | 0.25 Hz | $`5.1 \times 10^{-2}`$ | $`1.8 \times 10^{-12}`$ |
 | **0.35 Hz** | $`2.3 \times 10^{-1}`$ | $`1.4 \times 10^{-14}`$ |
-| 0.50 Hz | $`1.8 \times 10^{-1}`$ | $`3.6 \times 10^{-14}`$ |
+| 0.50 Hz | $`1.7 \times 10^{-1}`$ | $`3.6 \times 10^{-14}`$ |
+| 2.00 Hz | $`2.5 \times 10^{-4}`$ | — |
+
+The driven rows span $`5.2 \times 10^{-5}`$ to $`2.3 \times 10^{-1}`$ — a factor of 4300, on one rig
+at one step size, with nothing varying but the hand on the keyboard.
 
 **Confirmed in the running demo, not only headless.** Forty seconds of arrow-key drive at the same
 frequency, through `RsSolver` in a browser: the two chains end up `3.31` apart unstabilized — more
@@ -372,7 +377,7 @@ first pass at this measured the undriven rig, got $`2.5 \times 10^{-7}`$, and co
 nothing to fix — wrong by six orders, because drift here is something the solver is *driven* into.
 0.35 Hz is not arbitrary either: it is roughly where this rig resonates, the frequency that walks
 the pendulum round and round the way a cart-pole is swung up by hand. A person playing the demo
-finds it; a test that mashes keys at 2 Hz does not.
+finds it; a test that mashes keys at 2 Hz gets `2.5e-4`, three orders less.
 
 So Baumgarte's constants would have to be chosen against a drift that depends on how hard somebody
 happens to be playing. **And the intended interactive scene builder has nobody to do the choosing**
@@ -397,8 +402,17 @@ Two neighbours are worth naming because they look like alternatives and are not:
 
 **No measurable energy.** Projection's velocity half removes the component of $`\dot q`$ along
 $`J^{\mathsf T}`$, which is a removal of kinetic energy and so a fair thing to be suspicious of. On
-the demo rig swinging freely for 60 seconds, the pendulum's peak angle is `1.570782` with the
-stabilizer on and `1.570782` with it off — identical to every figure printed.
+the demo rig swinging freely, the pendulum reaches `-0.827175643` rad with the stabilizer off and
+`-0.827175642` with it on — the *top* of the arc, which is where a removal of kinetic energy would
+show, agreeing to nine figures.
+
+⚠️ **Which end of the swing is the whole of it.** The first version of this paragraph quoted the
+pendulum's peak *angle*, `1.570782`, identical with and without — which measures nothing. The rod is
+released at $`-\pi/2`$, and $`-\pi/2`$ is straight down, so $`\max\lvert q\rvert`$ is its release
+angle whatever happens to the energy: measured, it reads `1.570782` for the honest projection, for no
+projection at all, and for a mutant bleeding 2% of every velocity every step. A statistic quoted to
+seven figures that cannot come out wrong is not evidence, and looks more like evidence than a
+statistic that can.
 
 **About twice the wall clock**, on this rig. 10 000 steps of the demo through `RsSolver`: 347 ms
 unstabilized, 726 ms stabilized. Both halves solve an $`m \times m`$ system where $m$ is the
