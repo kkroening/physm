@@ -248,7 +248,12 @@ describe('CartAndRope under drive', () => {
       const solver = new JsSolver(scene, { rungeKutta: true, stabilize });
       const rod = [...solver.getStateMap().keys()].at(-1)!;
       let top = -Infinity;
-      for (let step = 0; step < Math.round(20 / DELTA_TIME); step++) {
+      // Three seconds, because the *first* swing is the highest one: the rod
+      // tops out at 0.80 s and joint drag takes every later arc lower, so a
+      // longer run measures drag rather than the stabilizer. Measured
+      // identically at 1, 2, 3, 4, 6 and 8 seconds -- and 20 seconds cost 12 of
+      // them on CI, which is over vitest's default per-test timeout.
+      for (let step = 0; step < Math.round(3 / DELTA_TIME); step++) {
         solver.tick(DELTA_TIME, 1, null);
         top = Math.max(top, solver.getStateMap().get(rod)![0]);
       }
