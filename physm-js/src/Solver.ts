@@ -2,6 +2,11 @@ import type { FrameId, StateMap } from './Frame';
 import type Scene from './Scene';
 import { NotImplementedError } from './utils';
 
+/** What every solver accepts, whatever it integrates with. */
+export interface SolverOptions {
+  stabilize?: boolean;
+}
+
 /** An external generalized force per frame, as the interactive demo supplies. */
 export type ExternalForceMap = Map<FrameId, number> | null;
 
@@ -38,8 +43,44 @@ export function checkStateMapValid(stateMap: StateMap): void {
 export default class Solver {
   readonly scene: Scene;
 
-  constructor(scene: Scene) {
+  /**
+   * Whether to pull the state back onto the constraint manifold after a tick.
+   *
+   * Off by default, and that is deliberate rather than cautious. Unstabilized,
+   * this formulation *conserves* a constraint violation exactly -- `C(t) = C₀ +
+   * Ċ₀t` -- which is a documented, tested property and the diagnostic that
+   * tells a drift caused by inconsistent initial velocities apart from one
+   * caused by integration error. Stabilizing by default would erase the
+   * distinction and leave no way to measure whether the stabilizer works.
+   *
+   * ⚠️ **The default is a decision deferred, not one made** -- see
+   * `docs/issues/0013.md`. Nothing currently depends on it: every test passes
+   * this flag explicitly in both directions, and the demo passes `true`. The
+   * argument against it is that a forgotten `stabilize` fails quietly -- the rig
+   * looks right for a minute and then comes apart, which is the bug the
+   * stabilizer was added to remove.
+   *
+   * See `Scene.getStabilizedState`.
+   */
+  readonly stabilize: boolean;
+
+  constructor(scene: Scene, { stabilize = false }: SolverOptions = {}) {
     this.scene = scene;
+    this.stabilize = stabilize;
+  }
+
+  /**
+   * Apply the stabilizer, if this solver has one.
+   *
+   * Here rather than in each integrator because it needs only `getStateMap` and
+   * `setStateMap`, which every solver has -- so the JavaScript and Rust
+   * integrators get the same correction from the same code, rather than two
+   * implementations that could disagree.
+   */
+  applyStabilization(): void {
+    if (this.stabilize) {
+      this.setStateMap(this.scene.getStabilizedState(this.getStateMap()));
+    }
   }
 
   dispose(): void {}

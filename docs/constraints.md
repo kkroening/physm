@@ -1,8 +1,14 @@
 # Constraints and loop closure
 
-**A design, not an implementation.** Nothing described here exists in the code yet;
-[`algorithm.md`](algorithm.md) describes what the solver actually computes today. This document
-exists to be argued with before any of it is built.
+**Written as a design, ahead of the code — and much of it has since been built.**
+[`algorithm.md`](algorithm.md) describes what the solver computes today.
+
+⚠️ **This document has not been audited section by section against the implementation.** Where a
+section records what was built, it says so and cites the measurements — [§7](#7-drift-and-how-it-gets-fixed)
+is the worked case. Everywhere else the prose is still in the future tense it was written in, and a
+"will" or a "later" there means only that nobody has been back to check, not that the thing is
+absent. Read it as a design argument that the code mostly follows, and confirm against the code
+before relying on any particular claim.
 
 ## Contents
 
@@ -12,7 +18,7 @@ exists to be argued with before any of it is built.
 4. [The Jacobian is already computed](#4-the-jacobian-is-already-computed)
 5. [Constraint types](#5-constraint-types)
 6. [Why the target length must be explicit](#6-why-the-target-length-must-be-explicit)
-7. [Drift, and how it gets fixed later](#7-drift-and-how-it-gets-fixed-later)
+7. [Drift, and how it gets fixed](#7-drift-and-how-it-gets-fixed)
 8. [What the solver has to tolerate](#8-what-the-solver-has-to-tolerate)
 9. [Prior art, and two bugs in it](#9-prior-art-and-two-bugs-in-it)
 10. [Verification](#10-verification)
@@ -157,7 +163,7 @@ about both ends — which is what the motivating example's central joining link 
 
 **Degenerate as $`\lVert d\rVert \to 0`$** — and the condition is on the *current* separation,
 which is state, not on $L$. The row is $`J_d^{\mathsf T}d`$, which vanishes with $d$; and since
-[§7](#7-drift-and-how-it-gets-fixed-later) establishes that $`\lVert d\rVert`$ is not held at $L$
+[§7](#7-drift-and-how-it-gets-fixed) establishes that $`\lVert d\rVert`$ is not held at $L$
 but drifts, requiring $`L > 0`$ at authoring time guarantees nothing at any later step.
 
 It is not a knife edge either. The row scales like $`\lVert d\rVert`$ while the right-hand side
@@ -202,7 +208,7 @@ place two things, say "link these", and the length falls out of the geometry.
 
 It is still worth storing, for two reasons, and the second is the one that decides the sequencing.
 
-**Stabilization needs it.** Every strategy in [§7](#7-drift-and-how-it-gets-fixed-later) corrects
+**Stabilization needs it.** Every strategy in [§7](#7-drift-and-how-it-gets-fixed) corrects
 toward $`C = 0`$, and $C$ cannot be evaluated without $L$. An implementation without it is not
 merely unstabilized — it cannot be stabilized without a data-model change.
 
@@ -213,7 +219,7 @@ a test, and — the point — **to compare stabilization strategies against**. B
 well-chosen constants versus projection is not a distinction visible in a rope animation.
 
 That comparison additionally requires the consistency step in
-[§7](#7-drift-and-how-it-gets-fixed-later): with $`\dot C_0 \neq 0`$ the measured drift is
+[§7](#7-drift-and-how-it-gets-fixed): with $`\dot C_0 \neq 0`$ the measured drift is
 dominated by a term linear in the horizon that has nothing to do with the integrator, and two
 strategies cannot be ranked against it. **Storing $L$ is necessary and not sufficient.**
 
@@ -226,7 +232,7 @@ There is no `initialState` — state arrives separately on every `tick`, so the 
 $`q_0`$. Capturing $L$ implicitly would mean latching a value on the first tick, which is stateful
 and wrong across RK4's four stage evaluations.
 
-## 7. Drift, and how it gets fixed later
+## 7. Drift, and how it gets fixed
 
 ### Consistent initial conditions come first
 
@@ -329,19 +335,169 @@ concluding anything about numerical drift.
 | Strategy | Where it attaches | Cost |
 | --- | --- | --- |
 | **Baumgarte** — enforce $`\ddot C + 2\alpha\dot C + \beta^2 C = 0`$ | Constraint RHS only | One term; two constants that interact badly with the integrator |
-| **Projection** — after each step, Newton $q$ onto $`C = 0`$, then project $`\dot q`$ onto $`J\dot q = 0`$ | *After* the integrator | Robust, untuned, keeps the dynamics clean |
+| ✅ **Projection** — after each step, Newton $q$ onto $`C = 0`$, then project $`\dot q`$ onto $`J\dot q = 0`$ | *After* the integrator | Robust, untuned, keeps the dynamics clean |
 | **GGL** — carry velocity-level multipliers, enforcing $`C = 0`$ and $`\dot C = 0`$ explicitly | System shape | No tuning; larger system |
 
-**Three seams keep these addable without rework:**
+`physm-js` implements the projection row, as `Scene.getStabilizedState`, behind a `stabilize` flag
+on `Solver` that defaults to **off**. The rest of this section records why that row, what it cost,
+and what the flag is for.
+
+#### Why projection, and not the tuned alternatives
+
+**Baumgarte is a damped spring on the violation**, and $`\alpha`$ and $`\beta`$ are its stiffness
+and damping. A spring has to be scaled against the masses it pulls on and against the step size
+that integrates it, so a setting that works on one rig at one $`\Delta t`$ is wrong on another —
+and it never *restores* the constraint, it only makes the violation decay.
+
+**Measured, there is no single setting to reach for.** On the demo rig the drift spans more than
+three orders depending on nothing but how the cart is being driven — 25 seconds of a square wave,
+$`\Delta t = 1/400`$, RK4:
+
+| Drive | $`\lVert C\rVert`$, unstabilized | stabilized |
+| --- | --- | --- |
+| idle, 30 s | $`2.5 \times 10^{-7}`$ | — |
+| 0.05 Hz | $`5.2 \times 10^{-5}`$ | — |
+| 0.15 Hz | $`8.0 \times 10^{-3}`$ | $`2.0 \times 10^{-13}`$ |
+| 0.25 Hz | $`5.1 \times 10^{-2}`$ | $`1.8 \times 10^{-12}`$ |
+| **0.35 Hz** | $`2.3 \times 10^{-1}`$ | $`1.4 \times 10^{-14}`$ |
+| 0.50 Hz | $`1.7 \times 10^{-1}`$ | $`3.6 \times 10^{-14}`$ |
+| 2.00 Hz | $`2.5 \times 10^{-4}`$ | — |
+
+The driven rows span $`5.2 \times 10^{-5}`$ to $`2.3 \times 10^{-1}`$ — a factor of 4300, on one rig
+at one step size, with nothing varying but the hand on the keyboard.
+
+**Confirmed in the running demo, not only headless.** Forty seconds of arrow-key drive at the same
+frequency, through `RsSolver` in a browser: the two chains end up `3.31` apart unstabilized — more
+than two segment lengths, and the rig is visibly broken — against $`8.0 \times 10^{-13}`$ with the
+stabilizer on, at the same 23-odd pendulum revolutions and with the frame rate pinned to the
+display's 120 Hz throughout.
+
+⚠️ **Idling is easy mode, and measuring it is how a stabilizer gets declared unnecessary.** The
+first pass at this measured the undriven rig, got $`2.5 \times 10^{-7}`$, and concluded there was
+nothing to fix — wrong by six orders, because drift here is something the solver is *driven* into.
+0.35 Hz is not arbitrary either: it is roughly where this rig resonates, the frequency that walks
+the pendulum round and round the way a cart-pole is swung up by hand. A person playing the demo
+finds it; a test that mashes keys at 2 Hz gets `2.5e-4`, three orders less.
+
+So Baumgarte's constants would have to be chosen against a drift that depends on how hard somebody
+happens to be playing. **And the intended interactive scene builder has nobody to do the choosing**
+— a rig assembled in a UI has no author to hand-tune two numbers per scene.
+
+**Projection has no such constants because it applies no force.** It relocates the state, so there
+is no stiffness to interact with the integrator, nothing to resonate, and nothing to critically
+damp. `tolerance` and `maxIterations` are convergence knobs: they change how precisely the state
+lands on the manifold, not where the manifold is.
+
+Two neighbours are worth naming because they look like alternatives and are not:
+
+- **ERP** (*error reduction parameter*, from ODE and Bullet) is Baumgarte re-parameterized as a
+  dimensionless fraction in $`[0, 1]`$ — "how much of the error to remove this step" — which makes
+  it step-size-aware where raw $`\beta`$ is not. It is a better-behaved dial. It is still a dial on
+  a spring.
+- **CFM** (*constraint force mixing*) adds $`\varepsilon I`$ to the augmented system's zero block.
+  That is regularization for a near-singular $J$, not stabilization: it makes the solve succeed at
+  a kinematic singularity, and does nothing about accumulated drift.
+
+#### What it costs
+
+**No measurable energy.** Projection's velocity half removes the component of $`\dot q`$ along
+$`J^{\mathsf T}`$, which is a removal of kinetic energy and so a fair thing to be suspicious of. On
+the demo rig swinging freely, the pendulum reaches `-0.827175643` rad with the stabilizer off and
+`-0.827175642` with it on — the *top* of the arc, which is where a removal of kinetic energy would
+show, agreeing to nine figures.
+
+⚠️ **Which end of the swing is the whole of it.** The first version of this paragraph quoted the
+pendulum's peak *angle*, `1.570782`, identical with and without — which measures nothing. The rod is
+released at $`-\pi/2`$, and $`-\pi/2`$ is straight down, so $`\max\lvert q\rvert`$ is its release
+angle whatever happens to the energy: measured, it reads `1.570782` for the honest projection, for no
+projection at all, and for a mutant bleeding 2% of every velocity every step. A statistic quoted to
+seven figures that cannot come out wrong is not evidence, and looks more like evidence than a
+statistic that can.
+
+**About twice the wall clock**, on this rig. 10 000 steps of the demo through `RsSolver`: 347 ms
+unstabilized, 726 ms stabilized. Both halves solve an $`m \times m`$ system where $m$ is the
+constraint row count — small beside the $`(n+m) \times (n+m)`$ saddle-point solve RK4 already does
+four times per step — but the position half is a *Newton iteration*, so it pays at least one solve
+per step even on a state already on the manifold. There is no cheap way to ask "is $`C`$ small?"
+that does not need a scale (see below), so the check is not worth its own code path.
+
+#### Why the flag defaults to off
+
+$`C(t) = C_0 + \dot C_0 t`$ holds *exactly* under this formulation, and that is a diagnostic, not
+just a defect: it is what distinguishes a drift caused by inconsistent initial velocities from one
+caused by integration error. Any stabilizer erases the distinction. Keeping it a flag keeps the
+diagnostic — and gives a direct A/B for measuring whether the stabilizer works, which is what the
+table above is.
+
+#### Scale, and why the convergence test is on the correction
+
+Neither $`C`$ nor $q$ has one unit. $`C`$ is a length for a coincidence constraint and a length
+*squared* for a distance constraint, so a single threshold on $`\max\lvert C\rvert`$ means
+something different per constraint type; and $q$ mixes a `TrackFrame`'s metres with a
+`RotationalFrame`'s radians. The implementation therefore tests **the correction against its own
+coordinate** — $`\lvert \Delta q_i \rvert \le \texttt{tolerance} \cdot \max(\lvert q_i \rvert, 1)`$
+— which keeps every comparison in one unit without needing a per-type scale.
+
+The same reasoning is why the correction itself is
+$`\Delta q = -g^{-1}J^{\mathsf T}(Jg^{-1}J^{\mathsf T})^{-1}C`$ rather than the Euclidean
+least-norm solution: it minimises $`\tfrac12 \Delta q^{\mathsf T} g \Delta q`$, an *energy*, which
+does not care what unit anybody authored lengths in. That is Gauss's principle of least
+constraint, and it is the same operator the velocity consistency step already used — the two share
+`Scene._solveMetricCorrection`, differing only in the right-hand side.
+
+#### A singular Jacobian skips rather than throws
+
+A chain pulled taut is collinear, which is exactly when $`Jg^{-1}J^{\mathsf T}`$ loses rank — and a
+hard-driven rope is exactly when a chain goes taut. Throwing there would turn the stabilizer into a
+crash in the one configuration it was added for, so an unsolvable step stops the iteration and the
+next one tries again from a pose that has moved off the singularity.
+
+**What a skip returns is three cases, not one**, and the difference is easy to state wrongly:
+
+| Where it went singular | What comes back |
+| --- | --- |
+| The first Newton step | The input state, unchanged |
+| A later Newton step | The positions already corrected, with the **input's** velocities |
+| Only the velocity half | The corrected positions, again with the input's velocities |
+
+The middle row is the one worth explaining. It is tempting to re-project the velocities at the pose
+actually reached — $`J`$ moved with $`q`$, after all, which is the whole reason the velocity half
+exists. It achieves nothing: the velocity half solves at that same $`q`$, so it re-forms that same
+gram, fails the same way, and arrives back at the same answer one factorization later. So the
+invariant is the weak one — **a returned velocity is either projected at the returned pose or is the
+one that came in**, never projected at some third pose — and the next tick corrects both.
+
+**Only a singular failure is skipped.** An over-determined scene — more constraint rows than
+coordinates — throws up front, mirroring the check the velocity-consistency step already makes,
+because it also produces a singular gram and would otherwise be skipped quietly on every step
+forever. Anything else thrown by the solve propagates: a stabilizer that silently stops stabilizing
+is indistinguishable from the bug it was added to fix, and measured, that is exactly what a bare
+`catch` produced — the demo back at its unstabilized drift with nothing reported.
+
+#### What became of the four seams
+
+**Four seams keep these addable without rework:**
 
 1. **`Constraint` exposes `value`, `jacobian_rows` and `bias` separately.** Baumgarte needs
    `value` and $`\dot C`$; projection needs `value` and `jacobian_rows` evaluated at a *new* $q$.
    Fusing them into one "emit my row" method puts both out of reach.
+
+   ✅ Held, and used as designed.
 2. **The constraint RHS is assembled as $`-\dot J\dot q`$ plus a stabilization term defaulting to
    zero.** Baumgarte is then a substitution rather than surgery.
+
+   ⏸️ Unused, and likely to stay so: this seam exists for the row that was not chosen.
 3. **The integrator has a post-step hook.** Projection must run once the step is complete, not per
    RK4 stage. `tick_runge_kutta_mut` currently owns the whole update inline, and retrofitting a
    hook into the integrator later is the most expensive of these to defer.
+
+   ↩️ **Not taken, and it turned out not to be needed.** Correction needs only `getStateMap` and
+   `setStateMap`, so the hook sits on `Solver` — above both integrators rather than inside either —
+   and the JavaScript and Rust paths get the same correction from the same code instead of two
+   implementations that could disagree. The cost is that `RsSolver` normally hands `tickCount`
+   straight to wasm and integrates the whole batch without crossing back; stabilizing forces it to
+   step one at a time, because correcting once per batch would be a different amount of
+   stabilization for the same physics depending on what a caller passed.
 4. **The kinematic sweeps are callable as a function of $q$ alone.** Seam 1 makes the methods
    reachable but not *evaluable*: projection's Newton iteration evaluates `value` and
    `jacobian_rows` at trial $q$ values no solve was run at, which needs sweeps 1, 1′ and 2 re-run
@@ -350,8 +506,21 @@ concluding anything about numerical drift.
    projection does not want. Extract them, have `get_system_of_equations` call the extraction, and
    let `value`/`jacobian_rows` take its output as a parameter.
 
+   ✅ Held, in `physm-js`, as `Scene.getConfigKinematics`. Not done in `physm-rs`, which needs it
+   only if the stabilizer is ever ported there.
+
    **Seams 3 and 4 land together or neither is worth anything**: a post-step hook with no way to
    evaluate the constraint at a trial configuration is a hook with nothing to call.
+
+   That prediction held in the direction that mattered — seam 4 was the one projection could not
+   do without — while seam 3 dissolved, because the hook did not have to be *in* the integrator.
+
+#### Still open
+
+The stabilizer is TypeScript only. `RsSolver` reaches it by stepping one at a time and correcting
+from the JavaScript side, which works and is measurably slower than the batched path; a
+`physm-rs`-side implementation would need seam 4 extracted there. Filed as
+[0012](issues/0012.md).
 
 ## 8. What the solver has to tolerate
 
@@ -389,7 +558,7 @@ that.** The notes' next two lines are the author's own diagnosis —
 > encouraging the acceleration constraint, but it does nothing to prevent displacement+velocity
 > drift
 
-— which describes an unstabilized index-1 formulation, i.e. the thing [§7](#7-drift-and-how-it-gets-fixed-later)
+— which describes an unstabilized index-1 formulation, i.e. the thing [§7](#7-drift-and-how-it-gets-fixed)
 predicts this port will also do. It is an impression rather than a measurement, so it settles
 nothing; but it is the only contemporaneous evidence, and it points away from the defects.
 
@@ -499,7 +668,7 @@ ones in [§9](#9-prior-art-and-two-bugs-in-it).**
    guards the signs.
 
 6. **Measure the drift.** Record $`\max_t \lVert C(t)\rVert`$ over a fixed scenario, **after** the
-   consistency step in [§7](#7-drift-and-how-it-gets-fixed-later) is in place. Without it the
+   consistency step in [§7](#7-drift-and-how-it-gets-fixed) is in place. Without it the
    number is $`\lvert\dot C_0\rvert`$ times the horizon and is not comparable between runs, let
    alone between stabilization strategies — which would defeat the purpose
    [§6](#6-why-the-target-length-must-be-explicit) gives for storing $L$ at all.
@@ -510,6 +679,8 @@ Explicit `length` and both constraint types behind one trait; the scene-build co
 the four seams; finite-difference, solve-residual and time-differenced $`\ddot C`$ checks; both
 implementations, cross-validated; the demo scene; then the drift measurement.
 
-Stabilization strategies are follow-ups, as is settling the
-[§9](#9-prior-art-and-two-bugs-in-it) attribution by re-running the 2019 notebook. §7's four seams
-are what keep the former from being rewrites.
+Projection stabilization landed in `physm-js` after the drift measurement, opt-in, on the strength
+of the numbers in [§7](#7-drift-and-how-it-gets-fixed); the seams did keep it from being a rewrite,
+though not the seam that was expected to matter most. What is left of that follow-up is the
+`physm-rs` side ([0012](issues/0012.md)). Settling the [§9](#9-prior-art-and-two-bugs-in-it)
+attribution by re-running the 2019 notebook is still open.

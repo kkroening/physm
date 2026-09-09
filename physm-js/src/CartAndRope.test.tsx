@@ -1,4 +1,5 @@
 import CartAndRope, { ARC, CART_FRAME_ID, RIG } from './CartAndRope';
+import JsSolver from './JsSolver';
 import Scene from './react/Scene';
 import { render } from '@testing-library/react';
 import type CoreScene from './Scene';
@@ -182,5 +183,125 @@ describe('CartAndRope', () => {
         loop.localPosition2,
       ).distance,
     ).toBeCloseTo(0, 9);
+  });
+});
+
+describe('CartAndRope under drive', () => {
+  // The demo's own step size, and roughly its arrow-key force. Both are stated
+  // here rather than imported: `App` deliberately keeps the force with the
+  // controls instead of the rig, and the step size belongs to its animation
+  // loop. What the numbers have to be is "what a person playing the demo
+  // actually produces", not any particular literal -- the drift below is a
+  // property of driving this rig hard, not of these two constants.
+  const DELTA_TIME = 1.5 / 600;
+  const DRIVE_FORCE = 8500;
+
+  /** How far apart the two chain tips have drifted, in scene lengths. */
+  function gap(scene: CoreScene, solver: JsSolver): number {
+    const ctx = scene.getConfigKinematics(solver.getStateMap());
+
+    return Math.hypot(
+      ...scene.constraints.flatMap((constraint) => constraint.value(ctx)),
+    );
+  }
+
+  /**
+   * Ten seconds of the cart being shoved back and forth at 0.35 Hz.
+   *
+   * Not an arbitrary number and not idling. Left alone, this rig drifts by
+   * about 2.5e-7 over thirty seconds, and so does every rig -- steady state is
+   * easy mode, and measuring it is how a stabilizer gets declared unnecessary.
+   * Driven, the drift depends sharply on *how* it is driven, and 0.35 Hz is
+   * roughly where this rig resonates -- the frequency that walks the pendulum
+   * round and round, the way a cart-pole is swung up by hand. Measured over 25
+   * seconds: 2.25e-1 here, against 2.54e-4 for key-mashing at 2 Hz and 5.20e-5
+   * for a slow shove at 0.05 Hz -- about 900x the fast end and 4300x the slow
+   * one.
+   */
+  function drive(solver: JsSolver): void {
+    for (let step = 0; step < Math.round(10 / DELTA_TIME); step++) {
+      const sign =
+        Math.sin(2 * Math.PI * 0.35 * step * DELTA_TIME) >= 0 ? 1 : -1;
+      solver.tick(
+        DELTA_TIME,
+        1,
+        new Map([[CART_FRAME_ID, sign * DRIVE_FORCE]]),
+      );
+    }
+  }
+
+  test('stabilizing costs the free swing no measurable energy', () => {
+    // Projection's velocity half removes the component of `q̇` along `Jᵀ`, which
+    // is a removal of kinetic energy and a fair thing to be suspicious of: a
+    // stabilizer that held the constraint by quietly damping the rig would pass
+    // every other test here.
+    //
+    // The statistic is the *top* of the pendulum's arc, and which end matters.
+    // `max|q|` looks like the obvious choice and is inert: the rod is released
+    // at `-π/2`, which is straight down, so `max|q|` is its release angle to
+    // the last digit however much energy is removed -- measured, it reads
+    // `1.570782` for the honest projection, for no projection, and for a
+    // mutant bleeding 2% of every velocity every step. The height it swings
+    // *to* is where energy shows.
+    const topOfArc = (stabilize: boolean): number => {
+      const scene = assemble();
+      const solver = new JsSolver(scene, { rungeKutta: true, stabilize });
+      const rod = [...solver.getStateMap().keys()].at(-1)!;
+      let top = -Infinity;
+      // Three seconds, because the *first* swing is the highest one: the rod
+      // tops out at 0.80 s and joint drag takes every later arc lower, so a
+      // longer run measures drag rather than the stabilizer. Measured
+      // identically at 1, 2, 3, 4, 6 and 8 seconds -- and 20 seconds cost 12 of
+      // them on CI, which is over vitest's default per-test timeout.
+      for (let step = 0; step < Math.round(3 / DELTA_TIME); step++) {
+        solver.tick(DELTA_TIME, 1, null);
+        top = Math.max(top, solver.getStateMap().get(rod)![0]);
+      }
+
+      return top;
+    };
+
+    const plain = topOfArc(false);
+    const stabilized = topOfArc(true);
+
+    // The rod really swung up from where it was released, so there is an arc to
+    // compare rather than a rig hanging still.
+    expect(plain).toBeGreaterThan(-Math.PI / 2 + 0.5);
+
+    // Measured: `-0.827175643` and `-0.827175642`, agreeing to nine figures.
+    // The 2%/step bleeder reaches `-1.043022240`, which is what makes this
+    // bound something the claim could fail.
+    expect(Math.abs(stabilized - plain)).toBeLessThan(1e-6);
+  });
+
+  test('the resonant drive separates the two chains', () => {
+    // The visible symptom, and the reason there is a stabilizer at all: after a
+    // minute of play the demo shows a gap where the two ropes are supposed to
+    // join. This reproduces it in ten seconds.
+    //
+    // Measured: 4.7e-2, against a segment length of about 1.4 -- a few percent
+    // of a segment, which is small on paper and plainly visible on screen. It
+    // is also unbounded, growing with how long the drive runs.
+    const scene = assemble();
+    const solver = new JsSolver(scene, { rungeKutta: true });
+
+    expect(gap(scene, solver)).toBeLessThan(1e-9);
+
+    drive(solver);
+
+    expect(gap(scene, solver)).toBeGreaterThan(1e-2);
+  });
+
+  test('stabilization holds them together through it', () => {
+    // The acceptance target for the stabilizer, on the rig that motivated it
+    // and under the drive that breaks it. Measured: 2.2e-14 -- twelve orders
+    // below the bound above, and at the noise floor of a length computed from
+    // float64 coordinates of order 10.
+    const scene = assemble();
+    const solver = new JsSolver(scene, { rungeKutta: true, stabilize: true });
+
+    drive(solver);
+
+    expect(gap(scene, solver)).toBeLessThan(1e-9);
   });
 });

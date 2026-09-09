@@ -2,6 +2,7 @@ import JsSolver from './JsSolver';
 import RotationalFrame from './RotationalFrame';
 import RsSolver from './RsSolver';
 import Scene from './Scene';
+import type Solver from './Solver';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { DistanceConstraint } from './Constraint';
@@ -218,3 +219,83 @@ describeCrossValidation('tree scene', getTreeScene, {
 });
 
 describeCrossValidation('rope scene', getRopeScene);
+
+describe('stabilization', () => {
+  async function loadRsWasmModule() {
+    return await import('../../physm-rs/nodepkg/physm_rs.js');
+  }
+
+  /** `max|C|` over the rope scene's one constraint. */
+  function violation(solver: Solver): number {
+    const ctx = solver.scene.getConfigKinematics(solver.getStateMap());
+
+    return Math.max(
+      ...solver.scene.constraints.flatMap((constraint) =>
+        constraint.value(ctx).map(Math.abs),
+      ),
+    );
+  }
+
+  function drive(solver: Solver, seconds: number): number {
+    const deltaTime = 1 / 400;
+    for (let step = 0; step < Math.round(seconds / deltaTime); step++) {
+      // A square wave at the frequency the rig responds to, because idling is
+      // easy mode: the same scene left alone drifts by about 1e-7, which any
+      // stabilizer and no stabilizer both pass. Drift is something the solver
+      // is *driven* into.
+      const sign =
+        Math.sin(2 * Math.PI * 0.35 * step * deltaTime) >= 0 ? 1 : -1;
+      solver.tick(deltaTime, 1, new Map([['cart', sign * 600]]));
+    }
+
+    return violation(solver);
+  }
+
+  // Both classes, because they stabilize by different routes and the point of
+  // putting `applyStabilization` on the base class is that they should not be
+  // able to disagree. `JsSolver` integrates in TypeScript and corrects inside
+  // its own loop; `RsSolver` hands `tickCount` to wasm, so stabilizing forces
+  // it to step one at a time and cross the boundary per step.
+  const solverKinds = [
+    {
+      name: 'JsSolver',
+      create: async (stabilize: boolean) =>
+        new JsSolver(getRopeScene(), { rungeKutta: true, stabilize }),
+    },
+    {
+      name: 'RsSolver',
+      create: async (stabilize: boolean) =>
+        new RsSolver(getRopeScene(), await loadRsWasmModule(), {
+          rungeKutta: true,
+          stabilize,
+        }),
+    },
+  ];
+
+  solverKinds.forEach((kind) => {
+    test(`${kind.name}: off by default, and the drift it leaves is real`, async () => {
+      const solver = await kind.create(false);
+
+      expect(solver.stabilize).toBe(false);
+
+      // Measured: 3.4e-4 for `JsSolver`, and the same order for `RsSolver` --
+      // the two integrate the same equations and diverge only through
+      // floating-point ordering. The lower bound is what makes the test below
+      // mean something: a drive that failed to excite the rig would leave
+      // nothing to correct, and a do-nothing stabilizer would pass.
+      expect(drive(solver, 25)).toBeGreaterThan(1e-5);
+    });
+
+    test(`${kind.name}: stabilized, the same drive leaves nothing`, async () => {
+      const solver = await kind.create(true);
+
+      expect(solver.stabilize).toBe(true);
+
+      // Measured: 1.9e-14 and 3.7e-14 -- the last few bits of a length squared,
+      // which is where projection lands rather than where it is asked to land.
+      // Nine orders below the bound above, so the two assertions cannot both
+      // hold by accident.
+      expect(drive(solver, 25)).toBeLessThan(1e-10);
+    });
+  });
+});
