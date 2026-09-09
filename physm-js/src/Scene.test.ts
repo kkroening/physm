@@ -3,8 +3,10 @@ import { faker } from '@faker-js/faker';
 import Frame from './Frame';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
-import type { StateMap } from './Frame';
+import type { FrameId, StateMap } from './Frame';
 import TrackFrame from './TrackFrame';
+import Weight from './Weight';
+import { CoincidenceConstraint } from './Constraint';
 import { DEFAULT_GRAVITY } from './Scene';
 
 describe('Scene queries', () => {
@@ -248,5 +250,86 @@ describe('Scene class', () => {
     expect(JSON.stringify(obj)).toEqual(
       '{"frames":[{"frames":[],"id":"d34db33f","initialState":[0,0],"position":[0,0],"resistance":0,"type":"Frame","weights":[]}],"gravity":10}',
     );
+  });
+});
+
+describe('Scene.getStabilizedState', () => {
+  test('an unconstrained scene is returned untouched', () => {
+    // Not merely "unchanged in value": the short-circuit returns the same
+    // object, because there is no manifold to project onto and building a new
+    // map would be work with nothing to show for it.
+    const scene = new Scene({
+      frames: [new TrackFrame({ id: 'root', initialState: [7, 3] })],
+    });
+    const stateMap = scene.getInitialStateMap();
+
+    expect(scene.getStabilizedState(stateMap)).toBe(stateMap);
+  });
+
+  test('a rank-deficient Jacobian skips rather than throws', () => {
+    // Two constraints saying the same thing about the same pair of points, so
+    // `J` has duplicate rows and `Jg⁻¹Jᵀ` is singular. That is the *shape* of
+    // the case this policy exists for: a chain pulled taut is collinear, which
+    // is exactly when the gram matrix loses rank -- and a hard-driven rope is
+    // exactly when a chain goes taut. Throwing there would turn the stabilizer
+    // into a crash in the one configuration it was added for.
+    //
+    // Duplicated deliberately rather than by posing a rig at a singularity,
+    // because a pose has to be hit to within floating-point tolerance and a
+    // test that has to hit it is a test that stops hitting it.
+    const scene = new Scene({
+      frames: [
+        new TrackFrame({
+          id: 'cart',
+          weights: [new Weight(5)],
+          frames: [
+            new RotationalFrame({
+              id: 'left',
+              initialState: [0.6, 0],
+              weights: [new Weight(4, { position: [10, 0] })],
+            }),
+            new RotationalFrame({
+              id: 'right',
+              initialState: [Math.PI - 0.6, 0],
+              // The pivots sit exactly `2L cos θ` apart, so the two tips meet
+              // and the constraint holds at `t = 0` without pre-straining.
+              position: [2 * 10 * Math.cos(0.6), 0],
+              weights: [new Weight(4, { position: [10, 0] })],
+            }),
+          ],
+        }),
+      ],
+    });
+    for (let copy = 0; copy < 2; copy++) {
+      scene.addConstraint(
+        new CoincidenceConstraint({
+          frame1: 'left',
+          frame2: 'right',
+          position1: [10, 0],
+          position2: [10, 0],
+        }),
+      );
+    }
+    const stateMap = new Map(
+      [...scene.getInitialStateMap()].map(
+        ([frameId, [q, qd]]): [FrameId, [number, number]] => [
+          frameId,
+          [q + 0.05, qd],
+        ],
+      ),
+    );
+
+    // Nudged off the manifold, so the stabilizer has a correction to attempt
+    // and reaches the solve rather than returning early.
+    const ctx = scene.getConfigKinematics(stateMap);
+    expect(
+      Math.max(
+        ...scene.constraints.flatMap((constraint) =>
+          constraint.value(ctx).map(Math.abs),
+        ),
+      ),
+    ).toBeGreaterThan(1e-3);
+
+    expect(scene.getStabilizedState(stateMap)).toBe(stateMap);
   });
 });

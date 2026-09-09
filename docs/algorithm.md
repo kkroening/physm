@@ -406,7 +406,7 @@ What has not been built is **stabilization**. The formulation is index-1: it hol
 at zero, so $`C(t) = C_0 + \dot C_0 t`$ exactly, and any inconsistency in the initial
 conditions is a gap that never closes — while floating-point error accumulates linearly on top
 of it. Baumgarte feedback, post-step projection and the GGL formulation are all compatible with
-what is there, and [`constraints.md` §7](constraints.md#7-drift-and-how-it-gets-fixed-later)
+what is there, and [`constraints.md` §7](constraints.md#7-drift-and-how-it-gets-fixed)
 compares them; today a scene has to start consistent and stay short.
 
 ### The assembly used to be quadratic in the wrong thing — *resolved*

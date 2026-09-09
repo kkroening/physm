@@ -8,7 +8,7 @@ import type { Mat3 } from './Mat3';
 import type Scene from './Scene';
 import type { Vec3 } from './Vec3';
 import { checkStateMapValid } from './Solver';
-import type { ExternalForceMap } from './Solver';
+import type { ExternalForceMap, SolverOptions } from './Solver';
 import { fromRows, solveLinearSystem } from './solveLinearSystem';
 
 /** A lookup into a table this solver derived itself; a miss is a bug here. */
@@ -47,15 +47,19 @@ function atRow(array: number[][], index: number): number[] {
   return row;
 }
 
+export interface JsSolverOptions extends SolverOptions {
+  rungeKutta?: boolean;
+}
+
 export default class JsSolver extends Solver {
   readonly rungeKutta: boolean;
   stateMap: StateMap;
 
   constructor(
     scene: Scene,
-    { rungeKutta = true }: { rungeKutta?: boolean } = {},
+    { rungeKutta = true, ...solverOptions }: JsSolverOptions = {},
   ) {
-    super(scene);
+    super(scene, solverOptions);
     this.rungeKutta = rungeKutta;
     this.stateMap = scene.getInitialStateMap();
   }
@@ -517,6 +521,11 @@ export default class JsSolver extends Solver {
     for (let i = 0; i < tickCount; i++) {
       this.stateMap = doTick(this.stateMap, deltaTime, externalForceMap);
       checkStateMapValid(this.stateMap);
+
+      // Per integration step, not per `tick` call: drift is injected by each
+      // step, so correcting once per batch would let it accumulate across
+      // however many steps a caller happened to ask for.
+      this.applyStabilization();
     }
   }
 }

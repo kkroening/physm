@@ -1,6 +1,6 @@
 import Solver from './Solver';
 import { InvalidStateMapError } from './Solver';
-import type { ExternalForceMap } from './Solver';
+import type { ExternalForceMap, SolverOptions } from './Solver';
 import type { FrameId, StateMap } from './Frame';
 import type Scene from './Scene';
 import type { State } from './State';
@@ -29,6 +29,10 @@ export interface SolverContext {
   dispose(): void;
 }
 
+export interface RsSolverOptions extends SolverOptions {
+  rungeKutta?: boolean;
+}
+
 export default class RsSolver extends Solver {
   stateBuffer: Float64Array;
   extForceBuffer: Float64Array;
@@ -37,9 +41,9 @@ export default class RsSolver extends Solver {
   constructor(
     scene: Scene,
     rsWasmModule: RsWasmModule,
-    { rungeKutta = true }: { rungeKutta?: boolean } = {},
+    { rungeKutta = true, ...solverOptions }: RsSolverOptions = {},
   ) {
-    super(scene);
+    super(scene, solverOptions);
     this.stateBuffer = new Float64Array(this.scene.sortedFrames.length * 2);
     this.extForceBuffer = new Float64Array(this.scene.sortedFrames.length);
     this.resetStateMap();
@@ -94,16 +98,34 @@ export default class RsSolver extends Solver {
         (frame) => externalForceMap?.get(frame.id) ?? 0,
       ),
     );
-    this.liveContext.tick(
-      this.stateBuffer,
-      deltaTime,
-      tickCount,
-      this.extForceBuffer,
-    );
-    for (const entry of this.stateBuffer) {
-      if (isNaN(entry)) {
-        throw new InvalidStateMapError();
+
+    // Unstabilized, `tickCount` goes straight to wasm and the whole batch
+    // integrates without crossing back. The stabilizer lives in TypeScript, so
+    // stabilizing means stepping one at a time and paying a boundary crossing
+    // per step -- worth it because the alternative is correcting once per batch
+    // and letting drift accumulate across however many steps a caller passed,
+    // which is a different amount of stabilization for the same physics.
+    const batchSize = this.stabilize ? 1 : tickCount;
+    let done = 0;
+    // `do`, not `while`: `tickCount` of zero still crosses into wasm and still
+    // validates, which is what this did before it had a loop at all.
+    do {
+      const size = Math.min(batchSize, tickCount - done);
+      this.liveContext.tick(
+        this.stateBuffer,
+        deltaTime,
+        size,
+        this.extForceBuffer,
+      );
+      for (const entry of this.stateBuffer) {
+        if (isNaN(entry)) {
+          throw new InvalidStateMapError();
+        }
       }
-    }
+      done += size;
+      if (size > 0) {
+        this.applyStabilization();
+      }
+    } while (done < tickCount);
   }
 }

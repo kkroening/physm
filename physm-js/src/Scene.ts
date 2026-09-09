@@ -87,6 +87,11 @@ export interface PoseQueryOptions {
   posMatMap?: Map<FrameId, Mat3> | null;
 }
 
+export interface StabilizationOptions {
+  tolerance?: number;
+  maxIterations?: number;
+}
+
 export default class Scene {
   readonly decals: Decal[];
   readonly frames: Frame[];
@@ -544,6 +549,50 @@ export default class Scene {
     return array;
   }
 
+  /**
+   * `g⁻¹Jᵀ(Jg⁻¹Jᵀ)⁻¹ r` -- the metric-orthogonal correction that removes a
+   * constraint residual `r`.
+   *
+   * The one operator both halves of stabilization are built from, which is why
+   * it is worth having separately. Feed it `J q̇` and subtracting the result
+   * makes a velocity consistent; feed it `C` and subtracting the result is one
+   * Newton step toward `C = 0`. Same `g`, same gram matrix, same solve --
+   * only the right-hand side differs.
+   *
+   * Orthogonal in the scene's metric `g` rather than the Euclidean one, for the
+   * reason `_getProjectedVelocities` sets out at length: a Euclidean correction
+   * adds a `TrackFrame`'s metres to a `RotationalFrame`'s radians and gets a
+   * different answer for the same rig authored in different units.
+   */
+  _solveMetricCorrection(
+    stateMap: StateMap,
+    rows: readonly number[][],
+    residual: readonly number[],
+  ): number[] {
+    // One factorization of `g` serves every constraint row. Re-factorizing per
+    // row would be `m` times the work, and -- since factorization consumes its
+    // matrix -- would return `R⁻¹b` on every row after the first: finite,
+    // plausible, and wrong.
+    const massFactorization = factor(fromRows(this.getMassMatrix(stateMap)));
+
+    // `g⁻¹Jᵀ`, column by column, rather than forming the inverse.
+    const invMassJT = rows.map((row) => solveFactored(massFactorization, row));
+    const gram = rows.map((row) =>
+      invMassJT.map((column) => dotRows(row, column)),
+    );
+    const lambda = solveFactored(factor(fromRows(gram)), residual);
+
+    return this.sortedFrames.map((unused, index) =>
+      invMassJT.reduce(
+        (total, column, row) =>
+          total +
+          at(column, index, 'inverse-mass column') *
+            at(lambda, row, 'multiplier'),
+        0,
+      ),
+    );
+  }
+
   _getProjectedVelocities(
     stateMap: StateMap,
     constraints: readonly Constraint[],
@@ -624,31 +673,7 @@ export default class Scene {
     }
     let correction: number[];
     try {
-      // One factorization of `g` serves every constraint row. Re-factorizing per
-      // row would be `m` times the work, and -- since factorization consumes its
-      // matrix -- would return `R⁻¹b` on every row after the first: finite,
-      // plausible, and wrong.
-      const massFactorization = factor(fromRows(this.getMassMatrix(stateMap)));
-
-      // `g⁻¹Jᵀ`, column by column, rather than forming the inverse.
-      const invMassJT = rows.map((row) =>
-        solveFactored(massFactorization, row),
-      );
-
-      const gram = rows.map((row) =>
-        invMassJT.map((column) => dotRows(row, column)),
-      );
-      const lambda = solveFactored(factor(fromRows(gram)), residual);
-
-      correction = this.sortedFrames.map((unused, index) =>
-        invMassJT.reduce(
-          (total, column, row) =>
-            total +
-            at(column, index, 'inverse-mass column') *
-              at(lambda, row, 'multiplier'),
-          0,
-        ),
-      );
+      correction = this._solveMetricCorrection(stateMap, rows, residual);
     } catch (error) {
       // Only the singular case gets re-diagnosed. The block also runs `dotRows`
       // and the indexed accessors, whose throws mean the Jacobian was assembled
@@ -675,6 +700,121 @@ export default class Scene {
     }
     return qd.map(
       (entry, index) => entry - at(correction, index, 'velocity correction'),
+    );
+  }
+
+  /**
+   * The state, pulled back onto the constraint manifold.
+   *
+   * Post-step projection -- the stabilizer `docs/constraints.md` §7 compares
+   * against Baumgarte and GGL, and the one that needs no tuning. Two halves,
+   * both built from `_solveMetricCorrection`:
+   *
+   * 1. **Position.** `C(q) = 0` is fewer equations than coordinates, so
+   *    linearizing gives the underdetermined `J Δq = −C`, and the metric
+   *    minimum-norm solution is `Δq = −g⁻¹Jᵀ(Jg⁻¹Jᵀ)⁻¹C`. `C` is nonlinear, so
+   *    this is a Newton step and it iterates.
+   * 2. **Velocity.** `J` moved with `q`, so the velocity is re-projected at the
+   *    new pose -- the same correction `getInitialStateMap` already applies.
+   *
+   * **Why it needs no constants.** It applies no force. It relocates the state,
+   * so there is no stiffness to interact with the integrator, nothing to
+   * resonate, and nothing to critically damp. Baumgarte's `α` and `β` are a
+   * spring on the violation, and a spring has to be scaled against masses and
+   * step size -- which is why they need retuning per rig and per `deltaTime`.
+   * `tolerance` and `maxIterations` here are convergence knobs: they change how
+   * precisely the state lands on the manifold, not where the manifold is.
+   *
+   * **Cost.** At least one position solve plus one velocity solve per call,
+   * even on a state already on the manifold -- there is no cheap way to ask
+   * "is `C` small?" that does not need the very scale reasoning the
+   * convergence test below avoids. Newton is quadratic, so a state near the
+   * manifold takes the one iteration and stops.
+   *
+   * **A singular `J` skips rather than throws.** A chain pulled taut is
+   * collinear, which is exactly when `Jg⁻¹Jᵀ` loses rank -- and a hard-driven
+   * rope is exactly when that happens. Refusing to step would turn the
+   * stabilizer into a crash in the one configuration it was added for, so an
+   * unsolvable step leaves the state alone and the next one tries again.
+   */
+  getStabilizedState(
+    stateMap: StateMap,
+    {
+      tolerance = CONSISTENCY_RELATIVE_TOLERANCE,
+      maxIterations = 4,
+    }: StabilizationOptions = {},
+  ): StateMap {
+    if (!this.constraints.length) {
+      return stateMap;
+    }
+
+    let q = this.sortedFrames.map(
+      (frame) => mapGet(stateMap, frame.id, 'state')[0],
+    );
+    const qd = this.sortedFrames.map(
+      (frame) => mapGet(stateMap, frame.id, 'state')[1],
+    );
+    const stateFrom = (positions: readonly number[]): StateMap =>
+      new Map(
+        this.sortedFrames.map((frame, index): [FrameId, State] => [
+          frame.id,
+          [at(positions, index, 'position'), at(qd, index, 'velocity')],
+        ]),
+      );
+
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
+      const ctx = this.getConfigKinematics(stateFrom(q));
+      const rows = this.constraints.flatMap((constraint) =>
+        constraint.jacobianRows(ctx),
+      );
+      const value = this.constraints.flatMap((constraint) =>
+        constraint.value(ctx),
+      );
+
+      let correction: number[];
+      try {
+        correction = this._solveMetricCorrection(stateFrom(q), rows, value);
+      } catch {
+        // Taut, or otherwise rank-deficient. Leave the state where it is and
+        // let the next step try again from a pose that has moved off the
+        // singularity.
+        return iteration === 0 ? stateMap : stateFrom(q);
+      }
+
+      q = q.map((entry, index) => entry - at(correction, index, 'correction'));
+      // Convergence is tested on the correction rather than on `C`, and
+      // per-coordinate rather than across the vector. Both for the same reason:
+      // neither `C` nor `q` has one unit. `C` is a length for a
+      // `CoincidenceConstraint` and a length *squared* for a
+      // `DistanceConstraint`, so a single threshold on `max|C|` means something
+      // different per constraint type; and `q` mixes a `TrackFrame`'s metres
+      // with a `RotationalFrame`'s radians. Comparing each correction against
+      // its own coordinate keeps every comparison in one unit -- and the floor
+      // of 1 keeps a coordinate sitting near zero from being asked for
+      // exactness that has nothing to do with how well the constraint holds.
+      if (
+        correction.every(
+          (entry, index) =>
+            Math.abs(entry) <=
+            tolerance * Math.max(Math.abs(at(q, index, 'position')), 1),
+        )
+      ) {
+        break;
+      }
+    }
+
+    let projected: number[];
+    try {
+      projected = this._getProjectedVelocities(stateFrom(q), this.constraints);
+    } catch {
+      return stateFrom(q);
+    }
+
+    return new Map(
+      this.sortedFrames.map((frame, index): [FrameId, State] => [
+        frame.id,
+        [at(q, index, 'position'), at(projected, index, 'projected velocity')],
+      ]),
     );
   }
 

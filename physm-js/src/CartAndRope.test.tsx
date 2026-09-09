@@ -1,4 +1,5 @@
 import CartAndRope, { ARC, CART_FRAME_ID, RIG } from './CartAndRope';
+import JsSolver from './JsSolver';
 import Scene from './react/Scene';
 import { render } from '@testing-library/react';
 import type CoreScene from './Scene';
@@ -182,5 +183,79 @@ describe('CartAndRope', () => {
         loop.localPosition2,
       ).distance,
     ).toBeCloseTo(0, 9);
+  });
+});
+
+describe('CartAndRope under drive', () => {
+  // The demo's own step size, and roughly its arrow-key force. Both are stated
+  // here rather than imported: `App` deliberately keeps the force with the
+  // controls instead of the rig, and the step size belongs to its animation
+  // loop. What the numbers have to be is "what a person playing the demo
+  // actually produces", not any particular literal -- the drift below is a
+  // property of driving this rig hard, not of these two constants.
+  const DELTA_TIME = 1.5 / 600;
+  const DRIVE_FORCE = 8500;
+
+  /** How far apart the two chain tips have drifted, in scene lengths. */
+  function gap(scene: CoreScene, solver: JsSolver): number {
+    const ctx = scene.getConfigKinematics(solver.getStateMap());
+
+    return Math.hypot(
+      ...scene.constraints.flatMap((constraint) => constraint.value(ctx)),
+    );
+  }
+
+  /**
+   * Ten seconds of the cart being shoved back and forth at 0.35 Hz.
+   *
+   * Not an arbitrary number and not idling. Left alone, this rig drifts by
+   * about 2.5e-7 over thirty seconds, and so does every rig -- steady state is
+   * easy mode, and measuring it is how a stabilizer gets declared unnecessary.
+   * Driven, the drift depends sharply on *how* it is driven: a slow shove gives
+   * 4e-2, key-mashing at 2 Hz gives 2e-4, and a square wave near 0.35 Hz -- the
+   * frequency that walks the pendulum round and round, the way a cart-pole is
+   * swung up by hand -- gives four orders more than either.
+   */
+  function drive(solver: JsSolver): void {
+    for (let step = 0; step < Math.round(10 / DELTA_TIME); step++) {
+      const sign =
+        Math.sin(2 * Math.PI * 0.35 * step * DELTA_TIME) >= 0 ? 1 : -1;
+      solver.tick(
+        DELTA_TIME,
+        1,
+        new Map([[CART_FRAME_ID, sign * DRIVE_FORCE]]),
+      );
+    }
+  }
+
+  test('the resonant drive separates the two chains', () => {
+    // The visible symptom, and the reason there is a stabilizer at all: after a
+    // minute of play the demo shows a gap where the two ropes are supposed to
+    // join. This reproduces it in ten seconds.
+    //
+    // Measured: 4.7e-2, against a segment length of about 1.4 -- a few percent
+    // of a segment, which is small on paper and plainly visible on screen. It
+    // is also unbounded, growing with how long the drive runs.
+    const scene = assemble();
+    const solver = new JsSolver(scene, { rungeKutta: true });
+
+    expect(gap(scene, solver)).toBeLessThan(1e-9);
+
+    drive(solver);
+
+    expect(gap(scene, solver)).toBeGreaterThan(1e-2);
+  });
+
+  test('stabilization holds them together through it', () => {
+    // The acceptance target for the stabilizer, on the rig that motivated it
+    // and under the drive that breaks it. Measured: 2.2e-14 -- twelve orders
+    // below the bound above, and at the noise floor of a length computed from
+    // float64 coordinates of order 10.
+    const scene = assemble();
+    const solver = new JsSolver(scene, { rungeKutta: true, stabilize: true });
+
+    drive(solver);
+
+    expect(gap(scene, solver)).toBeLessThan(1e-9);
   });
 });

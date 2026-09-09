@@ -132,12 +132,14 @@ function getConstrainedSolver({
   rungeKutta = false,
   spacingOffset = 0,
   elbow = false,
+  stabilize = false,
 }: {
   kind: ConstraintKind;
   seed?: number;
   rungeKutta?: boolean;
   spacingOffset?: number;
   elbow?: boolean;
+  stabilize?: boolean;
 }) {
   // A non-zero `spacingOffset` moves the poles apart without telling the
   // constraint, which is how a scene gets a deliberate `C₀ ≠ 0`.
@@ -151,7 +153,7 @@ function getConstrainedSolver({
     // by default.
     allowInitialViolation: spacingOffset !== 0,
   });
-  return new JsSolver(scene, { rungeKutta });
+  return new JsSolver(scene, { rungeKutta, stabilize });
 }
 
 describe('Constraint', () => {
@@ -293,9 +295,9 @@ describe('Constraint', () => {
       // `C₀` is deliberately non-zero. Conservation, not satisfaction, is the
       // property under test: a version of this that only checked `C ≈ 0` from
       // a consistent start would pass unconditionally against an
-      // implementation that snapped `C` to zero every step -- and projection
-      // is one of the three stabilizers `docs/constraints.md` §7 lists, so
-      // that is a plausible future implementation rather than a strawman.
+      // implementation that snapped `C` to zero every step -- which is exactly
+      // what `stabilize: true` now does, so that is a live alternative
+      // implementation rather than a strawman.
       //
       // Float64 resolves the truncation error, so the *order* is asserted
       // rather than just a bound. Measured over a 16x range of step sizes,
@@ -431,6 +433,100 @@ describe('Constraint', () => {
       // so the assertion below is about linearity rather than about zero.
       expect(coarse).toBeGreaterThan(1);
       expect(fine / coarse).toBeCloseTo(1, 4);
+    });
+
+    test(`${kind.name}: stabilization pulls C to zero, where index-1 holds it`, () => {
+      // The counterpart to the two tests above, and the reason they are worth
+      // keeping. Both of those pin what happens with `stabilize` off: `C` is
+      // conserved, and a non-zero `Ċ₀` separates the rig linearly forever. That
+      // behaviour is a diagnostic -- it is what tells an inconsistent initial
+      // velocity apart from integration error -- so the stabilizer is opt-in,
+      // and this test is the other half of the switch.
+      //
+      // The rig starts *deliberately* violated: `spacingOffset: 1.5` moves the
+      // poles apart without telling the constraint, so `C₀` is 29.4 for
+      // `DistanceConstraint` (a length squared) and 8.41 for
+      // `CoincidenceConstraint` (a length). Projection does not merely stop
+      // that growing -- it reaches the manifold, from 29 units away.
+      const measure = (stabilize: boolean) => {
+        const solver = getConstrainedSolver({
+          kind,
+          rungeKutta: true,
+          spacingOffset: 1.5,
+          seed: 1,
+          elbow: true,
+          stabilize,
+        });
+        const constraint = solver.scene.constraints[0];
+        const readC = (): number[] =>
+          constraint.value(
+            solver._getConfigKinematics(solver.getStateMap()),
+          ) as number[];
+        const initial = Math.max(...readC().map(Math.abs));
+        for (let step = 0; step < 240; step++) {
+          solver.tick(2 / 240);
+        }
+
+        return { initial, final: Math.max(...readC().map(Math.abs)) };
+      };
+
+      const off = measure(false);
+      const on = measure(true);
+
+      // That the rig really did start off the manifold -- otherwise the
+      // stabilized run below would have nothing to do and would pass against an
+      // implementation that did nothing at all.
+      expect(off.initial).toBeGreaterThan(1);
+      expect(on.initial).toBe(off.initial);
+
+      // Unstabilized, the violation is still there two seconds later. Measured:
+      // 41.5 for `DistanceConstraint`, 20.3 for `CoincidenceConstraint` -- both
+      // grown, because `Ċ₀` is non-zero at `seed: 1`.
+      expect(off.final).toBeGreaterThan(1);
+
+      // Stabilized, it is gone to the last bit. Measured: 2.7e-15 and 1.8e-15.
+      expect(on.final).toBeLessThan(1e-10);
+    });
+
+    test(`${kind.name}: stabilization barely moves a rig already on the manifold`, () => {
+      // The cost side of the switch. A stabilizer that reached the manifold by
+      // dragging the rig around would pass the test above and be useless: what
+      // makes projection the metric-orthogonal one is that it applies the
+      // *smallest* correction the mass matrix admits, so on a trajectory that
+      // never left the manifold there is nearly nothing to apply.
+      //
+      // No `spacingOffset` and no elbow here, so the constraint holds at `t = 0`
+      // by construction and the only thing to correct is the integrator's own
+      // drift.
+      const trajectory = (stabilize: boolean): number[] => {
+        const solver = getConstrainedSolver({
+          kind,
+          rungeKutta: true,
+          seed: 1,
+          stabilize,
+        });
+        for (let step = 0; step < 240; step++) {
+          solver.tick(2 / 240);
+        }
+
+        return [...solver.getStateMap().values()].map((state) => state[0]);
+      };
+
+      const plain = trajectory(false);
+      const stabilized = trajectory(true);
+      const difference = Math.max(
+        ...plain.map((value, index) => Math.abs(value - stabilized[index]!)),
+      );
+
+      // The rig actually swung, so the comparison is between two trajectories
+      // rather than between two frozen poses.
+      expect(Math.max(...plain.map(Math.abs))).toBeGreaterThan(0.5);
+
+      // Measured: 2.9e-6 for `DistanceConstraint`, 1.2e-14 for
+      // `CoincidenceConstraint` -- which differ because there is that much
+      // drift to remove, not because the correction differs in kind. The bound
+      // is well under the swing above, which is the claim being made.
+      expect(difference).toBeLessThan(1e-4);
     });
 
     test(`${kind.name}: bias refuses a configuration-only context`, () => {
