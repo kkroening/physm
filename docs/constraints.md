@@ -368,7 +368,7 @@ at one step size, with nothing varying but the hand on the keyboard.
 
 **Confirmed in the running demo, not only headless.** Forty seconds of arrow-key drive at the same
 frequency, through `RsSolver` in a browser: the two chains end up `3.31` apart unstabilized — more
-than two segment lengths, and the rig is visibly broken — against `8.0 \times 10^{-13}` with the
+than two segment lengths, and the rig is visibly broken — against $`8.0 \times 10^{-13}`$ with the
 stabilizer on, at the same 23-odd pendulum revolutions and with the frame rate pinned to the
 display's 120 Hz throughout.
 
@@ -476,7 +476,7 @@ is indistinguishable from the bug it was added to fix, and measured, that is exa
 
 #### What became of the four seams
 
-**Three seams keep these addable without rework:**
+**Four seams keep these addable without rework:**
 
 1. **`Constraint` exposes `value`, `jacobian_rows` and `bias` separately.** Baumgarte needs
    `value` and $`\dot C`$; projection needs `value` and `jacobian_rows` evaluated at a *new* $q$.
