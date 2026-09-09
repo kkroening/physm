@@ -339,8 +339,8 @@ concluding anything about numerical drift.
 | **GGL** — carry velocity-level multipliers, enforcing $`C = 0`$ and $`\dot C = 0`$ explicitly | System shape | No tuning; larger system |
 
 `physm-js` implements the projection row, as `Scene.getStabilizedState`, behind a `stabilize` flag
-on `Solver` that defaults to **off**. The rest of this section records why that row, what it cost,
-and what the flag is for.
+on `Solver` that defaults to **on**. The rest of this section records why that row, what it cost,
+and why it is still a flag.
 
 #### Why projection, and not the tuned alternatives
 
@@ -433,18 +433,8 @@ correct for a minute and then comes apart — quiet, slow, and indistinguishable
 mistake, which is the bug report the stabilizer was written for. Stabilizing a scene that did not
 need it costs a solve per step and is visible in a profile.
 
-The diagnostic survives that, because a default is the wrong place to keep it. The handful of tests
-that rely on the unstabilized behaviour now say `stabilize: false` in as many words, which is more
-legible than inheriting it *and* immune to the default moving again. The deciding case is the one
-that does not exist yet: an interactive builder assembles rigs with nobody to know the flag exists,
-and *"the author must opt in to the constraints holding"* is a worse contract than *"the author must
-opt out to measure the drift"*.
-
-⚠️ **The default costs `RsSolver` its batched path.** Stabilizing means crossing into wasm once per
-step rather than handing the whole `tickCount` over, so the demo now pays a boundary crossing per
-step by default. That is the trade until [0012](issues/0012.md) puts the stabilizer on the Rust
-side; it was measured at about 2× wall clock on this rig, and correctness by default is the right
-side of it. Settled in [0013](issues/0013.md).
+Turning it off is how the diagnostic is reached, and the tests that rely on it say `stabilize: false`
+rather than inheriting it.
 
 #### Scale, and why the convergence test is on the correction
 

@@ -122,13 +122,9 @@ function describeCrossValidation(
       return await import('../../physm-rs/nodepkg/physm_rs.js');
     }
 
-    // Every arm pins `stabilize: false`, and not because stabilizing breaks the
-    // comparison -- measured, it leaves the two implementations agreeing to
-    // 1.4e-12 against 1.7e-13, both float64 noise. It is that this suite exists
-    // to compare the two *integrators*, and the stabilizer is one piece of
-    // TypeScript both of them call, so including it can only add arithmetic
-    // neither side does differently. Explicit rather than inherited, since the
-    // default has already moved once (`docs/issues/0013.md`).
+    // `stabilize: false` on every arm, stated rather than inherited: this suite
+    // compares the two *integrators*, and the stabilizer is one piece of
+    // TypeScript both of them call.
     const solverInfos = [
       {
         name: 'JsSolver with rungeKutta=false',

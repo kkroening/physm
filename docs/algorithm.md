@@ -404,10 +404,10 @@ into a coincidence constraint between the two candidate poses.
 
 **Stabilization** is now built, in `physm-js` only: `Scene.getStabilizedState` projects the
 state back onto the constraint manifold after each step, behind a `stabilize` flag on `Solver`
-that defaults to off. Unstabilized the formulation is still index-1 — it holds $`\ddot C`$ at
-zero, so $`C(t) = C_0 + \dot C_0 t`$ exactly, and any inconsistency in the initial conditions
-is a gap that never closes while floating-point error accumulates linearly on top of it. That
-is why an *unstabilized* scene has to start consistent and stay short.
+that defaults to on. Turned off, the formulation is index-1 — it holds $`\ddot C`$ at zero,
+so $`C(t) = C_0 + \dot C_0 t`$ exactly, and any inconsistency in the initial conditions is a
+gap that never closes while floating-point error accumulates linearly on top of it. That is
+why a scene that opts out has to start consistent and stay short.
 [`constraints.md` §7](constraints.md#7-drift-and-how-it-gets-fixed) records why post-step
 projection was chosen over Baumgarte feedback and the GGL formulation, and what it costs.
 `physm-rs` has no stabilizer of its own; `RsSolver` reaches the JavaScript one by stepping one
