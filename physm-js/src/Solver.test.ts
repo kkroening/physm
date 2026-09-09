@@ -262,11 +262,10 @@ describe('stabilization', () => {
     return violation(solver);
   }
 
-  // Both classes, because they stabilize by different routes and the point of
-  // putting `applyStabilization` on the base class is that they should not be
-  // able to disagree. `JsSolver` integrates in TypeScript and corrects inside
-  // its own loop; `RsSolver` hands `tickCount` to wasm, so stabilizing forces
-  // it to step one at a time and cross the boundary per step.
+  // Both classes, because they now stabilize by *different code*: `JsSolver`
+  // corrects in TypeScript inside its own loop, `RsSolver` in Rust inside the
+  // wasm tick loop. Nothing structural stops those two from disagreeing, so the
+  // agreement is a thing to test rather than a thing to assume.
   const solverKinds = [
     {
       name: 'JsSolver',
@@ -338,6 +337,50 @@ describe('stabilization', () => {
         [...b].map(([id, [q, qd]]) => [id, q, qd]),
       );
     }
+  });
+
+  test('the two stabilizers hold a driven rig to the same trajectory', async () => {
+    // The agreement between two *implementations* of projection, one in
+    // TypeScript and one in Rust, on a rig driven hard enough that the
+    // stabilizer is doing continuous work rather than nothing.
+    //
+    // The cross-validation suite above cannot cover this: it pins
+    // `stabilize: false` on every arm precisely so it compares integrators.
+    const js = new JsSolver(getRopeScene(), { rungeKutta: true });
+    const rs = new RsSolver(getRopeScene(), await loadRsWasmModule(), {
+      rungeKutta: true,
+    });
+
+    expect(js.stabilize).toBe(true);
+    expect(rs.stabilize).toBe(true);
+
+    const deltaTime = 1 / 400;
+    let worst = 0;
+    for (let step = 0; step < Math.round(10 / deltaTime); step++) {
+      const sign =
+        Math.sin(2 * Math.PI * 0.35 * step * deltaTime) >= 0 ? 1 : -1;
+      const force = new Map([['cart', sign * 600]]);
+      js.tick(deltaTime, 1, force);
+      rs.tick(deltaTime, 1, force);
+      const a = js.getStateMap();
+      const b = rs.getStateMap();
+      for (const [frameId, [q]] of a) {
+        worst = Math.max(worst, Math.abs(q - b.get(frameId)![0]));
+      }
+    }
+
+    // The rig moved, so this is two trajectories rather than two rigs at rest.
+    expect(
+      Math.max(
+        ...[...js.getStateMap()].map(([frameId, [q]]) =>
+          Math.abs(q - getRopeScene().getInitialStateMap().get(frameId)![0]),
+        ),
+      ),
+    ).toBeGreaterThan(0.1);
+
+    expect(worst).toBeLessThan(1e-8);
+    expect(violation(js)).toBeLessThan(1e-10);
+    expect(violation(rs)).toBeLessThan(1e-10);
   });
 
   solverKinds.forEach((kind) => {

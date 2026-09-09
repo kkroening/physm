@@ -64,12 +64,12 @@ export default class Solver {
   }
 
   /**
-   * Apply the stabilizer, if this solver has one.
+   * Apply the stabilizer, for a solver that integrates on this side.
    *
-   * Here rather than in each integrator because it needs only `getStateMap` and
-   * `setStateMap`, which every solver has -- so the JavaScript and Rust
-   * integrators get the same correction from the same code, rather than two
-   * implementations that could disagree.
+   * `JsSolver` calls this per step. `RsSolver` does not: `physm-rs` runs the
+   * same projection inside its own tick loop, so its `tickCount` still crosses
+   * the wasm boundary once. The two are held to the same trajectory by
+   * cross-validation rather than by sharing code.
    */
   applyStabilization(): void {
     if (this.stabilize) {

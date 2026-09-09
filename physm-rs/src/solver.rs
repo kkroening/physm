@@ -14,6 +14,12 @@ use crate::Vec3;
 pub struct Solver {
     pub scene: Scene,
     pub runge_kutta: bool,
+    /// Whether to project the state back onto the constraint manifold after each
+    /// step. On by default, matching `Solver` in `physm-js` -- an unstabilized rig
+    /// looks correct for a minute and then comes apart, which is quiet and looks
+    /// like a modelling mistake, while stabilizing a scene that did not need it
+    /// costs a solve per step and shows up in a profile. See `stabilize_mut`.
+    pub stabilize: bool,
 }
 
 type FrameIndex = usize;
@@ -618,6 +624,241 @@ fn solve(
     solution.as_slice()[..frames.len()].to_vec()
 }
 
+/// The relative tolerance the Newton iteration converges to, matching
+/// `CONSISTENCY_RELATIVE_TOLERANCE` in `physm-js`.
+const STABILIZATION_TOLERANCE: f64 = 1e-5;
+
+/// How many Newton steps the position half takes before giving up on this tick.
+const STABILIZATION_MAX_ITERATIONS: usize = 4;
+
+/// The mass matrix `g` at a configuration, without the rest of the system.
+///
+/// `get_system_of_equations` builds this on its way to the augmented matrix and
+/// then builds `f`, the constraint blocks and both velocity-dependent sweeps on
+/// top. Projection wants only `g`, at trial configurations no solve was run at.
+fn get_mass_matrix(
+    frames: &[&FrameBox],
+    index_path_map: &FrameIndexPathMap,
+    pos_mats: &[Mat3],
+    vel_mats: &[Mat3],
+) -> CoefficientMatrix {
+    let weight_offsets = get_weight_offsets(frames);
+    let weight_pos_vecs = get_weight_pos_vecs(frames, pos_mats);
+    let composite_moment_mats =
+        get_composite_moment_mats(frames, index_path_map, &weight_offsets, &weight_pos_vecs);
+    get_coefficient_matrix(frames, index_path_map, vel_mats, &composite_moment_mats)
+}
+
+/// Every constraint's rows, stacked, at one configuration.
+fn get_jacobian_rows(
+    frames: &[&FrameBox],
+    index_path_map: &FrameIndexPathMap,
+    constraints: &[ConstraintBox],
+    constraint_frame_indices: &[(FrameIndex, FrameIndex)],
+    pos_mats: &[Mat3],
+    vel_mats: &[Mat3],
+) -> (Vec<Vec<f64>>, Vec<f64>) {
+    let frame_count = frames.len();
+    let mut rows = Vec::new();
+    let mut values = Vec::new();
+    for (constraint, &(index_a, index_b)) in constraints.iter().zip(constraint_frame_indices) {
+        let ctx = ConstraintCtx {
+            frame_count,
+            index_a,
+            index_b,
+            path_a: &index_path_map[&index_a],
+            path_b: &index_path_map[&index_b],
+            pos_mats,
+            vel_mats,
+            // Configuration-only, which is the whole point of seam 4: `value` and
+            // `jacobian_rows` never read these, and a `Some` here would be a claim
+            // that velocities belonging to some other configuration are valid at
+            // this one.
+            vel_sum_mats: None,
+            accel_sum_mats: None,
+        };
+        rows.extend(constraint.jacobian_rows(&ctx));
+        values.extend(constraint.value(&ctx));
+    }
+    (rows, values)
+}
+
+/// `g⁻¹Jᵀ(Jg⁻¹Jᵀ)⁻¹ r` — the correction both halves of projection are built from.
+///
+/// Feed it `J q̇` and subtracting the result makes a velocity consistent; feed it
+/// `C` and subtracting the result is one Newton step toward `C = 0`. Same `g`,
+/// same gram matrix, same solve — only the right-hand side differs.
+///
+/// `None` when the gram matrix is singular, which is what a collinear (taut) chain
+/// produces. Mirrors `Scene._solveMetricCorrection` in `physm-js`.
+fn solve_metric_correction(
+    mass_matrix: &CoefficientMatrix,
+    rows: &[Vec<f64>],
+    residual: &[f64],
+) -> Option<Vec<f64>> {
+    let frame_count = mass_matrix.nrows();
+    let row_count = rows.len();
+    // One factorization of `g` serves every row; re-factorizing per row would be
+    // `m` times the work for the same answer.
+    let mass_lu = mass_matrix.clone().lu();
+    let mut inv_mass_jt = Vec::with_capacity(row_count);
+    for row in rows {
+        inv_mass_jt.push(mass_lu.solve(&ForceVector::from_row_slice(row))?);
+    }
+    let mut gram = CoefficientMatrix::zeros(row_count, row_count);
+    for (i, row) in rows.iter().enumerate() {
+        for (j, column) in inv_mass_jt.iter().enumerate() {
+            gram[(i, j)] = row.iter().zip(column.iter()).map(|(a, b)| a * b).sum();
+        }
+    }
+    let lambda = gram.lu().solve(&ForceVector::from_row_slice(residual))?;
+    let mut correction = vec![0.0; frame_count];
+    for (row, column) in inv_mass_jt.iter().enumerate() {
+        for (index, entry) in correction.iter_mut().enumerate() {
+            *entry += column[index] * lambda[row];
+        }
+    }
+    Some(correction)
+}
+
+/// Pull the state back onto the constraint manifold, in place.
+///
+/// The Rust half of the projection stabilizer `docs/constraints.md` §7 describes,
+/// and the reason `RsSolver` no longer has to give up its batched path to
+/// stabilize: correcting here means the whole `tickCount` still crosses the wasm
+/// boundary once.
+///
+/// Two halves, both `solve_metric_correction`:
+///
+/// 1. **Position.** `J Δq = −C` is underdetermined, and the metric minimum-norm
+///    solution is `Δq = −g⁻¹Jᵀ(Jg⁻¹Jᵀ)⁻¹C`. `C` is nonlinear, so this iterates.
+/// 2. **Velocity.** `J` moved with `q`, so `q̇` is re-projected at the new pose.
+///
+/// A singular gram matrix skips rather than panicking — a taut chain is collinear,
+/// which is exactly when `Jg⁻¹Jᵀ` loses rank, and a hard-driven rope is exactly
+/// when a chain goes taut. What a skip leaves behind is three cases, matching
+/// `Scene.getStabilizedState`: singular on the first Newton step leaves the state
+/// untouched; singular later keeps the positions already corrected with the
+/// incoming velocities; singular only in the velocity half does the same.
+fn stabilize_mut(
+    frames: &[&FrameBox],
+    index_path_map: &FrameIndexPathMap,
+    constraints: &[ConstraintBox],
+    constraint_frame_indices: &[(FrameIndex, FrameIndex)],
+    states: &mut [State],
+) {
+    if constraints.is_empty() {
+        return;
+    }
+    let frame_count = frames.len();
+    let row_count: usize = constraints.iter().map(|c| c.row_count()).sum();
+    // Up front, and by row count rather than by a failed solve: an over-determined
+    // scene also produces a singular gram, so without this it would reach the skip
+    // below wearing the taut chain's costume and be skipped silently forever.
+    assert!(
+        row_count <= frame_count,
+        "scene is over-determined: {} constraint rows against {} coordinates; \
+         some of these constraints cannot hold at the same time",
+        row_count,
+        frame_count,
+    );
+
+    let mut trial: Vec<State> = states.to_vec();
+    for iteration in 0..STABILIZATION_MAX_ITERATIONS {
+        let (pos_mats, vel_mats) = get_config_kinematics(frames, index_path_map, &trial);
+        let (rows, values) = get_jacobian_rows(
+            frames,
+            index_path_map,
+            constraints,
+            constraint_frame_indices,
+            &pos_mats,
+            &vel_mats,
+        );
+        let mass_matrix = get_mass_matrix(frames, index_path_map, &pos_mats, &vel_mats);
+        let correction = match solve_metric_correction(&mass_matrix, &rows, &values) {
+            Some(correction) => correction,
+            // Nothing has moved yet on the first iteration, so the input stands;
+            // later, the positions already corrected are kept and the velocities
+            // are left to the next tick. Re-projecting them here would solve at the
+            // same `q` that just defeated the position solve, and fail identically.
+            None => {
+                if iteration > 0 {
+                    for (state, corrected) in states.iter_mut().zip(trial.iter()) {
+                        state.q = corrected.q;
+                    }
+                }
+                return;
+            }
+        };
+        for (state, entry) in trial.iter_mut().zip(correction.iter()) {
+            state.q -= entry;
+        }
+        // Per coordinate, against that coordinate's own magnitude: `q` mixes a
+        // `TrackFrame`'s metres with a `RotationalFrame`'s radians, so one
+        // threshold across the vector would mean different things in different
+        // entries. The floor of 1 keeps a coordinate near zero from being asked for
+        // exactness that says nothing about how well the constraint holds.
+        let converged = correction
+            .iter()
+            .zip(trial.iter())
+            .all(|(entry, state)| entry.abs() <= STABILIZATION_TOLERANCE * state.q.abs().max(1.0));
+        if converged {
+            break;
+        }
+    }
+
+    for (state, corrected) in states.iter_mut().zip(trial.iter()) {
+        state.q = corrected.q;
+    }
+
+    // The velocity half, at the settled pose.
+    let (pos_mats, vel_mats) = get_config_kinematics(frames, index_path_map, states);
+    let (rows, _) = get_jacobian_rows(
+        frames,
+        index_path_map,
+        constraints,
+        constraint_frame_indices,
+        &pos_mats,
+        &vel_mats,
+    );
+    let qd: Vec<f64> = states.iter().map(|state| state.qd).collect();
+    let residual: Vec<f64> = rows
+        .iter()
+        .map(|row| row.iter().zip(qd.iter()).map(|(a, b)| a * b).sum())
+        .collect();
+    // `J q̇` is a sum of signed terms, so what makes a residual meaningful is how
+    // much cancellation produced it, not how big it is. An absolute threshold
+    // would be a length squared in disguise for a `DistanceConstraint`, which is
+    // the unit-dependence the metric correction exists to avoid.
+    let term_scale = rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .zip(qd.iter())
+                .map(|(entry, velocity)| (entry * velocity).abs())
+                .sum::<f64>()
+        })
+        .fold(f64::NEG_INFINITY, f64::max);
+    let worst = residual
+        .iter()
+        .map(|entry| entry.abs())
+        .fold(f64::NEG_INFINITY, f64::max);
+    // Already consistent -- don't perturb it with a needless solve. This early-out
+    // is load-bearing for agreement with `physm-js`, not an optimization:
+    // measured, correcting unconditionally here diverges from the TypeScript
+    // implementation by 3.7e-8 after two seconds of driving, against 7.1e-15 for
+    // the unstabilized pair.
+    if term_scale == 0. || worst <= STABILIZATION_TOLERANCE * term_scale {
+        return;
+    }
+    let mass_matrix = get_mass_matrix(frames, index_path_map, &pos_mats, &vel_mats);
+    if let Some(correction) = solve_metric_correction(&mass_matrix, &rows, &residual) {
+        for (state, entry) in states.iter_mut().zip(correction.iter()) {
+            state.qd -= entry;
+        }
+    }
+}
+
 fn tick_simple_mut(
     frames: &[&FrameBox],
     index_path_map: &FrameIndexPathMap,
@@ -723,6 +964,7 @@ impl Solver {
         Self {
             scene: scene,
             runge_kutta: true,
+            stabilize: true,
         }
     }
 
@@ -754,6 +996,19 @@ impl Solver {
                 states,
                 external_forces,
                 delta_time,
+            );
+        }
+        // Per step, not per batch: drift is injected by each step, so correcting
+        // once per `tick_count` would let it accumulate across however many steps
+        // a caller happened to ask for -- a different amount of stabilization for
+        // the same physics.
+        if self.stabilize {
+            stabilize_mut(
+                &frames,
+                &index_path_map,
+                constraints,
+                &constraint_frame_indices,
+                states,
             );
         }
     }
@@ -2008,7 +2263,12 @@ mod tests {
                     .into_iter()
                     .fold(Scene::new(), |scene, frame| scene.add_frame(frame))
                     .add_constraint(make());
-                let solver = Solver::new(scene);
+                // Explicitly unstabilized: this test is *about* the index-1
+                // behaviour, which the stabilizer removes by design.
+                let solver = Solver {
+                    stabilize: false,
+                    ..Solver::new(scene)
+                };
                 let external_forces = vec![0.; frames.len()];
                 let delta_time = 2. / steps as f64;
                 let mut worst: f64 = 0.;

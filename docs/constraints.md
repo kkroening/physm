@@ -498,13 +498,11 @@ is indistinguishable from the bug it was added to fix, and measured, that is exa
    RK4 stage. `tick_runge_kutta_mut` currently owns the whole update inline, and retrofitting a
    hook into the integrator later is the most expensive of these to defer.
 
-   ↩️ **Not taken, and it turned out not to be needed.** Correction needs only `getStateMap` and
-   `setStateMap`, so the hook sits on `Solver` — above both integrators rather than inside either —
-   and the JavaScript and Rust paths get the same correction from the same code instead of two
-   implementations that could disagree. The cost is that `RsSolver` normally hands `tickCount`
-   straight to wasm and integrates the whole batch without crossing back; stabilizing forces it to
-   step one at a time, because correcting once per batch would be a different amount of
-   stabilization for the same physics depending on what a caller passed.
+   ✅ Held in both, and each integrator carries its own. `physm-js` puts it on `Solver`, above both
+   integrators, since correcting there needs only `getStateMap` and `setStateMap`; `physm-rs` puts
+   it at the end of `tick_mut`, so a batched `tickCount` still crosses the wasm boundary once. Each
+   runs *per step* rather than per batch, because correcting once per batch would be a different
+   amount of stabilization for the same physics depending on what a caller passed.
 4. **The kinematic sweeps are callable as a function of $q$ alone.** Seam 1 makes the methods
    reachable but not *evaluable*: projection's Newton iteration evaluates `value` and
    `jacobian_rows` at trial $q$ values no solve was run at, which needs sweeps 1, 1′ and 2 re-run
@@ -513,21 +511,39 @@ is indistinguishable from the bug it was added to fix, and measured, that is exa
    projection does not want. Extract them, have `get_system_of_equations` call the extraction, and
    let `value`/`jacobian_rows` take its output as a parameter.
 
-   ✅ Held, in `physm-js`, as `Scene.getConfigKinematics`. Not done in `physm-rs`, which needs it
-   only if the stabilizer is ever ported there.
+   ✅ Held in both — `Scene.getConfigKinematics` and `get_config_kinematics`. It is the seam
+   projection genuinely could not do without: every Newton step evaluates `value` and
+   `jacobian_rows` at a configuration no solve was run at, and `ConstraintCtx`'s velocity fields are
+   optional for exactly that reason.
 
    **Seams 3 and 4 land together or neither is worth anything**: a post-step hook with no way to
    evaluate the constraint at a trial configuration is a hook with nothing to call.
 
-   That prediction held in the direction that mattered — seam 4 was the one projection could not
-   do without — while seam 3 dissolved, because the hook did not have to be *in* the integrator.
+#### Two implementations, held together by test
 
-#### Still open
+`physm-js` and `physm-rs` each carry the whole projection, and nothing structural stops them from
+disagreeing — so a cross-validation drives the rope rig at its resonant frequency for ten seconds
+and pins the two trajectories to each other.
 
-The stabilizer is TypeScript only. `RsSolver` reaches it by stepping one at a time and correcting
-from the JavaScript side, which works and is measurably slower than the batched path; a
-`physm-rs`-side implementation would need seam 4 extracted there. Filed as
-[0012](issues/0012.md).
+That test earned its place immediately. The velocity half skips its solve when `J q̇` is already
+within tolerance of zero, relative to how much cancellation produced the residual; the first Rust
+version corrected unconditionally instead, which looks like a harmless extra correction and is not.
+Measured, the two implementations drifted apart by $`3.7 \times 10^{-8}`$ after two seconds and
+$`5.4 \times 10^{-5}`$ after ten, against $`7.1 \times 10^{-15}`$ and $`9.5 \times 10^{-12}`$ for
+the same pair unstabilized. With the early-out ported, the stabilized pair agrees to
+$`4.6 \times 10^{-12}`$ — the same order as the unstabilized one, which is what says the remaining
+difference is float64 rounding rather than physics.
+
+**The Rust side is what lets `RsSolver` keep its batched path.** Correcting inside the wasm tick
+loop means a whole `tickCount` still crosses the boundary once. On the demo rig, 10 000 steps:
+
+| | unstabilized | stabilized |
+| --- | --- | --- |
+| correcting from TypeScript, per step | 347 ms | 726 ms |
+| correcting in Rust | 359 ms | 402 ms |
+
+So stabilization costs about 1.15× rather than 2.1×, and batching no longer changes the answer —
+`tickCount` of 100 and 100 ticks of 1 leave the rig in the same state either way.
 
 ## 8. What the solver has to tolerate
 
