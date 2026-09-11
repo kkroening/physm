@@ -346,12 +346,9 @@ describe('insertion, a component that keeps a place for children', () => {
     });
   });
 
-  test('a place passed on through a nested instance holds to where it ends up', () => {
-    // A rig whose place for children is among its pendulum's children: what
-    // a rig is given goes where the pendulum keeps its place -- at the top of
-    // its body, under the root's rules.
-    const placed = withPlace(true);
-    const doc: SceneDocument = {
+  test('a place passed on through a nested instance is followed to where it ends up', () => {
+    /** The scene as one rig, whose place for children is among its pendulum's. */
+    const rigOver = (placed: SceneDocument): SceneDocument => ({
       ...placed,
       definitions: [
         ...placed.definitions.filter(({ name }) => name !== placed.root),
@@ -364,9 +361,17 @@ describe('insertion, a component that keeps a place for children', () => {
           body: [{ type: defined('Rig'), props: {}, children: [] }],
         },
       ],
-    };
+    });
 
-    expect(insertionPoint(doc, placed.root, [0])).toEqual({
+    // What a rig is given goes where the pendulum keeps its place: in its
+    // frame, under a frame's rules, or at the top of its body, under the
+    // root's.
+    expect(insertionPoint(rigOver(withPlace()), 'Scene', [0])).toEqual({
+      parent: [0],
+      index: 0,
+      holder: 'frame',
+    });
+    expect(insertionPoint(rigOver(withPlace(true)), 'Scene', [0])).toEqual({
       parent: [0],
       index: 0,
       holder: 'root',

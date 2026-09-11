@@ -664,18 +664,25 @@ export function deletionRefusal(
   const holdsPlace = everyNode([nodeAt(doc, definition, path)]).some(
     ({ type }) => type.kind === 'children',
   );
-  const given = doc.definitions.some(({ body }) =>
-    everyNode(body).some(
-      ({ type, children }) =>
-        type.kind === 'defined' &&
-        type.name === definition &&
-        children.length > 0,
-    ),
-  );
+  // The bodies holding an instance given children, to say where to look.
+  const givers = doc.definitions
+    .filter(({ body }) =>
+      everyNode(body).some(
+        ({ type, children }) =>
+          type.kind === 'defined' &&
+          type.name === definition &&
+          children.length > 0,
+      ),
+    )
+    .map(({ name }) => name);
+  const where =
+    givers.length > 1
+      ? `${givers.slice(0, -1).join(', ')} and ${givers[givers.length - 1]}`
+      : givers[0];
 
-  return holdsPlace && given
-    ? `An instance of ${definition} holds children, which would then have ` +
-        'nowhere to go: delete them first.'
+  return holdsPlace && where
+    ? `An instance of ${definition} in ${where} holds children, which would ` +
+        'then have nowhere to go: delete them first.'
     : null;
 }
 

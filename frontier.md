@@ -9,8 +9,12 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 **Where a component's children hang.** A nested pendulum should hang from the
 bob, but the `Children` placeholder puts an instance's children at the origin
 of the frame it sits in -- for the pendulum, its pivot. The placeholder needs a
-position: a frame without a coordinate in the core, or an offset the builder
-applies to what sits in the placeholder -- Karl's call.
+position, and the starter pendulum keeps its own pivot offset in its body, so
+the place goes at `[4, 0.5]` for the next one's pivot to land on the bob.
+Either way the code writes a positioned element with no coordinate of its own
+around `{children}`, `<Mount position={[4, 0.5]}>`; what differs is who
+resolves it -- the core, as a frame without a coordinate, or the builder,
+folding the translation into what sits in it. Karl's call.
 
 ## Next — the MVP
 

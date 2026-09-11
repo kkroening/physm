@@ -564,8 +564,9 @@ describe("a component's place for children", () => {
   test('the place can be deleted unless an instance holds children', () => {
     const given = armGiven(nodesFrom(<TrackFrame id="slider" />));
 
-    expect(deletionRefusal(given, 'Arm', [0, 0])).toMatch(
-      /holds children, which would then have nowhere to go/,
+    expect(deletionRefusal(given, 'Arm', [0, 0])).toBe(
+      'An instance of Arm in Scene holds children, which would then have ' +
+        'nowhere to go: delete them first.',
     );
     // So can the frame it is in, which takes it along.
     expect(deletionRefusal(given, 'Arm', [0])).not.toBeNull();
@@ -594,6 +595,40 @@ describe("a component's place for children", () => {
     };
 
     expect(deletionRefusal(other, 'Arm', [0, 0])).toBeNull();
+
+    // An instance given children by passing on a place of its own is found in
+    // the body that holds it -- and so is one in the scene.
+    const passed: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        arm!,
+        {
+          name: 'Rig',
+          body: [
+            {
+              type: { kind: 'defined', name: 'Arm' },
+              props: {},
+              children: [PLACE],
+            },
+          ],
+        },
+        {
+          name: 'Scene',
+          body: [
+            { type: { kind: 'defined', name: 'Rig' }, props: {}, children: [] },
+            {
+              type: { kind: 'defined', name: 'Arm' },
+              props: {},
+              children: nodesFrom(<TrackFrame id="t" />),
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(deletionRefusal(passed, 'Arm', [0, 0])).toMatch(
+      /^An instance of Arm in Rig and Scene holds children/,
+    );
   });
 
   test('the place stays in its component, and its name is taken', () => {
