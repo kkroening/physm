@@ -15,7 +15,9 @@ export interface EmittedScene {
    *
    * Recorded while writing because it costs a few lines here and a search
    * afterwards cannot recover it -- two identical elements in one definition
-   * are indistinguishable by their text.
+   * are indistinguishable by their text. They index `source` exactly as
+   * written: formatting it on the way to the code pane would leave them
+   * pointing at the wrong characters.
    */
   readonly ranges: ReadonlyMap<string, readonly [number, number]>;
 }
@@ -68,10 +70,14 @@ function literal(value: unknown): string {
     return entries.length ? `{ ${entries.join(', ')} }` : '{}';
   }
 
-  // A function, a class instance, a ref: nothing a scene file can say.
+  // A function, a class instance: nothing a scene file can say.
+  const what =
+    typeof value === 'object'
+      ? 'An object that is not plain data'
+      : `A value of type ${typeof value}`;
   throw new Error(
-    `A ${typeof value} prop cannot be written as source. A scene document ` +
-      'holds plain data -- numbers, strings, flags, arrays and objects of them.',
+    `${what} cannot be written as source. A scene document holds plain ` +
+      'data -- numbers, strings, flags, arrays and objects of them.',
   );
 }
 
@@ -79,15 +85,25 @@ function literal(value: unknown): string {
  * One attribute, as JSX writes it.
  *
  * A string goes in quotes where it can -- `id="cart"` -- and in braces where it
- * cannot: a JSX string attribute has no escapes, so a quote, backslash or line
- * break inside one has to be an expression instead.
+ * cannot. A JSX string attribute has no backslash escapes, but it does decode
+ * character references, so `&amp;` written in one would be read back as `&`:
+ * a quote, an ampersand, a backslash or a line break has to be an expression.
  */
 function attribute(name: string, value: unknown): string {
   if (!PROP_NAME.test(name)) {
     throw new Error(`'${name}' cannot be written as a JSX attribute.`);
   }
 
-  return typeof value === 'string' && !/["\\\n\r]/.test(value)
+  // A ref is filled in by an effect. Written out, it would be a fresh object
+  // with the ref's contents at the moment of writing, not the ref.
+  if (name === 'ref') {
+    throw new Error(
+      'A ref cannot be written as source: it is filled in by an effect. ' +
+        'Name what it points at by id instead.',
+    );
+  }
+
+  return typeof value === 'string' && !/["&\\\n\r]/.test(value)
     ? `${name}="${value}"`
     : `${name}={${literal(value)}}`;
 }
@@ -121,12 +137,17 @@ function tagOf(type: ComponentRef): string {
 function writtenProps(node: DocNode): [string, unknown][] {
   const specs = node.type.kind === 'core' ? node.type.component.meta.props : {};
 
+  // `undefined` is absent to every component, and writing it would say
+  // something different under `exactOptionalPropertyTypes`.
   return Object.entries(node.props).filter(([name, value]) => {
     const spec = (specs as Record<string, { default?: unknown } | undefined>)[
       name
     ];
 
-    return !(spec && 'default' in spec && sameValue(spec.default, value));
+    return (
+      value !== undefined &&
+      !(spec && 'default' in spec && sameValue(spec.default, value))
+    );
   });
 }
 
@@ -159,7 +180,9 @@ function declarationOrder(doc: SceneDocument): Definition[] {
     if (seen === 'visiting') {
       throw new Error(
         `Components instantiate each other in a cycle: ` +
-          `${[...trail, name].join(' -> ')}.`,
+          // From where the cycle starts: the path that led into it is not
+          // part of it.
+          `${[...trail.slice(trail.indexOf(name)), name].join(' -> ')}.`,
       );
     }
 
@@ -186,16 +209,32 @@ function declarationOrder(doc: SceneDocument): Definition[] {
   return ordered;
 }
 
-/** The module's import lines. */
+/**
+ * The module's import lines -- refusing a name the module would bind twice.
+ *
+ * A definition named like an import would shadow it, so every tag in the file
+ * resolves to the definition: `tsc` refuses that module, and evaluated anyway
+ * it builds a different scene. Two different imported components under one
+ * name would collapse into one import.
+ */
 function importsOf(doc: SceneDocument): string[] {
   const core = new Set<string>();
-  const imported = new Set<string>();
+  const imported = new Map<string, unknown>();
   const collect = (nodes: readonly DocNode[]): void => {
     for (const node of nodes) {
       if (node.type.kind === 'core') {
         core.add(tagOf(node.type));
       } else if (node.type.kind === 'imported') {
-        imported.add(tagOf(node.type));
+        const name = tagOf(node.type);
+        const earlier = imported.get(name);
+        if (earlier !== undefined && earlier !== node.type.component) {
+          throw new Error(
+            `Two different imported components are both called '${name}', ` +
+              'and a module can import only one of them under that name.',
+          );
+        }
+
+        imported.set(name, node.type.component);
       }
 
       collect(node.children);
@@ -206,11 +245,44 @@ function importsOf(doc: SceneDocument): string[] {
     collect(definition.body);
   }
 
+  const importedAs = (name: string): string | null => {
+    if (core.has(name)) {
+      return 'a building block the module imports';
+    }
+
+    if (imported.has(name)) {
+      return `a component the module imports from './${name}'`;
+    }
+
+    return name === 'ReactElement' ? 'the type every component returns' : null;
+  };
+
+  for (const name of imported.keys()) {
+    if (core.has(name)) {
+      throw new Error(
+        `'${name}' is both a building block and an imported component, and ` +
+          'the module can import only one of them under that name.',
+      );
+    }
+  }
+
+  for (const { name } of doc.definitions) {
+    const clash = importedAs(name);
+    if (clash) {
+      throw new Error(
+        `'${name}' is both a component this scene defines and ${clash}. ` +
+          'Rename the component.',
+      );
+    }
+  }
+
   // An imported composite is written as a default import from a module of its
   // own name, which is this repo's convention -- one component per file, named
   // for it -- and so right for anything written to that convention.
   return [
-    ...[...imported].sort().map((name) => `import ${name} from './${name}';`),
+    ...[...imported.keys()]
+      .sort()
+      .map((name) => `import ${name} from './${name}';`),
     ...(core.size
       ? [`import { ${[...core].sort().join(', ')} } from './react';`]
       : []),
@@ -243,9 +315,20 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
   ): void => {
     const start = source.length;
     const tag = tagOf(node.type);
+    // A value that cannot be written says which one, and where it is.
+    const written = (name: string, value: unknown): string => {
+      try {
+        return attribute(name, value);
+      } catch (error) {
+        throw new Error(
+          `Cannot write '${name}' on <${tag}> at ${rangeKey(definition, path)}: ` +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      }
+    };
     const attributes = [
-      ...(node.key === undefined ? [] : [attribute('key', node.key)]),
-      ...writtenProps(node).map(([name, value]) => attribute(name, value)),
+      ...(node.key === undefined ? [] : [written('key', node.key)]),
+      ...writtenProps(node).map(([name, value]) => written(name, value)),
     ];
     const opening = [tag, ...attributes].join(' ');
 

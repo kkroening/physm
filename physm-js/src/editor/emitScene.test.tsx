@@ -5,6 +5,7 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import Box from './../react/Box';
 import CartAndRope from './../CartAndRope';
 import Circle from './../react/Circle';
+import Coincidence from './../react/Coincidence';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
@@ -14,8 +15,34 @@ import emitScene, { rangeKey } from './emitScene';
 import ts from 'typescript';
 import { documentFrom, elementOf, nodesFrom } from './sceneDocument';
 import type CoreScene from './../Scene';
+import type { DocNode, SceneDocument } from './sceneDocument';
 import type { ReactElement } from 'react';
-import type { SceneDocument } from './sceneDocument';
+
+/**
+ * An imported composite taking an object prop -- the one kind of value no
+ * building block has -- served to the evaluator as `./Gantry`.
+ */
+function Gantry({
+  span,
+}: {
+  span: { reach: number; 'lift-off': number };
+}): ReactElement {
+  return (
+    <RotationalFrame position={[0, span['lift-off']]}>
+      <Weight mass={1} position={[span.reach, 0]} />
+    </RotationalFrame>
+  );
+}
+
+/** `./Gantry` as `tsc` sees it: its type, for an emitted import to check against. */
+const GANTRY_MODULE = `import type { ReactElement } from 'react';
+
+export default function Gantry(_props: {
+  span: { reach: number; 'lift-off': number };
+}): ReactElement {
+  throw new Error('declared for type-checking only');
+}
+`;
 
 /**
  * The modules an emitted scene imports, as the evaluator hands them out.
@@ -28,14 +55,15 @@ const MODULES: Record<string, unknown> = {
   'react/jsx-runtime': jsxRuntime,
   './react': binding,
   './CartAndRope': cartAndRopeModule,
+  './Gantry': { default: Gantry },
 };
 
 /**
  * Compile an emitted module and run it, returning its default export.
  *
- * This is the half of the round trip the ordinary toolchain does -- the same
- * compiler the repo builds with, set to the repo's JSX transform -- so a module
- * that passes here is one that would build if pasted into `src/`.
+ * The same compiler the repo builds with, set to the repo's JSX transform. It
+ * parses and transforms and nothing more -- whether the module would also pass
+ * `tsc` is `typeCheck`'s question.
  */
 function evaluate(source: string): () => ReactElement {
   const { outputText, diagnostics } = ts.transpileModule(source, {
@@ -67,10 +95,83 @@ function evaluate(source: string): () => ReactElement {
   return module.exports.default as () => ReactElement;
 }
 
-/** A scene with frame ids replaced by position, plus its decals. */
+/**
+ * The repo's compiler settings, as CI's `tsc` reads them.
+ *
+ * Read through `ts.sys` rather than Node's own modules, which this suite's
+ * types do not include. Vitest runs from `physm-js`, where the config lives.
+ */
+const COMPILER_OPTIONS = ((): ts.CompilerOptions => {
+  const parsed = ts.getParsedCommandLineOfConfigFile(
+    `${ts.sys.getCurrentDirectory()}/tsconfig.json`,
+    undefined,
+    {
+      ...ts.sys,
+      onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
+        throw new Error(
+          ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+        );
+      },
+    },
+  );
+  if (!parsed) {
+    throw new Error('tsconfig.json could not be read');
+  }
+
+  return parsed.options;
+})();
+
+/**
+ * Type-check modules under the repo's settings, returning each diagnostic.
+ *
+ * They are served from memory as files in `src/`, so `./react` and
+ * `./CartAndRope` resolve to the real modules -- the check a module pasted into
+ * the repo would meet in CI.
+ */
+function typeCheck(files: Record<string, string>): string[] {
+  const src = `${ts.sys.getCurrentDirectory()}/src`;
+  const virtual = new Map(
+    Object.entries(files).map(([name, text]) => [`${src}/${name}`, text]),
+  );
+  const host = ts.createCompilerHost(COMPILER_OPTIONS);
+  const { fileExists, getSourceFile, readFile } = host;
+  host.fileExists = (fileName) =>
+    virtual.has(fileName) || fileExists.call(host, fileName);
+  host.readFile = (fileName) =>
+    virtual.get(fileName) ?? readFile.call(host, fileName);
+  host.getSourceFile = (fileName, languageVersion, onError, fresh) => {
+    const text = virtual.get(fileName);
+
+    return text === undefined
+      ? getSourceFile.call(host, fileName, languageVersion, onError, fresh)
+      : ts.createSourceFile(fileName, text, languageVersion);
+  };
+  const program = ts.createProgram([...virtual.keys()], COMPILER_OPTIONS, host);
+
+  return [...virtual.keys()].flatMap((fileName) =>
+    ts
+      .getPreEmitDiagnostics(program, program.getSourceFile(fileName))
+      .map(
+        (diagnostic) =>
+          `${diagnostic.file?.fileName.slice(src.length + 1) ?? ''}: ` +
+          ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+      ),
+  );
+}
+
+/**
+ * A scene with each generated frame id replaced by its position among them,
+ * plus its decals.
+ *
+ * Only the ids `buildScene` generates -- `@`-prefixed paths -- are relabelled:
+ * they differ between the two builds by the wrapper `elementOf` adds. An
+ * authored id compares as itself, so one written wrong, or dropped, is seen.
+ */
 function normalized(scene: CoreScene): unknown {
   const labels = new Map(
-    scene.sortedFrames.map((frame, index) => [frame.id, `#${index}`]),
+    scene.sortedFrames
+      .filter((frame) => frame.id.startsWith('@'))
+      .map((frame, index) => [frame.id, `#${index}`]),
   );
   const rewrite = (value: unknown): unknown => {
     if (typeof value === 'string') {
@@ -106,25 +207,97 @@ function expectRoundTrip(doc: SceneDocument): string {
   return source;
 }
 
+/** An instance of a component the document defines. */
+function instance(name: string): DocNode {
+  return { type: { kind: 'defined', name }, props: {}, children: [] };
+}
+
+/**
+ * Every kind of value a prop can hold, and every kind of node: named and
+ * unnamed frames, a key, strings that need braces, a constraint with a `null`
+ * end, and an imported composite with an object prop.
+ */
+function everything(): SceneDocument {
+  return documentFrom(
+    <>
+      <TrackFrame id={'R&amp;D'} angle={0.25} initialState={[1, 0.5]}>
+        <Box width={4} height={2} solid={false} color='say "hi"' />
+        <Weight mass={250} position={[0.5, -1]} drag={1.5} />
+        <RotationalFrame id="pole" position={[0, -1]} key="p">
+          <Circle radius={0.3} color={'a&lt;b'} />
+          <Line endPos={[3, 0]} lineWidth={0.1} />
+        </RotationalFrame>
+      </TrackFrame>
+      <RotationalFrame id="left">
+        <Weight mass={1} position={[1, 0]} />
+      </RotationalFrame>
+      <RotationalFrame id="right" position={[3, 0]} />
+      <Coincidence
+        frame1="left"
+        frame2="right"
+        position1={[1, 0]}
+        position2={null}
+      />
+      <Gantry span={{ reach: 2, 'lift-off': 0.5 }} />
+    </>,
+  );
+}
+
+/** The demo rig, as one imported composite. */
+function demo(): SceneDocument {
+  return documentFrom(<CartAndRope />);
+}
+
+/** A component the document defines, listed after the scene that uses it. */
+function definedLater(): SceneDocument {
+  const [arm] = nodesFrom(
+    <RotationalFrame position={[1, 0]}>
+      <Weight mass={1} position={[2, 0]} />
+    </RotationalFrame>,
+  );
+
+  return {
+    root: 'Scene',
+    definitions: [
+      {
+        name: 'Scene',
+        body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+          ...cart,
+          children: [instance('Arm'), instance('Arm')],
+        })),
+      },
+      { name: 'Arm', body: [arm] },
+    ],
+  };
+}
+
+/** One node with a prop set to `value` -- a value JSX could not have typed. */
+function withProp(prop: string, value: unknown): SceneDocument {
+  const [box] = nodesFrom(<Box height={2} />);
+
+  return {
+    root: 'Scene',
+    definitions: [
+      {
+        name: 'Scene',
+        body: [{ ...box, props: { ...box.props, [prop]: value } }],
+      },
+    ],
+  };
+}
+
 describe('emitScene', () => {
   test('writes a module that rebuilds the scene, every kind of value included', () => {
-    const source = expectRoundTrip(
-      documentFrom(
-        <TrackFrame id="cart" angle={0.25} initialState={[1, 0.5]}>
-          <Box width={4} height={2} solid={false} color='say "hi"' />
-          <Weight mass={250} position={[0.5, -1]} drag={1.5} />
-          <RotationalFrame id="pole" position={[0, -1]} key="p">
-            <Circle radius={0.3} />
-            <Line endPos={[3, 0]} lineWidth={0.1} />
-          </RotationalFrame>
-        </TrackFrame>,
-      ),
-    );
+    const source = expectRoundTrip(everything());
 
-    // A string with a quote in it cannot go in a JSX string attribute, which
-    // has no escapes -- so it is written as an expression.
+    // A JSX string attribute has no escapes and decodes character references,
+    // so a string with a quote or an ampersand is written as an expression.
     expect(source).toContain('color={"say \\"hi\\""}');
+    expect(source).toContain('id={"R&amp;D"}');
+    expect(source).toContain('color={"a&lt;b"}');
     expect(source).toContain('key="p"');
+    expect(source).toContain('position2={null}');
+    expect(source).toContain('span={{ reach: 2, "lift-off": 0.5 }}');
   });
 
   test('omits a prop equal to its default, and keeps one that is not', () => {
@@ -141,39 +314,23 @@ describe('emitScene', () => {
     expect(source).not.toContain('centered');
   });
 
+  test('writes an undefined prop as absent', () => {
+    // What reading `width={cond ? 2 : undefined}` leaves: the prop is there,
+    // holding `undefined` -- which every component takes as absent.
+    expect(emitScene(withProp('width', undefined)).source).toContain(
+      '<Box height={2} />',
+    );
+  });
+
   test('imports an imported composite from a module of its own name', () => {
-    const source = expectRoundTrip(documentFrom(<CartAndRope />));
+    const source = expectRoundTrip(demo());
 
     expect(source).toContain("import CartAndRope from './CartAndRope';");
     expect(source).toContain('export default function Scene(): ReactElement');
   });
 
   test('declares a defined component before what instantiates it', () => {
-    const [arm] = nodesFrom(
-      <RotationalFrame position={[1, 0]}>
-        <Weight mass={1} position={[2, 0]} />
-      </RotationalFrame>,
-    );
-    const instance = {
-      type: { kind: 'defined' as const, name: 'Arm' },
-      props: {},
-      children: [],
-    };
-    const doc: SceneDocument = {
-      root: 'Scene',
-      definitions: [
-        {
-          name: 'Scene',
-          body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
-            ...cart,
-            children: [instance, instance],
-          })),
-        },
-        { name: 'Arm', body: [arm!] },
-      ],
-    };
-
-    const source = expectRoundTrip(doc);
+    const source = expectRoundTrip(definedLater());
 
     // Listed after `Scene` in the document, declared before it in the file.
     expect(source.indexOf('function Arm()')).toBeLessThan(
@@ -181,6 +338,21 @@ describe('emitScene', () => {
     );
     expect(source).not.toContain('export default function Arm');
   });
+
+  test('writes modules that type-check under the repo settings', () => {
+    // The round trips above only parse what they compile. CI runs `tsc`,
+    // which is where a module shadowing its own imports, or writing an
+    // `undefined` that `exactOptionalPropertyTypes` refuses, would fail to
+    // build -- so every module they emit is checked here, in one program.
+    const modules = Object.fromEntries(
+      Object.entries({ everything, demo, definedLater }).map(([name, doc]) => [
+        `Emitted_${name}.tsx`,
+        emitScene(doc()).source,
+      ]),
+    );
+
+    expect(typeCheck({ ...modules, 'Gantry.tsx': GANTRY_MODULE })).toEqual([]);
+  }, 60_000);
 
   test('refuses components that instantiate each other in a cycle', () => {
     const doc: SceneDocument = {
@@ -206,10 +378,96 @@ describe('emitScene', () => {
     expect(() => emitScene(doc)).toThrow(/cycle: B -> A -> B\./);
   });
 
-  test('refuses a prop that is not plain data', () => {
+  test('names only the components in a cycle, not the path into it', () => {
+    // `C` is visited first and leads into the cycle, but is not part of it.
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        { name: 'C', body: [instance('A')] },
+        { name: 'A', body: [instance('B')] },
+        { name: 'B', body: [instance('A')] },
+        { name: 'Scene', body: [] },
+      ],
+    };
+
+    expect(() => emitScene(doc)).toThrow(/cycle: A -> B -> A\.$/);
+  });
+
+  test('refuses a name the module would bind twice, naming both uses', () => {
+    const [box] = nodesFrom(<Box width={2} />);
+    const [frame] = nodesFrom(<TrackFrame id="inner" />);
+
+    expect(() =>
+      emitScene({
+        root: 'Scene',
+        definitions: [
+          { name: 'Box', body: [frame] },
+          { name: 'Scene', body: [box, instance('Box')] },
+        ],
+      }),
+    ).toThrow(
+      /'Box' is both a component this scene defines and a building block the module imports/,
+    );
+    expect(() =>
+      emitScene({
+        root: 'ReactElement',
+        definitions: [{ name: 'ReactElement', body: [frame] }],
+      }),
+    ).toThrow(
+      /'ReactElement' is both a component this scene defines and the type/,
+    );
+
+    // Imports against each other: a building block and an imported component,
+    // and two different imported components.
+    const named = (name: string, id: string): (() => ReactElement) =>
+      Object.defineProperty(
+        (): ReactElement => <TrackFrame id={id} />,
+        'name',
+        {
+          value: name,
+        },
+      );
+    const Impostor = named('Box', 'c');
+    const Twin = named('Twin', 'a');
+    const OtherTwin = named('Twin', 'b');
+
+    expect(() =>
+      emitScene(
+        documentFrom(
+          <>
+            <Box />
+            <Impostor />
+          </>,
+        ),
+      ),
+    ).toThrow(/'Box' is both a building block and an imported component/);
+    expect(() =>
+      emitScene(
+        documentFrom(
+          <>
+            <Twin />
+            <OtherTwin />
+          </>,
+        ),
+      ),
+    ).toThrow(/Two different imported components are both called 'Twin'/);
+  });
+
+  test('refuses a prop that is not plain data, saying where it is', () => {
     expect(() =>
       emitScene(documentFrom(<Weight mass={1} position={[NaN, 0]} />)),
-    ).toThrow(/NaN cannot be written/);
+    ).toThrow(
+      /Cannot write 'position' on <Weight> at Scene\/0: NaN cannot be written/,
+    );
+    expect(() => emitScene(withProp('color', () => 'red'))).toThrow(
+      /Cannot write 'color' on <Box> at Scene\/0: A value of type function cannot be written/,
+    );
+  });
+
+  test('refuses a ref, which it could only copy', () => {
+    expect(() => emitScene(withProp('ref', { current: null }))).toThrow(
+      /Cannot write 'ref' on <Box> at Scene\/0: A ref cannot be written/,
+    );
   });
 
   test('records where each node landed', () => {
