@@ -14,9 +14,7 @@ function describeWeight({ mass, ...options }: WeightProps): SceneNode {
 
 /** A point mass in the enclosing frame's coordinates. */
 export default function Weight(props: WeightProps): null {
-  const { mass, ...options } = props;
-
-  useSceneNode(useId(), describeWeight(props), [mass, JSON.stringify(options)]);
+  useSceneNode(useId(), describeWeight(props), props);
 
   return null;
 }

@@ -1,5 +1,6 @@
-import CoreScene from './../Scene';
-import { addAnchor, refuseAnchorFrameCollisions } from './resolveAnchor';
+import Scene from './Scene';
+import assembleScene from './assembleScene';
+import { addAnchor } from './resolveAnchor';
 import { Fragment, isValidElement } from 'react';
 import type {
   AnchorPoint,
@@ -8,6 +9,7 @@ import type {
   SceneNode,
   SceneNodeSource,
 } from './sceneNodes';
+import type CoreScene from './../Scene';
 import type { FrameId } from './../Frame';
 import type { ReactNode } from 'react';
 
@@ -25,7 +27,7 @@ interface Walk {
   /** The enclosing frame's id, or `null` at the root. */
   readonly frameId: FrameId | null;
 
-  /** Keys and indices from the root, dot-joined: an unnamed frame's id. */
+  /** Indices and `$`-marked keys from the root, dot-joined: an unnamed frame's id. */
   readonly path: string;
 
   /** Composites entered so far, for `MAX_DEPTH`. */
@@ -56,6 +58,20 @@ function nameOf(type: unknown): string {
   return typeof type === 'function' && type.name
     ? `<${type.name}>`
     : 'an element of an unsupported kind';
+}
+
+/**
+ * A child's path segment: its index, or `$` and its key.
+ *
+ * Kept apart the way React keeps them. Otherwise `key="0"` and the first
+ * unkeyed sibling would share a segment, and so a frame id -- and the core
+ * `Scene` keeps only one of two frames with one id. `.` is the separator and
+ * `%` the escape, so a key has both escaped.
+ */
+function segmentOf(key: string | null, index: number): string {
+  return key === null
+    ? String(index)
+    : `$${key.replace(/%/g, '%25').replace(/\./g, '%2E')}`;
 }
 
 /** A path segment appended to its parent's. */
@@ -111,9 +127,9 @@ function walkNode(node: ReactNode, index: number, walk: Walk): void {
     );
   }
 
-  // An explicit `key` beats the index, exactly as it does in React: it is the
-  // identity that survives siblings being inserted or removed around it.
-  const path = childPath(walk.path, node.key ?? String(index));
+  // An explicit `key` beats the index, as it does in React: it is the identity
+  // that survives siblings being inserted or removed around it.
+  const path = childPath(walk.path, segmentOf(node.key, index));
   const { type, props } = node;
 
   if (type === Fragment) {
@@ -121,8 +137,30 @@ function walkNode(node: ReactNode, index: number, walk: Walk): void {
     return;
   }
 
+  // Handed the whole `<Scene>`, the walk would call it as a composite and fail
+  // inside React, with an error naming neither.
+  if (type === Scene) {
+    throw new Error(
+      `buildScene takes what goes inside a <Scene>, and found the <Scene> ` +
+        `itself at '${path}'. Pass its children, and its gravity as an ` +
+        'option: buildScene(<Rig />, { gravity }).',
+    );
+  }
+
   const sceneNode = sceneNodeOf(type);
   if (sceneNode) {
+    // A ref is filled in by an effect, and the walk runs none: an empty one
+    // names nothing, and one a mount has filled names that mount's frames.
+    // Refused here, where the walk can see it, rather than at whatever
+    // constraint happens to name it.
+    if ((props as { ref?: unknown }).ref != null) {
+      throw new Error(
+        `${nameOf(type)} at '${path}' has a ref, which a scene built without ` +
+          'rendering never fills: a ref is set by an effect. Give it an id, ' +
+          'and name that instead.',
+      );
+    }
+
     place(
       sceneNode(props, { key: `@${path}`, frameId: walk.frameId }),
       props.children,
@@ -183,7 +221,8 @@ function walkChildren(children: ReactNode, walk: Walk): void {
  * - **Sibling order is JSX order**, always. Mounting orders siblings by when
  *   they registered, which is JSX order only for a tree whose shape never
  *   changes -- see `docs/issues/0005.md`. A walk has no registration to go by.
- * - **An unnamed frame's id is its path** through the tree, `@0.0.1`, where
+ * - **An unnamed frame's id is its path** through the tree -- `@0.1`, or
+ *   `@0.$wheel` for a child keyed `wheel` -- where
  *   mounting uses React's `useId`. Both are stable for a given tree; they are
  *   not the same string, so a state map built against one does not carry to
  *   the other.
@@ -208,39 +247,26 @@ export default function buildScene(
     constraints,
   });
 
-  // A scene carries no mass of its own, so there is nowhere for a root
-  // `<Weight>` to go -- and dropping it would change the answer rather than
-  // the picture. Same rule, and same wording, as `<Scene>`.
-  if (root.weights.length) {
-    throw new Error(
-      `A <Weight> must be inside a frame: a scene carries no mass of its ` +
-        `own, and ${root.weights.length} was placed at the root of the scene.`,
-    );
-  }
-
-  const scene = new CoreScene({
-    decals: root.decals,
-    frames: root.frames,
-    ...(gravity === undefined ? {} : { gravity }),
+  return assembleScene(root, anchors, constraints, {
+    gravity,
+    // A walked tree is complete when it is handed over, so nothing will come
+    // along later to resolve a constraint that cannot be built now.
+    unbuildable: {
+      onEmptyRef: (node) => {
+        throw new Error(
+          `Found ${node.describe?.() ?? 'a constraint'}, naming an <Anchor> ` +
+            'by ref. A ref is filled in by an effect, and a scene built ' +
+            'without rendering runs none. Give the anchor an id, and name ' +
+            'that instead.',
+        );
+      },
+      onMissingFrame: (constraint) => {
+        throw new Error(
+          `A constraint between '${constraint.frameId1}' and ` +
+            `'${constraint.frameId2}' names something the scene does not ` +
+            'have: no frame or <Anchor id> goes by that name.',
+        );
+      },
+    },
   });
-
-  // After the tree, because `addConstraint` solves against the pose the frames
-  // are actually in. A constraint naming a frame that does not exist throws
-  // from `addConstraint` -- which `<Scene>` avoids, because a mounted tree is
-  // transiently inconsistent while it registers, and this one never is.
-  refuseAnchorFrameCollisions(anchors, scene.frameMap);
-  for (const node of constraints) {
-    const constraint = node.build(anchors);
-    if (!constraint) {
-      throw new Error(
-        `Found ${node.describe?.() ?? 'a constraint'}, naming an <Anchor> by ` +
-          'ref. A ref is filled in by an effect, and a scene built without ' +
-          'rendering runs none. Give the anchor an id, and name that instead.',
-      );
-    }
-
-    scene.addConstraint(constraint);
-  }
-
-  return scene;
 }

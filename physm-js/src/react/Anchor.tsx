@@ -72,7 +72,7 @@ function describeAnchor(
  * anchor mounted would stay unresolved with nothing to retry it.
  */
 export default function Anchor(props: AnchorProps): null {
-  const { id, position, ref } = props;
+  const { ref } = props;
   const frameId = useContext(FrameIdContext);
   const key = useId();
   const node = describeAnchor(props, { key, frameId });
@@ -87,7 +87,7 @@ export default function Anchor(props: AnchorProps): null {
   // than the node re-registers, which is safe in the direction that matters and
   // cheap in the other.
   useImperativeHandle(ref, () => node.build());
-  useSceneNode(key, node, [id, frameId, JSON.stringify(position)]);
+  useSceneNode(key, node, { ...props, frameId });
 
   return null;
 }

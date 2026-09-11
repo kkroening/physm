@@ -59,14 +59,7 @@ function describeCoincidence({
  * at whatever geometry the scene places. See `docs/constraints.md`.
  */
 export default function Coincidence(props: CoincidenceProps): null {
-  const { frame1, frame2, position1, position2 } = props;
-
-  useSceneNode(useId(), describeCoincidence(props), [
-    frame1,
-    frame2,
-    JSON.stringify(position1),
-    JSON.stringify(position2),
-  ]);
+  useSceneNode(useId(), describeCoincidence(props), props);
 
   return null;
 }

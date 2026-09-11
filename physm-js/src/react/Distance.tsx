@@ -62,15 +62,7 @@ function describeDistance({
  * can be authored at any geometry. See `docs/constraints.md`.
  */
 export default function Distance(props: DistanceProps): null {
-  const { frame1, frame2, position1, position2, length } = props;
-
-  useSceneNode(useId(), describeDistance(props), [
-    frame1,
-    frame2,
-    JSON.stringify(position1),
-    JSON.stringify(position2),
-    length,
-  ]);
+  useSceneNode(useId(), describeDistance(props), props);
 
   return null;
 }

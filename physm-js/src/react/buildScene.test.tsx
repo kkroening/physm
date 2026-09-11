@@ -3,13 +3,22 @@ import Box from './Box';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './Circle';
 import Coincidence from './Coincidence';
+import CoreBoxDecal from './../BoxDecal';
+import CoreCircleDecal from './../CircleDecal';
+import CoreLineDecal from './../LineDecal';
+import CoreRotationalFrame from './../RotationalFrame';
+import CoreScene from './../Scene';
+import CoreTrackFrame from './../TrackFrame';
+import CoreWeight from './../Weight';
+import Distance from './Distance';
+import Line from './Line';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import buildScene from './buildScene';
+import { CoincidenceConstraint, DistanceConstraint } from './../Constraint';
 import { render } from '@testing-library/react';
-import type CoreScene from './../Scene';
 import type { ReactElement, ReactNode } from 'react';
 
 /** The scene the mounted binding assembles -- the oracle here. */
@@ -60,6 +69,213 @@ function normalized(scene: CoreScene): unknown {
   return rewrite(scene.toJsonObj());
 }
 
+/**
+ * All nine building blocks with every prop set: none at its default when `k`
+ * is 1, and every one different between `k` = 1 and 2.
+ *
+ * The constraints join three pairs of weighted pivots set `gap` apart at
+ * angle 0, posed so every stated position and length holds -- which the
+ * constraints check -- and so no pair sits at a kinematic singularity, since
+ * `<Scene>` solves for initial velocities. Every frame is named, so nothing
+ * needs normalizing.
+ */
+function fullRig(k: 1 | 2): ReactElement {
+  const gap = 2 + k;
+  const y = 6 + k;
+  const pivot = (id: string, x: number, children?: ReactNode): ReactElement => (
+    <RotationalFrame
+      id={id}
+      position={[x, y]}
+      initialState={[0, 0.1 * k]}
+      resistance={0.5 * k}
+    >
+      <Weight mass={1} position={[1, 0]} />
+      {children}
+    </RotationalFrame>
+  );
+
+  return (
+    <>
+      <Line
+        startPos={[-k, -4]}
+        endPos={[k, -4]}
+        lineWidth={0.1 * k}
+        color={k === 1 ? 'slategray' : 'peru'}
+      />
+      <TrackFrame
+        id="cart"
+        position={[2 * k, -3]}
+        angle={0.25 * k}
+        initialState={[k, 0.5 * k]}
+        resistance={5 * k}
+      >
+        <Box
+          width={4 * k}
+          height={2 * k}
+          position={[0.5 * k, 0.1]}
+          angle={0.2 * k}
+          centered={k === 2}
+          solid={k === 2}
+          lineWidth={0.2 * k}
+          color={k === 1 ? 'tomato' : 'navy'}
+        />
+        <Weight mass={250 * k} position={[0.5 * k, 0]} drag={1.5 * k} />
+        <RotationalFrame
+          id="pole"
+          position={[0, -k]}
+          initialState={[0.6 * k, -0.2 * k]}
+          resistance={1.25 * k}
+        >
+          <Circle
+            position={[3 * k, 0]}
+            radius={0.3 * k}
+            color={k === 1 ? 'seagreen' : 'gold'}
+          />
+          <Weight mass={7 * k} position={[3 * k, 0]} drag={6 * k} />
+        </RotationalFrame>
+      </TrackFrame>
+      {pivot('c1', -20)}
+      {pivot('c2', -20 + gap)}
+      {pivot('d1', 0, <Anchor id="d1-top" position={[0, 1]} />)}
+      {pivot('d2', gap)}
+      {pivot('e1', 20)}
+      {pivot('e2', 20 + gap)}
+      <Coincidence
+        frame1="c1"
+        frame2="c2"
+        position1={[gap, gap]}
+        position2={[0, gap]}
+      />
+      <Distance frame1="d1-top" frame2="d2" position2={[0, 1]} length={gap} />
+      <Distance
+        frame1="e1"
+        frame2="e2"
+        position1={[0, -1]}
+        position2={[0, -1]}
+        length={gap}
+      />
+    </>
+  );
+}
+
+/**
+ * `fullRig(k)`, built by calling the core constructors by hand.
+ *
+ * The independent oracle: it shares nothing with the describers, so a describer
+ * that drops a prop disagrees with it -- where `<Scene>`, which calls the same
+ * describers, would agree just as happily.
+ */
+function handBuilt(k: 1 | 2): CoreScene {
+  const gap = 2 + k;
+  const y = 6 + k;
+  const pivot = (id: string, x: number): CoreRotationalFrame =>
+    new CoreRotationalFrame({
+      id,
+      position: [x, y],
+      initialState: [0, 0.1 * k],
+      resistance: 0.5 * k,
+      weights: [new CoreWeight(1, { position: [1, 0] })],
+    });
+
+  const scene = new CoreScene({
+    decals: [
+      new CoreLineDecal({
+        startPos: [-k, -4],
+        endPos: [k, -4],
+        lineWidth: 0.1 * k,
+        color: k === 1 ? 'slategray' : 'peru',
+      }),
+    ],
+    frames: [
+      new CoreTrackFrame({
+        id: 'cart',
+        position: [2 * k, -3],
+        angle: 0.25 * k,
+        initialState: [k, 0.5 * k],
+        resistance: 5 * k,
+        decals: [
+          new CoreBoxDecal({
+            width: 4 * k,
+            height: 2 * k,
+            position: [0.5 * k, 0.1],
+            angle: 0.2 * k,
+            centered: k === 2,
+            solid: k === 2,
+            lineWidth: 0.2 * k,
+            color: k === 1 ? 'tomato' : 'navy',
+          }),
+        ],
+        weights: [
+          new CoreWeight(250 * k, { position: [0.5 * k, 0], drag: 1.5 * k }),
+        ],
+        frames: [
+          new CoreRotationalFrame({
+            id: 'pole',
+            position: [0, -k],
+            initialState: [0.6 * k, -0.2 * k],
+            resistance: 1.25 * k,
+            decals: [
+              new CoreCircleDecal({
+                position: [3 * k, 0],
+                radius: 0.3 * k,
+                color: k === 1 ? 'seagreen' : 'gold',
+              }),
+            ],
+            weights: [
+              new CoreWeight(7 * k, { position: [3 * k, 0], drag: 6 * k }),
+            ],
+          }),
+        ],
+      }),
+      pivot('c1', -20),
+      pivot('c2', -20 + gap),
+      pivot('d1', 0),
+      pivot('d2', gap),
+      pivot('e1', 20),
+      pivot('e2', 20 + gap),
+    ],
+  });
+
+  scene.addConstraint(
+    new CoincidenceConstraint({
+      frame1: 'c1',
+      frame2: 'c2',
+      position1: [gap, gap],
+      position2: [0, gap],
+    }),
+  );
+  // The first end is the anchor's frame, at the anchor's point.
+  scene.addConstraint(
+    new DistanceConstraint({
+      frame1: 'd1',
+      frame2: 'd2',
+      position1: [0, 1],
+      position2: [0, 1],
+      length: gap,
+    }),
+  );
+  scene.addConstraint(
+    new DistanceConstraint({
+      frame1: 'e1',
+      frame2: 'e2',
+      position1: [0, -1],
+      position2: [0, -1],
+      length: gap,
+    }),
+  );
+
+  return scene;
+}
+
+/** A scene as the tests compare it: its serialization, and the decals that leaves out. */
+function picture(scene: CoreScene): unknown {
+  return {
+    json: scene.toJsonObj(),
+    decals: scene.decals,
+    frameDecals: scene.sortedFrames.map((frame) => [frame.id, frame.decals]),
+  };
+}
+
 describe('buildScene', () => {
   test('builds the demo rig exactly as the mounted binding does', () => {
     // The differential test the rest of the editor stands on: two routes, one
@@ -84,42 +300,32 @@ describe('buildScene', () => {
     expect(walked.frameMap.has('cart')).toBe(true);
   });
 
-  test('agrees with the mounted binding on every prop, named frames and all', () => {
-    // Every prop set and none at its default, and every frame named, so no
-    // normalization is needed and a dropped passthrough cannot agree with the
-    // other side by coincidence.
-    const rig = (
-      <TrackFrame
-        id="cart"
-        position={[2, -3]}
-        angle={0.25}
-        initialState={[1, 0.5]}
-        resistance={5}
-      >
-        <Box width={4} height={2} lineWidth={0.2} color="tomato" />
-        <Weight mass={250} position={[0.5, 0]} drag={1.5} />
-        <RotationalFrame
-          id="pole"
-          position={[0, -1]}
-          initialState={[0.6, -0.2]}
-          resistance={1.25}
-        >
-          <Circle position={[3, 0]} radius={0.3} color="seagreen" />
-          <Weight mass={7} position={[3, 0]} drag={6} />
-        </RotationalFrame>
-      </TrackFrame>
+  test('builds every prop of every component as the constructors do', () => {
+    expect(picture(buildScene(fullRig(1)))).toEqual(picture(handBuilt(1)));
+    expect(picture(buildScene(fullRig(2)))).toEqual(picture(handBuilt(2)));
+
+    // And there was something to compare.
+    expect(buildScene(fullRig(1)).constraints).toHaveLength(3);
+  });
+
+  test('agrees with the mounted binding on mount, and after every prop changes', () => {
+    // A rerender keeps a mounted component's old node unless one of its
+    // dependencies changed -- so a dependency list that has fallen behind its
+    // describer shows here, as a stale prop the walk does not have.
+    let mounted: CoreScene | null = null;
+    const tree = (k: 1 | 2): ReactElement => (
+      <svg>
+        <Scene onSceneChange={(built) => (mounted = built)}>{fullRig(k)}</Scene>
+      </svg>
     );
 
-    const walked = buildScene(rig);
-    const mounted = assemble(rig);
+    const { rerender } = render(tree(1));
 
-    expect(walked.toJsonObj()).toEqual(mounted.toJsonObj());
-    for (const frameId of ['cart', 'pole']) {
-      expect(walked.frameMap.get(frameId)!.decals).toEqual(
-        mounted.frameMap.get(frameId)!.decals,
-      );
-      expect(walked.frameMap.get(frameId)!.decals).not.toHaveLength(0);
-    }
+    expect(picture(mounted!)).toEqual(picture(buildScene(fullRig(1))));
+
+    rerender(tree(2));
+
+    expect(picture(mounted!)).toEqual(picture(buildScene(fullRig(2))));
   });
 
   test('names an unnamed frame by its path, the same way every time', () => {
@@ -136,7 +342,7 @@ describe('buildScene', () => {
     const ids = (scene: CoreScene): string[] =>
       scene.frameMap.get('cart')!.frames.map((frame) => frame.id);
 
-    expect(ids(buildScene(rig))).toEqual(['@0.0', '@0.named-by-key']);
+    expect(ids(buildScene(rig))).toEqual(['@0.0', '@0.$named-by-key']);
     expect(ids(buildScene(rig))).toEqual(ids(buildScene(rig)));
   });
 
@@ -176,7 +382,59 @@ describe('buildScene', () => {
       </>
     );
 
-    expect(() => buildScene(rig)).toThrow(/Give the anchor an id/);
+    expect(() => buildScene(rig)).toThrow(/has a ref.*Give it an id/);
+  });
+
+  test('refuses a ref even once a mount has filled it', () => {
+    // Filled, it names the frames of whichever mount filled it, not the tree
+    // being walked -- so it is refused where it sits, not where it is used.
+    const tip = {
+      current: { frameId: 'from-some-mount' },
+    };
+    const rig = (
+      <>
+        <RotationalFrame id="a">
+          <Anchor ref={tip} />
+        </RotationalFrame>
+        <RotationalFrame id="b" />
+        <Coincidence frame1="b" frame2={tip} />
+      </>
+    );
+
+    expect(() => buildScene(rig)).toThrow(/<Anchor> at '0\.0\.0' has a ref/);
+  });
+
+  test('keeps keys and indices apart in the ids it makes', () => {
+    // `key="0"` beside an unkeyed first child, and a dotted key beside a
+    // nested path: sharing a segment would give two frames one id.
+    const scene = buildScene(
+      <TrackFrame id="cart">
+        <RotationalFrame />
+        <RotationalFrame key="0" />
+        <RotationalFrame>
+          <RotationalFrame />
+        </RotationalFrame>
+        <RotationalFrame key="2.0" />
+      </TrackFrame>,
+    );
+
+    expect(scene.frameMap.get('cart')!.frames.map(({ id }) => id)).toEqual([
+      '@0.0',
+      '@0.$0',
+      '@0.2',
+      '@0.$2%2E0',
+    ]);
+    expect(scene.sortedFrames).toHaveLength(6);
+  });
+
+  test('refuses a whole <Scene>, saying what to pass instead', () => {
+    expect(() =>
+      buildScene(
+        <Scene gravity={10}>
+          <TrackFrame id="cart" />
+        </Scene>,
+      ),
+    ).toThrow(/takes what goes inside a <Scene>/);
   });
 
   test('refuses a DOM element, naming it', () => {

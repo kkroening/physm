@@ -43,6 +43,8 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Further out
 
+- Refuse a repeated frame id in the core `Scene`. daglet's toposort skips an id
+  it has already sorted, so the second frame silently loses its coordinate.
 - Scene picking and dragging
 - Promote to prop
 - Code pane highlighting, and scroll-once on focus change
@@ -62,7 +64,9 @@ the same scene. Play is cheap once the shell exists and may come forward.
   the rig outside a render.
 - **Tree-walk builder** — `buildScene(element)` builds a `Scene` from JSX with
   no renderer: composites are called, each core component states how it builds
-  as data the mounted binding shares, and siblings take JSX order. Both routes
-  refuse two anchors sharing an id, and a name meaning both an anchor and a
-  frame, through the same helpers. Checked against the mounted route on the
-  demo rig and on every prop. Resolves [0006](docs/issues/0006.md).
+  as data the mounted binding shares, and siblings take JSX order. The assembly
+  around those builds is one function both routes call, differing only in
+  whether an unbuildable constraint waits or throws. Checked against a
+  hand-built scene on every prop of every component, and against the mounted
+  route on the demo rig and after every prop changes. Resolves
+  [0006](docs/issues/0006.md).

@@ -1,7 +1,7 @@
 import CoreTrackFrame from './../TrackFrame';
 import FrameIdContext from './FrameIdContext';
 import { ParentKeyContext, useSceneNode } from './sceneNodes';
-import { useId } from 'react';
+import { useContext, useId } from 'react';
 import type { FrameId } from './../Frame';
 import type { FrameNode, SceneNodeContext } from './sceneNodes';
 import type { ReactElement, ReactNode } from 'react';
@@ -46,17 +46,12 @@ function describeTrackFrame(
 
 /** A prismatic joint: one coordinate, sliding along `angle`. */
 export default function TrackFrame(props: TrackFrameProps): ReactElement {
-  const { children, id, position, angle, initialState, resistance } = props;
+  const { children } = props;
   const key = useId();
-  const node = describeTrackFrame(props, { key, frameId: null });
+  const frameId = useContext(FrameIdContext);
+  const node = describeTrackFrame(props, { key, frameId });
 
-  useSceneNode(key, node, [
-    id,
-    JSON.stringify(position),
-    angle,
-    JSON.stringify(initialState),
-    resistance,
-  ]);
+  useSceneNode(key, node, { ...props, frameId });
 
   return (
     <ParentKeyContext.Provider value={key}>

@@ -1,7 +1,7 @@
 import * as mat3 from './../Mat3';
-import CoreScene from './../Scene';
 import SceneView from './SceneView';
-import { addAnchor, refuseAnchorFrameCollisions } from './resolveAnchor';
+import assembleScene from './assembleScene';
+import { addAnchor } from './resolveAnchor';
 import {
   ParentKeyContext,
   RegistryContext,
@@ -11,6 +11,7 @@ import {
 } from './sceneNodes';
 import { useEffect, useMemo, useRef } from 'react';
 import type Constraint from './../Constraint';
+import type CoreScene from './../Scene';
 import type { AnchorLookup, AnchorPoint, SceneRegistry } from './sceneNodes';
 import type { Mat3 } from './../Mat3';
 import type { ReactElement, ReactNode } from 'react';
@@ -86,21 +87,9 @@ export default function Scene({
   const unresolvedAnchorsRef = useRef<string[]>([]);
 
   const scene = useMemo(() => {
-    const { decals, weights, frames } = buildChildren(registry.entries, null);
+    const root = buildChildren(registry.entries, null);
 
-    // A scene carries no mass of its own, so there is nowhere for a root
-    // `<Weight>` to go. Silently dropping it would remove mass from a rig,
-    // which changes the answer rather than the picture -- and `<Weight>` and
-    // `<Box>` are siblings inside a frame, so mistaking one for the other
-    // is an easy thing to do from the JSX alone.
-    if (weights.length) {
-      throw new Error(
-        `A <Weight> must be inside a frame: a scene carries no mass of its ` +
-          `own, and ${weights.length} was placed at the root of the <Scene>.`,
-      );
-    }
-
-    if (!frames.length && !decals.length) {
+    if (!root.frames.length && !root.decals.length && !root.weights.length) {
       // Cleared on this path too. The warnings below read these refs, so an
       // early return that left them alone would re-report the *previous*
       // assembly's failures against a scene that no longer has any.
@@ -112,48 +101,35 @@ export default function Scene({
 
     const unresolved: Constraint[] = [];
     const unresolvedAnchors: string[] = [];
-    const built = new CoreScene({
-      decals,
-      frames,
-      ...(gravity === undefined ? {} : { gravity }),
-    });
-
-    // After the tree, because `addConstraint` solves against the pose the
-    // frames are actually in.
-    const anchors = collectAnchors(registry.entries);
-    refuseAnchorFrameCollisions(anchors, built.frameMap);
-    for (const { node, live } of registry.entries.values()) {
-      if (!live || node.slot !== 'constraint') {
-        continue;
-      }
-
-      // A frame this constraint names may be mid-unmount: registrations arrive
-      // and depart one effect at a time, and assembly runs against whatever is
-      // registered now. `addConstraint` treats a missing frame as fatal, which
-      // is right for a hand-built scene and wrong here -- it would throw out of
-      // render, which React cannot recover from without an error boundary. So
-      // an unresolved constraint waits for the tree to settle instead.
-      //
-      // The cost is that a genuine typo in `frame1` becomes a missing
-      // constraint rather than a loud error. `unresolvedConstraints` below is
-      // how that surfaces once nothing is moving.
-      // `null` is the same "wait" answer one step earlier: an `<Anchor>` this
-      // constraint names has not handed out its point yet.
-      const constraint = node.build(anchors);
-      if (!constraint) {
-        unresolvedAnchors.push(node.describe?.() ?? 'a constraint');
-        continue;
-      }
-
-      if (
-        built.frameMap.has(constraint.frameId1) &&
-        built.frameMap.has(constraint.frameId2)
-      ) {
-        built.addConstraint(constraint);
-      } else {
-        unresolved.push(constraint);
-      }
-    }
+    const constraints = [...registry.entries.values()].flatMap(
+      ({ node, live }) => (live && node.slot === 'constraint' ? [node] : []),
+    );
+    const built = assembleScene(
+      root,
+      collectAnchors(registry.entries),
+      constraints,
+      {
+        gravity,
+        // A frame or anchor a constraint names may be mid-mount or
+        // mid-unmount: registrations arrive and depart one effect at a time,
+        // and assembly runs against whatever is registered now. Throwing here
+        // would throw out of render, which React cannot recover from without
+        // an error boundary -- so an unbuildable constraint waits for the tree
+        // to settle instead.
+        //
+        // The cost is that a genuine typo in `frame1` becomes a missing
+        // constraint rather than a loud error. The warnings below are how that
+        // surfaces once nothing is moving.
+        unbuildable: {
+          onEmptyRef: (node) => {
+            unresolvedAnchors.push(node.describe?.() ?? 'a constraint');
+          },
+          onMissingFrame: (constraint) => {
+            unresolved.push(constraint);
+          },
+        },
+      },
+    );
 
     unresolvedRef.current = unresolved;
     unresolvedAnchorsRef.current = unresolvedAnchors;

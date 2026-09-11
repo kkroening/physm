@@ -6,6 +6,8 @@
  * nothing themselves; the **view** components (`SceneView` and below) draw an
  * already-assembled scene. `Scene` does both: it collects what its children
  * registered, builds a `physm` scene from them, and renders it.
+ * `buildScene` builds the same scene from the same JSX without mounting it:
+ * it walks the element tree and returns a `Scene` synchronously.
  *
  * The scene graph and the solvers import nothing from here: a `Scene`, `Frame`
  * or `Decal` builds, steps and serializes with no renderer present. The app
@@ -14,6 +16,7 @@
  * mention React.
  */
 export { default as Scene } from './Scene';
+export { default as buildScene } from './buildScene';
 export { default as SceneView } from './SceneView';
 export { default as FrameView } from './FrameView';
 export { default as DecalView } from './DecalView';

@@ -12,7 +12,7 @@ function describeCircle(props: CircleProps): SceneNode {
 
 /** A circle drawn in the enclosing frame's coordinates. */
 export default function Circle(props: CircleProps): null {
-  useSceneNode(useId(), describeCircle(props), [JSON.stringify(props)]);
+  useSceneNode(useId(), describeCircle(props), props);
 
   return null;
 }

@@ -12,7 +12,7 @@ function describeLine(props: LineProps): SceneNode {
 
 /** A line drawn in the enclosing frame's coordinates. */
 export default function Line(props: LineProps): null {
-  useSceneNode(useId(), describeLine(props), [JSON.stringify(props)]);
+  useSceneNode(useId(), describeLine(props), props);
 
   return null;
 }

@@ -12,7 +12,7 @@ function describeBox(props: BoxProps): SceneNode {
 
 /** A box drawn in the enclosing frame's coordinates. */
 export default function Box(props: BoxProps): null {
-  useSceneNode(useId(), describeBox(props), [JSON.stringify(props)]);
+  useSceneNode(useId(), describeBox(props), props);
 
   return null;
 }

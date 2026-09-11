@@ -202,8 +202,11 @@ export const ParentKeyContext = createContext<string | null>(null);
  * registration, the parent key it hands its children, and the id it falls back
  * to when the author gives none.
  *
- * `deps` is the caller's own list, exactly as `useEffect` would take it: this
- * hook cannot know which of a component's props the node was built from.
+ * `inputs` is everything the node was built from -- the component's props, and
+ * the enclosing frame where its describer reads that. It is compared as a JSON
+ * signature rather than listed prop by prop, so a describer that starts reading
+ * a new prop cannot leave a hand-kept list behind it. `children` and `ref` are
+ * structure rather than inputs, and are left out.
  *
  * **Sibling order is first-registration order**, which is JSX order for a tree
  * whose shape does not change: React runs sibling effects left to right. A
@@ -218,7 +221,7 @@ export const ParentKeyContext = createContext<string | null>(null);
 export function useSceneNode(
   key: string,
   node: SceneNode,
-  deps: readonly unknown[],
+  inputs: object,
 ): void {
   const registry = useContext(RegistryContext);
   const parentKey = useContext(ParentKeyContext);
@@ -228,6 +231,10 @@ export function useSceneNode(
       'physm components must be rendered inside a <Scene>: no registry found',
     );
   }
+
+  const signature = JSON.stringify(inputs, (name, value: unknown) =>
+    name === 'children' || name === 'ref' ? undefined : value,
+  );
 
   useEffect(() => {
     registry.entries.set(key, { parentKey, node, live: true });
@@ -243,10 +250,9 @@ export function useSceneNode(
       registry.bump();
     };
     // `node` is deliberately absent: it is rebuilt on every render, so
-    // including it would re-register forever. The caller names the props it
-    // was built from instead.
+    // including it would re-register forever. `signature` stands in for it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, registry, parentKey, ...deps]);
+  }, [key, registry, parentKey, signature]);
 }
 
 /**

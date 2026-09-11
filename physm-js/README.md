@@ -25,7 +25,7 @@ to draw a circle lives in the renderer rather than on `CircleDecal`.
 ```jsx
 function Rig() {
   return (
-    <Scene gravity={10}>
+    <>
       <TrackFrame id="cart" resistance={5}>
         <Box width={4} height={2} />
         <Weight mass={250} />
@@ -39,9 +39,14 @@ function Rig() {
       </TrackFrame>
 
       <Coincidence frame1="left-tip" frame2="right-tip" />
-    </Scene>
+    </>
   );
 }
+
+// Mounted, it draws, and reports the scene through `onSceneChange`:
+<Scene gravity={10}>
+  <Rig />
+</Scene>;
 ```
 
 The authoring components render nothing; they register what they describe, and
@@ -53,7 +58,7 @@ a `Frame` takes its children as constructor arguments, so `Scene` reports the
 built scene through `onSceneChange` rather than returning it.
 
 [`buildScene`](src/react/buildScene.ts) builds the same scene from what goes
-inside `<Scene>` without rendering anything: `buildScene(<Rig />, { gravity })`
+inside `<Scene>` without rendering anything: `buildScene(<Rig />, { gravity: 10 })`
 walks the element tree, calls each composite with its props, and returns the
 `Scene` synchronously. It cannot resolve an `<Anchor>` named by ref — a ref is
 filled in by an effect, and the walk runs none — so name anchors by `id`, as
