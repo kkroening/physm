@@ -21,6 +21,7 @@ import {
   nodeAt,
   removeNode,
 } from './sceneDocument';
+import { historyOf, recorded, redone, undone } from './history';
 import { insertionPoint, newNode, refusalOf } from './insertion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
@@ -35,6 +36,7 @@ import type {
   NodePath,
   SceneDocument,
 } from './sceneDocument';
+import type { History, Step } from './history';
 import type { InsertionPoint } from './insertion';
 import type { MouseEvent, ReactElement } from 'react';
 import type { ScreenPoint } from './placeGizmos';
@@ -712,9 +714,10 @@ export default function Editor({
 }: {
   initialDocument?: SceneDocument;
 }): ReactElement {
-  const [doc, setDoc] = useState<SceneDocument>(
-    () => initialDocument ?? starterDocument(),
+  const [history, setHistory] = useState(() =>
+    historyOf(initialDocument ?? starterDocument()),
   );
+  const doc = history.present.doc;
   const [tabs, setTabs] = useState<readonly string[]>(() => [doc.root]);
   const [focus, setFocus] = useState(doc.root);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -728,9 +731,36 @@ export default function Editor({
   const selectedPath = selection?.definition === focus ? selection.path : null;
   const point = insertionPoint(doc, focus, selectedPath);
 
+  /**
+   * Record an edit made in the focused tab, with the selection before it and
+   * the one it makes: by default, the same one.
+   */
+  const record = (
+    next: SceneDocument,
+    {
+      structural,
+      field = null,
+      after = selectedPath,
+    }: {
+      structural: boolean;
+      field?: string | null;
+      after?: NodePath | null;
+    },
+  ): void =>
+    setHistory((current) =>
+      recorded(current, {
+        doc: next,
+        focus,
+        structural,
+        before: selectedPath,
+        after,
+        field,
+      }),
+    );
+
   /** Replace the document, and select `path` in it -- or nothing. */
   const change = (next: SceneDocument, path: NodePath | null): void => {
-    setDoc(next);
+    record(next, { structural: true, after: path });
     restructure();
     setSelection(path ? { definition: focus, path } : null);
   };
@@ -752,6 +782,80 @@ export default function Editor({
     }
   };
 
+  /**
+   * Move through the history to `next` by undoing `edit` -- `back` -- or by
+   * redoing it, returning to the tab it was made in.
+   *
+   * A tab whose component the document no longer defines closes. The selection
+   * goes back to one side of the edit: the one before it, on undo, and the one
+   * it made, on redo. Each is a path in the very document arrived at, so it
+   * means what it meant then.
+   */
+  const travel = (next: History, edit: Step, back: boolean): void => {
+    const names = new Set(next.present.doc.definitions.map(({ name }) => name));
+    const to = names.has(edit.focus) ? edit.focus : next.present.doc.root;
+    const path = to === edit.focus ? (back ? edit.before : edit.after) : null;
+    setHistory(next);
+    setTabs((open) => {
+      const kept = open.filter((tab) => names.has(tab));
+
+      return kept.includes(to) ? kept : [...kept, to];
+    });
+    setFocus(to);
+    setSelection(path ? { definition: to, path } : null);
+    if (edit.structural) {
+      restructure();
+    }
+  };
+
+  const undo = (): void => {
+    if (history.past.length) {
+      travel(undone(history), history.present, true);
+    }
+  };
+
+  const redo = (): void => {
+    const [next] = history.future;
+    if (next) {
+      travel(redone(history), next, false);
+    }
+  };
+
+  // Undo and redo from the keyboard, wherever the focus is -- except in a text
+  // field, whose own they are. On the window, because a click in the scene
+  // leaves the focus on the page's body, outside the editor; through a ref, so
+  // the one listener always reaches this render's history.
+  const onHistoryKey = useRef<(event: KeyboardEvent) => void>(() => {});
+  onHistoryKey.current = (event) => {
+    const { target } = event;
+    const inText =
+      target instanceof HTMLTextAreaElement ||
+      (target instanceof HTMLInputElement && target.type !== 'checkbox');
+    const key = event.key.toLowerCase();
+    if (
+      inText ||
+      !(event.metaKey || event.ctrlKey) ||
+      !['y', 'z'].includes(key)
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    if (key === 'y' || event.shiftKey) {
+      redo();
+    } else {
+      undo();
+    }
+  };
+
+  useEffect(() => {
+    const listener = (event: KeyboardEvent): void =>
+      onHistoryKey.current(event);
+    window.addEventListener('keydown', listener);
+
+    return () => window.removeEventListener('keydown', listener);
+  }, []);
+
   const actions: TreeActions = {
     onSelect: (path) => setSelection({ definition: focus, path }),
     onDeselect: () => setSelection(null),
@@ -770,33 +874,51 @@ export default function Editor({
 
   return (
     <div className="editor">
-      <nav className="editor__tabs" role="tablist" aria-label="Open components">
-        {tabs.map((name) => (
-          <span className="editor__tab" key={name}>
-            <button
-              role="tab"
-              type="button"
-              aria-selected={name === focus}
-              onClick={() => {
-                setFocus(name);
-                setSelection(null);
-              }}
-            >
-              {name}
-            </button>
-            {name === doc.root ? null : (
+      <div className="editor__bar">
+        <nav
+          className="editor__tabs"
+          role="tablist"
+          aria-label="Open components"
+        >
+          {tabs.map((name) => (
+            <span className="editor__tab" key={name}>
               <button
+                role="tab"
                 type="button"
-                className="editor__close"
-                aria-label={`Close ${name}`}
-                onClick={() => close(name)}
+                aria-selected={name === focus}
+                onClick={() => {
+                  setFocus(name);
+                  setSelection(null);
+                }}
               >
-                ×
+                {name}
               </button>
-            )}
-          </span>
-        ))}
-      </nav>
+              {name === doc.root ? null : (
+                <button
+                  type="button"
+                  className="editor__close"
+                  aria-label={`Close ${name}`}
+                  onClick={() => close(name)}
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          ))}
+        </nav>
+        <div className="editor__history" role="group" aria-label="History">
+          <button type="button" disabled={!history.past.length} onClick={undo}>
+            Undo
+          </button>
+          <button
+            type="button"
+            disabled={!history.future.length}
+            onClick={redo}
+          >
+            Redo
+          </button>
+        </div>
+      </div>
       <CodePane doc={doc} />
       <div className="editor__center">
         <div className="editor__workspace">
@@ -808,7 +930,10 @@ export default function Editor({
             focus={focus}
             selectedPath={selectedPath}
             onExtract={(path, name) => {
-              setDoc(extractComponent(doc, focus, path, name));
+              record(extractComponent(doc, focus, path, name), {
+                structural: true,
+                after: path,
+              });
               open(name);
               restructure();
             }}
@@ -840,7 +965,7 @@ export default function Editor({
       <PropertiesPane
         doc={doc}
         selection={selection}
-        onChange={setDoc}
+        onChange={(next, field) => record(next, { structural: false, field })}
         onOpen={open}
       />
     </div>
