@@ -267,12 +267,29 @@ describe('insertion, a component that keeps a place for children', () => {
     children: [],
   };
 
+  /** The starter scene with every place for children taken out. */
+  function bare(): SceneDocument {
+    const strip = (nodes: readonly DocNode[]): DocNode[] =>
+      nodes
+        .filter(({ type }) => type.kind !== 'children')
+        .map((node) => ({ ...node, children: strip(node.children) }));
+    const doc = starterDocument();
+
+    return {
+      ...doc,
+      definitions: doc.definitions.map((definition) => ({
+        ...definition,
+        body: strip(definition.body),
+      })),
+    };
+  }
+
   /**
    * The starter scene, with the pendulum's place for children in its frame --
    * or, with `atTop`, at the top of its body.
    */
   function withPlace(atTop = false): SceneDocument {
-    const doc = starterDocument();
+    const doc = bare();
 
     return {
       ...doc,
@@ -293,9 +310,18 @@ describe('insertion, a component that keeps a place for children', () => {
   }
 
   // Scene: [Line, TrackFrame [Box, Weight, Pendulum]].
+  test("the starter's pendulum takes children, in the fixed frame at its bob", () => {
+    // Scene: [Line, TrackFrame [Box, Weight, FixedFrame [Pendulum]]].
+    expect(insertionPoint(starterDocument(), 'Scene', [1, 2, 0])).toEqual({
+      parent: [1, 2, 0],
+      index: 0,
+      holder: 'frame',
+    });
+  });
+
   test("an instance takes children, held to the rules of its place's frame", () => {
-    expect(insertionPoint(withPlace(), 'Scene', [1, 2])).toEqual({
-      parent: [1, 2],
+    expect(insertionPoint(withPlace(), 'Scene', [1, 2, 0])).toEqual({
+      parent: [1, 2, 0],
       index: 0,
       holder: 'frame',
     });
@@ -303,19 +329,19 @@ describe('insertion, a component that keeps a place for children', () => {
 
   test("with the place at the top of its body, to the root's", () => {
     const doc = withPlace(true);
-    const point = insertionPoint(doc, 'Scene', [1, 2]);
+    const point = insertionPoint(doc, 'Scene', [1, 2, 0]);
 
-    expect(point).toEqual({ parent: [1, 2], index: 0, holder: 'root' });
+    expect(point).toEqual({ parent: [1, 2, 0], index: 0, holder: 'root' });
     expect(refusalOf(doc, 'Scene', point, core(Weight))).toMatch(
       /has to go inside a frame/,
     );
   });
 
   test('an instance of a component with no place takes none', () => {
-    // So an addition goes after it, among the cart's children.
-    expect(insertionPoint(starterDocument(), 'Scene', [1, 2])).toEqual({
-      parent: [1],
-      index: 3,
+    // So an addition goes after it, inside the fixed frame that holds it.
+    expect(insertionPoint(bare(), 'Scene', [1, 2, 0])).toEqual({
+      parent: [1, 2],
+      index: 1,
       holder: 'frame',
     });
   });
@@ -326,21 +352,27 @@ describe('insertion, a component that keeps a place for children', () => {
     const doc = insertNode(
       withPlace(true),
       'Scene',
-      [1, 2],
+      [1, 2, 0],
       0,
       newNode(core(RotationalFrame)),
     );
 
-    expect(insertionPoint(doc, 'Scene', [1, 2, 0])).toEqual({
-      parent: [1, 2, 0],
+    expect(insertionPoint(doc, 'Scene', [1, 2, 0, 0])).toEqual({
+      parent: [1, 2, 0, 0],
       index: 0,
       holder: 'frame',
     });
 
-    const withLine = insertNode(doc, 'Scene', [1, 2], 1, newNode(core(Line)));
+    const withLine = insertNode(
+      doc,
+      'Scene',
+      [1, 2, 0],
+      1,
+      newNode(core(Line)),
+    );
 
-    expect(insertionPoint(withLine, 'Scene', [1, 2, 1])).toEqual({
-      parent: [1, 2],
+    expect(insertionPoint(withLine, 'Scene', [1, 2, 0, 1])).toEqual({
+      parent: [1, 2, 0],
       index: 2,
       holder: 'root',
     });
@@ -380,7 +412,7 @@ describe('insertion, a component that keeps a place for children', () => {
 
   test("a place for children goes in a component's body, and only once", () => {
     const children: ComponentRef = { kind: 'children' };
-    const doc = starterDocument();
+    const doc = bare();
 
     expect(
       refusalOf(doc, 'Scene', insertionPoint(doc, 'Scene', null), children),

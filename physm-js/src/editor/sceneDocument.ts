@@ -724,6 +724,11 @@ export function extractionRefusal(
  * Move the node at `path`, and everything under it, into a new component named
  * `name`, leaving an instance of it in its place.
  *
+ * It also keeps a place for the new component's children: at the origin of its
+ * outermost frame, passed on to the place of an instance that keeps one, or
+ * beside the node. The place builds nothing until an instance is given
+ * children.
+ *
  * A pure document edit. The scene it builds is unchanged, up to the ids of
  * frames nobody named: ids are scene-wide, so whatever names one -- inside the
  * subtree or out -- still finds it. That is also the limit on reuse. A
@@ -745,6 +750,26 @@ export function extractComponent(
 
   const node = nodeAt(doc, definition, path);
   const [list, index] = splitPath(path);
+
+  // A component takes children by default. The place for them goes at the
+  // origin of its outermost frame; or, for an instance of a component that
+  // keeps a place of its own, among its children, passing them on to it; or
+  // beside the node. It builds nothing until an instance is given some, so
+  // the scene is unchanged, and it can be moved or deleted like any node.
+  const place: DocNode = {
+    type: { kind: 'children' },
+    props: {},
+    children: [],
+  };
+  const holds =
+    (node.type.kind === 'core' && node.type.component.meta.slot === 'frame') ||
+    (node.type.kind === 'defined' &&
+      placeholderPath(doc, node.type.name) !== null);
+  const root: DocNode = {
+    type: node.type,
+    props: node.props,
+    children: holds ? [...node.children, place] : node.children,
+  };
   const instance: DocNode = {
     type: { kind: 'defined', name },
     props: {},
@@ -761,10 +786,7 @@ export function extractComponent(
     ...replaced,
     definitions: [
       ...replaced.definitions,
-      {
-        name,
-        body: [{ type: node.type, props: node.props, children: node.children }],
-      },
+      { name, body: holds ? [root] : [root, place] },
     ],
   };
 }

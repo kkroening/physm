@@ -6,13 +6,12 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Components take children by default.** Karl expects most components to be
-nestable, so that selecting a pendulum and adding a pendulum makes a double
-pendulum. Today that takes three steps in the pendulum's tab first: a
-`FixedFrame` where the children should hang, and the `Children` placeholder
-in it. An extracted component should come with a place for children, in its
-outermost frame, and the starter pendulum with one at its bob -- `[4, 0.5]`,
-which cancels its own pivot offset.
+**Moving a node into another.** The tree moves a node only among its
+siblings, so putting an existing node inside a frame -- a component's place
+for children into a `FixedFrame`, a frame under another -- means deleting it
+and adding it again, props and all. Dragging a row onto another would move it
+inside, held to the same rules as adding there, and a row dropped between two
+would go among them.
 
 ## Next — the MVP
 
@@ -249,3 +248,8 @@ was built while gizmos were in review.
   moves it. With one at a component's bob and the `Children` placeholder in
   it, a nested pendulum hangs from the bob. The core frame, and how its
   coordinate is kept inert in both solvers, landed first.
+- **Components take children by default** — an extracted component keeps a
+  place for children: at the origin of its outermost frame; passed on, for an
+  instance of a component that keeps one; or beside the node. The starter's
+  pendulum keeps its place in a `FixedFrame` at its bob, so adding a pendulum
+  to its instance makes a double pendulum.

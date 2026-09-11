@@ -344,8 +344,10 @@ describe('extracting a component', () => {
       kind: 'defined',
       name: 'Chassis',
     });
+    // With a place for children beside it, since a box holds none.
     expect(definitionOf(next, 'Chassis').body).toEqual([
       nodeAt(doc, 'Scene', [1, 0]),
+      PLACE,
     ]);
     // The document it was given is left as it was.
     expect(definitionOf(doc, 'Scene')).toBe(scene);
@@ -375,6 +377,37 @@ describe('extracting a component', () => {
     expect(named(after)).toEqual(named(before));
     expect(named(after)).toContain('cart');
     expect(frameIds(after)).not.toEqual(frameIds(before));
+  });
+
+  test('a new component takes children, at the origin of its outermost frame', () => {
+    // Scene: [Line, TrackFrame [Box, Weight, Pendulum]].
+    const next = extractComponent(starterDocument(), 'Scene', [1], 'Cart');
+
+    expect(placeholderPath(next, 'Cart')).toEqual([0, 3]);
+  });
+
+  test('from an instance whose component keeps a place, it passes children on', () => {
+    // Given to a rig, they go where its pendulum keeps its place.
+    const next = extractComponent(starterDocument(), 'Scene', [1, 2, 0], 'Rig');
+
+    expect(definitionOf(next, 'Rig').body).toEqual([
+      {
+        type: { kind: 'defined', name: 'Pendulum' },
+        props: {},
+        children: [PLACE],
+      },
+    ]);
+  });
+
+  test('from anything else, it keeps the place beside the node', () => {
+    const next = extractComponent(
+      starterDocument(),
+      'Scene',
+      [1, 0],
+      'Chassis',
+    );
+
+    expect(placeholderPath(next, 'Chassis')).toEqual([1]);
   });
 
   test('refuses to extract a weight or an anchor alone', () => {

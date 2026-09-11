@@ -12,6 +12,7 @@ import emitScene, { rangeKey } from './emitScene';
 import starterDocument from './starterDocument';
 import { InvalidStateMapError } from './../Solver';
 import { documentFrom, nodesFrom } from './sceneDocument';
+import type { DocNode, SceneDocument } from './sceneDocument';
 import { vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
@@ -29,7 +30,9 @@ describe('Editor', () => {
     // as the scene that uses it.
     const code = screen.getByRole('region', { name: 'Code' }).textContent!;
 
-    expect(code).toContain('function Pendulum(): ReactElement');
+    expect(code).toContain(
+      'function Pendulum({ children }: { children?: ReactNode }): ReactElement',
+    );
     expect(code).toContain('export default function Scene(): ReactElement');
 
     // The tree shows the scene's authored nodes, the defined component's
@@ -586,7 +589,7 @@ describe('Editor, changing structure', () => {
 
     fireEvent.click(within(library()).getByRole('button', { name: 'Circle' }));
 
-    expect(code()).toMatch(/<Pendulum \/>\s*<Circle \/>\s*<\/TrackFrame>/);
+    expect(code()).toMatch(/<\/FixedFrame>\s*<Circle \/>\s*<\/TrackFrame>/);
   });
 
   test('adding with anything else selected puts it just after', () => {
@@ -650,7 +653,7 @@ describe('Editor, changing structure', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Move down' }));
     fireEvent.click(screen.getByRole('button', { name: 'Move down' }));
 
-    expect(code()).toMatch(/<Pendulum \/>\s*<Weight mass=\{50\} \/>/);
+    expect(code()).toMatch(/<\/FixedFrame>\s*<Weight mass=\{50\} \/>/);
     expect(screen.getByRole('button', { name: 'Move down' })).toBeDisabled();
 
     // And from the keyboard.
@@ -660,7 +663,7 @@ describe('Editor, changing structure', () => {
       altKey: true,
     });
 
-    expect(code()).toMatch(/<Weight mass=\{50\} \/>\s*<Pendulum \/>/);
+    expect(code()).toMatch(/<Weight mass=\{50\} \/>\s*<FixedFrame/);
   });
 
   test('from the keyboard, each press acts on the node it acted on before', () => {
@@ -680,16 +683,20 @@ describe('Editor, changing structure', () => {
 
     // Focus a row once, then keep pressing wherever focus is, as a keyboard
     // does -- rows are keyed by position, so the row can change under it.
-    focusRow('Pendulum');
+    focusRow('FixedFrame');
     press('Enter');
     press('ArrowUp', true);
     press('ArrowUp', true);
 
-    expect(code()).toMatch(/<Pendulum \/>\s*<Box width=\{2\} \/>\s*<Weight/);
+    expect(code()).toMatch(
+      /<FixedFrame[\s\S]*?<\/FixedFrame>\s*<Box width=\{2\} \/>\s*<Weight/,
+    );
 
     press('ArrowDown', true);
 
-    expect(code()).toMatch(/<Box width=\{2\} \/>\s*<Pendulum \/>\s*<Weight/);
+    expect(code()).toMatch(
+      /<Box width=\{2\} \/>\s*<FixedFrame[\s\S]*?<\/FixedFrame>\s*<Weight/,
+    );
 
     // A second Delete removes nothing the first did not.
     press('Delete');
@@ -805,9 +812,10 @@ describe('Editor, components and tabs', () => {
       within(screen.getByRole('tree', { name: 'Chassis' })).getByText('Box'),
     ).toBeVisible();
 
-    // Defined above its user, and used where the box was.
+    // Defined above its user, with a place for children beside the box, and
+    // used where the box was.
     expect(code()).toMatch(
-      /function Chassis\(\): ReactElement[\s\S]*<Box width=\{2\} \/>[\s\S]*export default function Scene/,
+      /function Chassis\(\{ children \}: \{ children\?: ReactNode \}\): ReactElement[\s\S]*<Box width=\{2\} \/>\s*\{children\}[\s\S]*export default function Scene/,
     );
     expect(code()).toMatch(/resistance=\{5\}>\s*<Chassis \/>\s*<Weight/);
 
@@ -942,9 +950,9 @@ describe('Editor, playing', () => {
       );
     const start = gizmos();
 
-    // The cart, and the pendulum's pivot: the tree's one frame, and the one
-    // inside the component it uses.
-    expect(start).toHaveLength(2);
+    // The cart and the fixed frame it hangs the pendulum from; the pendulum's
+    // pivot and the fixed frame at its bob.
+    expect(start).toHaveLength(4);
 
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
     run(300);
@@ -1191,8 +1199,9 @@ describe('Editor, picking', () => {
   test('the same place again goes one deeper, through each node under it once', () => {
     const { container } = render(<Editor />);
 
-    // Just above the pivot: its gizmo and the pendulum's rod, the cart's gizmo
-    // and box, and the ground. The pivot and the rod are one node here.
+    // Just above the pivot: the pendulum's own gizmo and rod, the fixed frame
+    // the cart hangs it from, the cart's gizmo and box, and the ground. The
+    // pivot and the rod are one node here.
     const nearPivot = [0, 8] as const;
     const clicks: (readonly [number, number])[] = [
       nearPivot,
@@ -1209,10 +1218,10 @@ describe('Editor, picking', () => {
 
     expect(picked).toEqual([
       'Pendulum',
+      'FixedFrame',
       'TrackFrame',
       'Box',
       'Line',
-      'Pendulum',
     ]);
   });
 
@@ -1257,8 +1266,9 @@ describe('Editor, picking', () => {
     );
     clickScene(container, circleCentre(container));
 
-    // The bob is drawn where it was, over the end of the rod.
-    expect(shown()).toBe('Circle');
+    // The bob is drawn where it was, over the end of the rod, and the fixed
+    // frame's gizmo at its centre is on top of it.
+    expect(shown()).toBe('FixedFrame');
   });
 
   test("on a component's tab, a click selects in that component's body", () => {
@@ -1266,6 +1276,11 @@ describe('Editor, picking', () => {
     fireEvent.doubleClick(
       within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
     );
+    clickScene(container, circleCentre(container));
+
+    // The fixed frame at the bob, on top -- and, clicked again, the bob.
+    expect(shown()).toBe('FixedFrame');
+
     clickScene(container, circleCentre(container));
 
     expect(shown()).toBe('Circle');
@@ -2250,6 +2265,7 @@ describe('Editor, the tree from the keyboard', () => {
       'TrackFrame id="cart"',
       'Box',
       'Weight mass=50',
+      'FixedFrame',
       'Pendulum',
     ]);
     expect(screen.getByRole('treeitem', { name: 'TrackFrame id="cart"' })).toBe(
@@ -2257,7 +2273,7 @@ describe('Editor, the tree from the keyboard', () => {
     );
 
     // With nothing selected, Tab reaches the first row.
-    expect(rows().map((row) => row.tabIndex)).toEqual([0, -1, -1, -1, -1]);
+    expect(rows().map((row) => row.tabIndex)).toEqual([0, -1, -1, -1, -1, -1]);
 
     // Nothing else in the tree is a Tab stop: not the rows inside the items.
     const tree = screen.getByRole('tree', { name: 'Scene' });
@@ -2287,7 +2303,7 @@ describe('Editor, the tree from the keyboard', () => {
 
     pressKey('End');
 
-    expect(document.activeElement).toBe(rows()[4]);
+    expect(document.activeElement).toBe(rows()[5]);
 
     pressKey('Home');
 
@@ -2332,18 +2348,18 @@ describe('Editor, the tree from the keyboard', () => {
     pressKey('ArrowDown');
     pressKey('ArrowDown');
 
-    // On the pendulum, with the box still selected: the pendulum is the stop.
-    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, -1, -1, 0]);
+    // On the fixed frame, with the box still selected: it is the stop.
+    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, -1, -1, 0, -1]);
 
     // Out of the tree: Tab back in lands on the selection...
     act(() => (document.activeElement as HTMLElement).blur());
 
-    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, 0, -1, -1]);
+    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, 0, -1, -1, -1]);
 
     // ...and on a new one, however it was made.
     clickScene(container, circleCentre(container));
 
-    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, -1, -1, 0]);
+    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, -1, -1, -1, 0]);
   });
 
   test('the focused row stays the Tab stop when the selection is cleared', () => {
@@ -2353,7 +2369,7 @@ describe('Editor, the tree from the keyboard', () => {
     pressKey('Escape');
 
     expect(document.activeElement).toBe(rows()[2]);
-    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, 0, -1, -1]);
+    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
   test('with Alt, Ctrl or Meta held, the arrows are left to the browser', () => {
@@ -2652,7 +2668,7 @@ describe('Editor, the selection in the code', () => {
     select('TrackFrame');
 
     expect(marked()).toMatch(
-      /^<TrackFrame id="cart" resistance=\{5\}>[\s\S]*<Pendulum \/>\s*<\/TrackFrame>$/,
+      /^<TrackFrame id="cart" resistance=\{5\}>[\s\S]*<\/FixedFrame>\s*<\/TrackFrame>$/,
     );
   });
 
@@ -2847,6 +2863,35 @@ describe('Editor, finding a node', () => {
   });
 });
 
+/**
+ * The starter scene with its pendulum keeping no place for children -- and,
+ * unless `mount`, no fixed frame at its bob either.
+ */
+function starterWithoutPlaces({ mount = true } = {}): SceneDocument {
+  const isMount = (node: DocNode): boolean =>
+    node.type.kind === 'core' && node.type.component.meta.name === 'FixedFrame';
+
+  // A fixed frame taken out leaves what it held where it was, so the cart
+  // keeps its pendulum.
+  const strip = (nodes: readonly DocNode[]): DocNode[] =>
+    nodes
+      .filter(({ type }) => type.kind !== 'children')
+      .flatMap((node) =>
+        !mount && isMount(node)
+          ? strip(node.children)
+          : [{ ...node, children: strip(node.children) }],
+      );
+  const doc = starterDocument();
+
+  return {
+    ...doc,
+    definitions: doc.definitions.map((definition) => ({
+      ...definition,
+      body: strip(definition.body),
+    })),
+  };
+}
+
 /** Add `name` from the library, where the selection says. */
 function add(name: string): void {
   fireEvent.click(within(library()).getByRole('button', { name }));
@@ -2867,21 +2912,19 @@ function selectIn(name: string, text: string): void {
 }
 
 describe('Editor, components that take children', () => {
-  test('a place for children, and a pendulum hung in a pendulum', () => {
+  test("a pendulum added to the starter's pendulum hangs from its bob", () => {
     const { container } = render(<Editor />);
 
-    // In the pendulum's own tab, a place for its children, in its frame.
-    openPendulum();
-    selectIn('Pendulum', 'RotationalFrame');
-    add('Children');
-
-    expect(code()).toContain(
-      'function Pendulum({ children }: { children?: ReactNode }): ReactElement {',
+    // The starter's pendulum keeps a place for children, in the fixed frame at
+    // its bob, so its instance takes a pendulum -- and the cart hangs it from
+    // a fixed frame of its own, at the bottom edge of its box.
+    expect(code()).toMatch(
+      /<FixedFrame position=\{\[4, 0\]\}>\s*\{children\}\s*<\/FixedFrame>/,
     );
-    expect(code()).toContain('{children}');
+    expect(code()).toMatch(
+      /<FixedFrame position=\{\[0, -0\.5\]\}>\s*<Pendulum \/>\s*<\/FixedFrame>/,
+    );
 
-    // Back in the scene's tab, the pendulum's instance takes a pendulum.
-    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
     selectIn('Scene', 'Pendulum');
 
     expect(library()).toHaveTextContent('Adds inside the selected Pendulum.');
@@ -2890,12 +2933,28 @@ describe('Editor, components that take children', () => {
 
     expect(code()).toMatch(/<Pendulum>\s*<Pendulum \/>\s*<\/Pendulum>/);
 
-    // The cart, the pendulum, and the pendulum hung in it.
-    expect(container.querySelectorAll('.editor__gizmo')).toHaveLength(3);
+    // The cart and its fixed frame; the pendulum and its own; and the same
+    // again, hung in it.
+    expect(container.querySelectorAll('.editor__gizmo')).toHaveLength(6);
+
+    // The nested one's rod starts at the centre of the first one's bob.
+    const scene = container.querySelector('.editor__scene .scene')!;
+    const [bob] = [...scene.querySelectorAll('circle')];
+    const [cx, cy] = ['cx', 'cy'].map((name) =>
+      Number(bob!.getAttribute(name)),
+    );
+    const starts = [...scene.querySelectorAll('line')].map((line) =>
+      Math.hypot(
+        Number(line.getAttribute('x1')) - cx!,
+        Number(line.getAttribute('y1')) - cy!,
+      ),
+    );
+
+    expect(Math.min(...starts)).toBeLessThan(1e-6);
   });
 
   test("the library's place for children goes in a component's tab, once", () => {
-    render(<Editor />);
+    render(<Editor initialDocument={starterWithoutPlaces()} />);
     const place = (): HTMLElement =>
       within(library()).getByRole('button', { name: 'Children' });
 
@@ -2921,8 +2980,7 @@ describe('Editor, components that take children', () => {
   test('the place says what it is, and cannot leave while children use it', () => {
     render(<Editor />);
     openPendulum();
-    selectIn('Pendulum', 'RotationalFrame');
-    add('Children');
+    selectIn('Pendulum', 'Children');
 
     expect(shown()).toBe('Children');
     expect(
@@ -2931,8 +2989,8 @@ describe('Editor, components that take children', () => {
       'The children an instance of Pendulum is given go here',
     );
 
-    // Nor can the frame holding it become a component of its own.
-    selectIn('Pendulum', 'RotationalFrame');
+    // Nor can a frame holding it become a component of its own.
+    selectIn('Pendulum', 'FixedFrame');
 
     expect(
       screen.getByRole('button', { name: 'Extract to component' }),
@@ -2970,12 +3028,13 @@ describe('Editor, components that take children', () => {
 });
 
 describe('Editor, children on a fixed frame', () => {
-  test('a fixed frame at the bob hangs a nested pendulum from it', () => {
-    const { container } = render(<Editor />);
+  test('a fixed frame at the bob, with the place in it, hangs a nested pendulum there', () => {
+    const { container } = render(
+      <Editor initialDocument={starterWithoutPlaces({ mount: false })} />,
+    );
 
-    // In the pendulum's tab: a fixed frame in its frame, at the bob -- half a
-    // unit up, since the pendulum's own pivot sits half a unit below where it
-    // is placed -- and the place for children in it.
+    // In the pendulum's tab: a fixed frame in its frame, at the bob, and the
+    // place for children in it.
     openPendulum();
     selectIn('Pendulum', 'RotationalFrame');
     add('FixedFrame');
@@ -2983,14 +3042,11 @@ describe('Editor, children on a fixed frame', () => {
     fireEvent.change(within(props).getByLabelText('Position x'), {
       target: { value: '4' },
     });
-    fireEvent.change(within(props).getByLabelText('Position y'), {
-      target: { value: '0.5' },
-    });
     selectIn('Pendulum', 'FixedFrame');
     add('Children');
 
     expect(code()).toMatch(
-      /<FixedFrame position=\{\[4, 0\.5\]\}>\s*\{children\}\s*<\/FixedFrame>/,
+      /<FixedFrame position=\{\[4, 0\]\}>\s*\{children\}\s*<\/FixedFrame>/,
     );
 
     // In the scene's tab, a pendulum hung in the pendulum.
