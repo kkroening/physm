@@ -237,6 +237,30 @@ function pathsFound(nodes: readonly DocNode[], query: string): NodePath[] {
   return search ? pathsMatching(nodes, search) : [];
 }
 
+/**
+ * The found node to select, of `paths` in the tree's order `keys`: the first
+ * from the selection on, or the next or the previous one -- round from the end
+ * to the start, and back.
+ */
+function foundFrom(
+  paths: readonly NodePath[],
+  keys: readonly string[],
+  selectedKey: string | null,
+  step: 'here' | 'next' | 'previous',
+): NodePath | undefined {
+  const placeOf = (path: NodePath): number => keys.indexOf(path.join('.'));
+  const selectedPlace = selectedKey === null ? -1 : keys.indexOf(selectedKey);
+  if (step === 'previous') {
+    const before = paths.filter((path) => placeOf(path) < selectedPlace);
+
+    return before[before.length - 1] ?? paths[paths.length - 1];
+  }
+
+  const from = step === 'here' ? selectedPlace : selectedPlace + 1;
+
+  return paths.find((path) => placeOf(path) >= from) ?? paths[0];
+}
+
 /** Every row's key -- its path, joined -- in the order the tree draws them. */
 function rowKeys(nodes: readonly DocNode[], parent: NodePath = []): string[] {
   return nodes.flatMap((node, index) => {
@@ -457,14 +481,15 @@ function TreePane({
   const [naming, setNaming] = useState<string | null>(null);
   const selectedKey = selectedPath ? selectedPath.join('.') : null;
 
-  // The pane scrolls to the selection when it changes -- by a find, say, or a
-  // click in the scene -- or it could be selected out of sight.
-  const paneRef = useRef<HTMLElement>(null);
+  // The rows scroll to the selection when it changes -- by a find, say, or a
+  // click in the scene -- or it could be selected out of sight. The rows, not
+  // the pane: the toolbar and the find field above them stay put.
+  const listRef = useRef<HTMLUListElement>(null);
   useEffect(() => {
-    const pane = paneRef.current;
-    const row = pane?.querySelector('[aria-selected="true"] > .editor__row');
-    if (pane && row) {
-      scrollPaneTo(pane, row);
+    const list = listRef.current;
+    const row = list?.querySelector('[aria-selected="true"] > .editor__row');
+    if (list && row) {
+      scrollPaneTo(list, row);
     }
   }, [selectedKey]);
 
@@ -538,27 +563,6 @@ function TreePane({
   const found = pathsFound(body, query);
   const matched = new Set(found.map((path) => path.join('.')));
   const foundAt = found.findIndex((path) => path.join('.') === selectedKey);
-  const selectedPlace = selectedKey === null ? -1 : keys.indexOf(selectedKey);
-  const placeOf = (path: NodePath): number => keys.indexOf(path.join('.'));
-
-  /**
-   * The found node to select: the first from the selection on, or the next or
-   * the previous one -- round from the end to the start, and back.
-   */
-  const foundFrom = (
-    paths: readonly NodePath[],
-    step: 'here' | 'next' | 'previous',
-  ): NodePath | undefined => {
-    if (step === 'previous') {
-      const before = paths.filter((path) => placeOf(path) < selectedPlace);
-
-      return before[before.length - 1] ?? paths[paths.length - 1];
-    }
-
-    const from = step === 'here' ? selectedPlace : selectedPlace + 1;
-
-    return paths.find((path) => placeOf(path) >= from) ?? paths[0];
-  };
   const findStatus = !query.trim()
     ? ''
     : found.length === 0
@@ -578,7 +582,6 @@ function TreePane({
 
   return (
     <section
-      ref={paneRef}
       className="editor__tree"
       aria-label="Tree"
       onClick={(event) => {
@@ -656,6 +659,8 @@ function TreePane({
             // selection that still matches.
             const next = foundFrom(
               pathsFound(body, event.target.value),
+              keys,
+              selectedKey,
               'here',
             );
             if (next) {
@@ -667,6 +672,8 @@ function TreePane({
               event.preventDefault();
               const next = foundFrom(
                 found,
+                keys,
+                selectedKey,
                 event.shiftKey ? 'previous' : 'next',
               );
               if (next) {
@@ -676,7 +683,7 @@ function TreePane({
               // Cleared, and back to the tree, on the row Tab would reach.
               event.preventDefault();
               setQuery('');
-              paneRef.current
+              listRef.current
                 ?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]')
                 ?.focus();
             }
@@ -687,6 +694,7 @@ function TreePane({
         </span>
       </div>
       <ul
+        ref={listRef}
         role="tree"
         aria-label={focus}
         tabIndex={-1}

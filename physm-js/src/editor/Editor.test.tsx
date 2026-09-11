@@ -2798,32 +2798,34 @@ describe('Editor, finding a node', () => {
 
     expect(marks()).toEqual(['Line', 'Box']);
 
+    // On to the box, which is not the first row.
+    fireEvent.keyDown(findField(), { key: 'Enter' });
     fireEvent.keyDown(findField(), { key: 'Escape' });
 
     expect(findField()).toHaveValue('');
     expect(marks()).toEqual([]);
 
     // Back in the tree, on the node it found.
-    expect(document.activeElement).toBe(rows()[0]);
+    expect(document.activeElement).toBe(rows()[2]);
   });
 
-  test('the tree scrolls to a node selected out of its sight', () => {
-    // jsdom lays nothing out: a tree pane 100 pixels high at the top of the
-    // screen, and the selected row 300 pixels down what it scrolls.
+  test('the rows scroll to a node selected out of their sight, and only they', () => {
+    // jsdom lays nothing out: the tree's rows in a list 100 pixels high at the
+    // top of the screen, and the selected row 300 pixels down what it scrolls.
     const spies = [
       vi
         .spyOn(Element.prototype, 'clientHeight', 'get')
         .mockImplementation(function (this: Element) {
-          return this.matches('.editor__tree') ? 100 : 0;
+          return this.matches('.editor__tree [role="tree"]') ? 100 : 0;
         }),
       vi
         .spyOn(Element.prototype, 'getBoundingClientRect')
         .mockImplementation(function (this: Element) {
-          const pane = this.closest('.editor__tree');
-          const [top, bottom] = this.matches('.editor__tree')
+          const list = this.closest('.editor__tree [role="tree"]');
+          const [top, bottom] = this.matches('.editor__tree [role="tree"]')
             ? [0, 100]
-            : pane && this.matches('[aria-selected="true"] > .editor__row')
-              ? [300 - pane.scrollTop, 320 - pane.scrollTop]
+            : list && this.matches('[aria-selected="true"] > .editor__row')
+              ? [300 - list.scrollTop, 320 - list.scrollTop]
               : [0, 0];
 
           return new DOMRect(0, top, 0, bottom - top);
@@ -2833,7 +2835,12 @@ describe('Editor, finding a node', () => {
       const { container } = render(<Editor />);
       find('mass=50');
 
-      expect(container.querySelector('.editor__tree')!.scrollTop).toBe(220);
+      expect(
+        container.querySelector('.editor__tree [role="tree"]')!.scrollTop,
+      ).toBe(220);
+
+      // The pane around them, with the find field in it, stays where it was.
+      expect(container.querySelector('.editor__tree')!.scrollTop).toBe(0);
     } finally {
       spies.forEach((spy) => spy.mockRestore());
     }

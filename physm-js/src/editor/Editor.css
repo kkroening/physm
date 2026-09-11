@@ -123,8 +123,19 @@
   background-color: #eef4f9;
 }
 
+/* The tree pane's toolbar and find field stay put, and its rows scroll
+   beneath them: finding a row far down must not scroll the field away. */
 .editor__tree {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-right: 1px solid #a1b5d8;
+}
+
+.editor__tree > [role='tree'] {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .editor__tree ul {
@@ -635,7 +646,8 @@
     min-height: 100vh;
   }
 
-  .editor__code {
+  .editor__code,
+  .editor__tree > [role='tree'] {
     max-height: 20rem;
   }
 }
