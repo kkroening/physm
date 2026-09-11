@@ -242,6 +242,27 @@ describe('Editor, editing props', () => {
     expect(angle).toHaveValue('90');
   });
 
+  test("a rotational frame's state is edited in degrees", () => {
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame id="arm" initialState={[Math.PI / 2, 0]}>
+            <Weight mass={1} position={[1, 0]} />
+          </RotationalFrame>,
+        )}
+      />,
+    );
+    const value = within(select('RotationalFrame')).getByLabelText(
+      'Initial state value',
+    );
+
+    expect(value).toHaveValue('90');
+
+    fireEvent.change(value, { target: { value: '45' } });
+
+    expect(code()).toContain(`initialState={[${Math.PI / 4}, 0]}`);
+  });
+
   test('emptying a field returns the prop to its default', () => {
     render(<Editor />);
 

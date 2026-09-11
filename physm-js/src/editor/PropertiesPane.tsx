@@ -148,6 +148,9 @@ function NumberInput({
  */
 function PairInputs({ spec, value, onChange }: FieldProps): ReactElement {
   const axes = spec.kind === 'point' ? ['x', 'y'] : ['value', 'rate'];
+  // A rotational frame's state is an angle and its rate: both in degrees.
+  const scale =
+    spec.kind === 'state' && spec.coordinate === 'angle' ? DEGREES : 1;
   const pair = Array.isArray(value) ? (value as readonly number[]) : undefined;
   const fallback = Array.isArray(spec.default)
     ? (spec.default as readonly number[])
@@ -160,9 +163,9 @@ function PairInputs({ spec, value, onChange }: FieldProps): ReactElement {
           key={axis}
           aria-label={`${spec.label} ${axis}`}
           inputMode="decimal"
-          shown={pair ? formatNumber(pair[index]!) : ''}
+          shown={pair ? formatNumber(pair[index]! * scale) : ''}
           placeholder={
-            fallback ? formatNumber(fallback[index]!) : absenceOf(spec)
+            fallback ? formatNumber(fallback[index]! * scale) : absenceOf(spec)
           }
           commit={(text) => {
             const parsed = parseNumber(text);
@@ -171,7 +174,7 @@ function PairInputs({ spec, value, onChange }: FieldProps): ReactElement {
             }
 
             const next = [...(pair ?? fallback ?? [0, 0])];
-            next[index] = parsed;
+            next[index] = parsed / scale;
             onChange(next);
             return true;
           }}
