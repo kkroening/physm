@@ -992,6 +992,19 @@ describe('Editor, playing', () => {
     fireEvent.click(undoButton());
 
     expect(bob(container)).toBe(moved);
+
+    // Redone the same way round: the width carries the motion over, and the
+    // insert starts it over.
+    fireEvent.click(redoButton());
+
+    expect(bob(container)).toBe(moved);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    fireEvent.click(redoButton());
+
+    expect(bob(container)).toBe(start);
   });
 });
 
@@ -1276,6 +1289,116 @@ describe('Editor, undo', () => {
       'aria-selected',
       'true',
     );
+
+    // And redone there too.
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+    fireEvent.click(redoButton());
+
+    expect(screen.getByRole('tab', { name: 'Pendulum' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  test("undoing a prop edit made in another tab brings back that tab's node", () => {
+    render(<Editor />);
+    fireEvent.doubleClick(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
+    );
+    fireEvent.click(
+      within(screen.getByRole('tree', { name: 'Pendulum' })).getByText(
+        'Circle',
+      ),
+    );
+    fireEvent.change(
+      within(screen.getByRole('region', { name: 'Properties' })).getByLabelText(
+        'Radius',
+      ),
+      { target: { value: '0.8' } },
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+    select('Box');
+    fireEvent.click(undoButton());
+
+    expect(screen.getByRole('tab', { name: 'Pendulum' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(shown()).toBe('Circle');
+  });
+
+  test('undoing an edit whose tab was closed opens it again', () => {
+    render(<Editor />);
+    fireEvent.doubleClick(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
+    );
+    fireEvent.click(within(library()).getByRole('button', { name: 'Circle' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close Pendulum' }));
+    fireEvent.click(undoButton());
+
+    expect(screen.getByRole('tab', { name: 'Pendulum' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  test('undoing a delete brings the node back, selected as it was', () => {
+    render(<Editor />);
+    select('Box');
+    fireEvent.keyDown(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText('Box'),
+      { key: 'Delete' },
+    );
+
+    expect(shown()).toBeNull();
+
+    fireEvent.click(undoButton());
+
+    expect(shown()).toBe('Box');
+
+    // Redone, it leaves nothing selected, as the delete did.
+    fireEvent.click(redoButton());
+
+    expect(shown()).toBeNull();
+  });
+
+  test('two clicks on a checkbox are two steps', () => {
+    render(<Editor />);
+    const solid = within(select('Box')).getByRole('checkbox', {
+      name: 'Solid',
+    });
+    fireEvent.click(solid);
+    fireEvent.click(solid);
+    fireEvent.click(undoButton());
+
+    expect(code()).toContain('solid={false}');
+  });
+
+  test('a reset is a step of its own', () => {
+    render(<Editor />);
+    fireEvent.change(within(select('Line')).getByLabelText('Line width'), {
+      target: { value: '0.3' },
+    });
+    fireEvent.click(
+      within(select('Line')).getByRole('button', { name: 'Reset Line width' }),
+    );
+    fireEvent.click(undoButton());
+
+    expect(code()).toContain('lineWidth={0.3}');
+  });
+
+  test('coming back to a field starts a new step', () => {
+    render(<Editor />);
+    const width = (): HTMLElement =>
+      within(select('Box')).getByLabelText('Width');
+    fireEvent.focus(width());
+    fireEvent.change(width(), { target: { value: '3' } });
+    fireEvent.focus(within(select('Box')).getByLabelText('Height'));
+    fireEvent.focus(width());
+    fireEvent.change(width(), { target: { value: '5' } });
+    fireEvent.click(undoButton());
+
+    expect(code()).toContain('width={3}');
   });
 
   test('from the keyboard, anywhere but in a text field', () => {
@@ -1300,6 +1423,20 @@ describe('Editor, undo', () => {
 
     fireEvent.keyDown(tree, { key: 'z', ctrlKey: true });
     fireEvent.keyDown(tree, { key: 'y', ctrlKey: true });
+
+    expect(code()).toContain('width={3}');
+
+    // With the focus nowhere in particular, as after a click in the scene.
+    fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
+
+    expect(code()).toBe(before);
+
+    // A checkbox is not a text field: the keys are the editor's there.
+    fireEvent.keyDown(screen.getByRole('checkbox', { name: 'Solid' }), {
+      key: 'Z',
+      ctrlKey: true,
+      shiftKey: true,
+    });
 
     expect(code()).toContain('width={3}');
   });

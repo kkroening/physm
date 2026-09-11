@@ -38,7 +38,7 @@ import type {
 } from './sceneDocument';
 import type { History, Step } from './history';
 import type { InsertionPoint } from './insertion';
-import type { KeyboardEvent, MouseEvent, ReactElement } from 'react';
+import type { MouseEvent, ReactElement } from 'react';
 import type { ScreenPoint } from './placeGizmos';
 import type { Selection } from './PropertiesPane';
 import type { Trail } from './../react/buildScene';
@@ -731,19 +731,36 @@ export default function Editor({
   const selectedPath = selection?.definition === focus ? selection.path : null;
   const point = insertionPoint(doc, focus, selectedPath);
 
-  /** Record an edit made in the focused tab. */
+  /**
+   * Record an edit made in the focused tab, with the selection before it and
+   * the one it makes: by default, the same one.
+   */
   const record = (
     next: SceneDocument,
-    structural: boolean,
-    field: string | null = null,
+    {
+      structural,
+      field = null,
+      after = selectedPath,
+    }: {
+      structural: boolean;
+      field?: string | null;
+      after?: NodePath | null;
+    },
   ): void =>
     setHistory((current) =>
-      recorded(current, { doc: next, focus, structural, field }),
+      recorded(current, {
+        doc: next,
+        focus,
+        structural,
+        before: selectedPath,
+        after,
+        field,
+      }),
     );
 
   /** Replace the document, and select `path` in it -- or nothing. */
   const change = (next: SceneDocument, path: NodePath | null): void => {
-    record(next, true);
+    record(next, { structural: true, after: path });
     restructure();
     setSelection(path ? { definition: focus, path } : null);
   };
@@ -766,16 +783,18 @@ export default function Editor({
   };
 
   /**
-   * Move through the history to `next`, back in the tab `edit` was made in.
+   * Move through the history to `next` by undoing `edit` -- `back` -- or by
+   * redoing it, returning to the tab it was made in.
    *
    * A tab whose component the document no longer defines closes. The selection
-   * goes with a structural edit, after which a path no longer means what it
-   * did, and with a change of tab; it stays with a prop edit, which moves
-   * nothing.
+   * goes back to one side of the edit: the one before it, on undo, and the one
+   * it made, on redo. Each is a path in the very document arrived at, so it
+   * means what it meant then.
    */
-  const travel = (next: History, edit: Step): void => {
+  const travel = (next: History, edit: Step, back: boolean): void => {
     const names = new Set(next.present.doc.definitions.map(({ name }) => name));
     const to = names.has(edit.focus) ? edit.focus : next.present.doc.root;
+    const path = to === edit.focus ? (back ? edit.before : edit.after) : null;
     setHistory(next);
     setTabs((open) => {
       const kept = open.filter((tab) => names.has(tab));
@@ -783,10 +802,7 @@ export default function Editor({
       return kept.includes(to) ? kept : [...kept, to];
     });
     setFocus(to);
-    if (edit.structural || to !== focus) {
-      setSelection(null);
-    }
-
+    setSelection(path ? { definition: to, path } : null);
     if (edit.structural) {
       restructure();
     }
@@ -794,19 +810,23 @@ export default function Editor({
 
   const undo = (): void => {
     if (history.past.length) {
-      travel(undone(history), history.present);
+      travel(undone(history), history.present, true);
     }
   };
 
   const redo = (): void => {
     const [next] = history.future;
     if (next) {
-      travel(redone(history), next);
+      travel(redone(history), next, false);
     }
   };
 
-  /** Undo and redo from the keyboard -- except in a text field, whose own they are. */
-  const onHistoryKey = (event: KeyboardEvent<HTMLDivElement>): void => {
+  // Undo and redo from the keyboard, wherever the focus is -- except in a text
+  // field, whose own they are. On the window, because a click in the scene
+  // leaves the focus on the page's body, outside the editor; through a ref, so
+  // the one listener always reaches this render's history.
+  const onHistoryKey = useRef<(event: KeyboardEvent) => void>(() => {});
+  onHistoryKey.current = (event) => {
     const { target } = event;
     const inText =
       target instanceof HTMLTextAreaElement ||
@@ -828,6 +848,14 @@ export default function Editor({
     }
   };
 
+  useEffect(() => {
+    const listener = (event: KeyboardEvent): void =>
+      onHistoryKey.current(event);
+    window.addEventListener('keydown', listener);
+
+    return () => window.removeEventListener('keydown', listener);
+  }, []);
+
   const actions: TreeActions = {
     onSelect: (path) => setSelection({ definition: focus, path }),
     onDeselect: () => setSelection(null),
@@ -845,7 +873,7 @@ export default function Editor({
   };
 
   return (
-    <div className="editor" onKeyDown={onHistoryKey}>
+    <div className="editor">
       <div className="editor__bar">
         <nav
           className="editor__tabs"
@@ -902,7 +930,10 @@ export default function Editor({
             focus={focus}
             selectedPath={selectedPath}
             onExtract={(path, name) => {
-              record(extractComponent(doc, focus, path, name), true);
+              record(extractComponent(doc, focus, path, name), {
+                structural: true,
+                after: path,
+              });
               open(name);
               restructure();
             }}
@@ -934,7 +965,7 @@ export default function Editor({
       <PropertiesPane
         doc={doc}
         selection={selection}
-        onChange={(next, field) => record(next, false, field)}
+        onChange={(next, field) => record(next, { structural: false, field })}
         onOpen={open}
       />
     </div>

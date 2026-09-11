@@ -1,4 +1,4 @@
-import type { SceneDocument } from './sceneDocument';
+import type { NodePath, SceneDocument } from './sceneDocument';
 
 /** One state the document has been in, and how the edit that made it was made. */
 export interface Step {
@@ -9,6 +9,12 @@ export interface Step {
 
   /** Whether the edit changed the structure: see `useSimulation`. */
   readonly structural: boolean;
+
+  /** The selection in `focus` before the edit, which undoing it puts back. */
+  readonly before: NodePath | null;
+
+  /** The selection the edit made, which redoing it puts back. */
+  readonly after: NodePath | null;
 
   /**
    * The field a prop edit came from, so that a run of keystrokes in one field
@@ -33,7 +39,14 @@ export interface History {
 export function historyOf(doc: SceneDocument): History {
   return {
     past: [],
-    present: { doc, focus: doc.root, structural: false, field: null },
+    present: {
+      doc,
+      focus: doc.root,
+      structural: false,
+      before: null,
+      after: null,
+      field: null,
+    },
     future: [],
   };
 }

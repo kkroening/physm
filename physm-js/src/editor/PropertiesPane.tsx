@@ -1,4 +1,4 @@
-import { Fragment, useId, useState } from 'react';
+import { Fragment, useId, useRef, useState } from 'react';
 import { nodeAt, setProp } from './sceneDocument';
 import type { DocNode, NodePath, SceneDocument } from './sceneDocument';
 import type { PropSpec } from './../react/componentMeta';
@@ -233,7 +233,12 @@ function PropField({
   value,
   names,
   onChange,
-}: FieldProps & { readonly names: readonly string[] }): ReactElement {
+}: Omit<FieldProps, 'onChange'> & {
+  readonly names: readonly string[];
+
+  /** A new value -- `discrete` for a click, which is a step of its own to undo. */
+  readonly onChange: (value: unknown, discrete?: boolean) => void;
+}): ReactElement {
   const id = useId();
   const reset =
     value !== undefined && !spec.required ? (
@@ -242,7 +247,7 @@ function PropField({
         className="editor__reset"
         aria-label={`Reset ${spec.label}`}
         title={spec.default === undefined ? 'Unset' : 'Reset to default'}
-        onClick={() => onChange(undefined)}
+        onClick={() => onChange(undefined, true)}
       >
         ×
       </button>
@@ -268,7 +273,7 @@ function PropField({
             <input
               type="checkbox"
               checked={Boolean(value ?? spec.default)}
-              onChange={(event) => onChange(event.target.checked)}
+              onChange={(event) => onChange(event.target.checked, true)}
             />
             {spec.label}
           </label>
@@ -338,13 +343,17 @@ function NodeProps({
   doc,
   selection,
   node,
+  visit,
   onChange,
   onOpen,
 }: {
   doc: SceneDocument;
   selection: Selection;
   node: DocNode;
-  onChange: (doc: SceneDocument, field: string) => void;
+
+  /** How many times the focus has come into the pane: see `PropertiesPane`. */
+  visit: { readonly current: number };
+  onChange: (doc: SceneDocument, field: string | null) => void;
   onOpen: (name: string) => void;
 }): ReactElement {
   if (node.type.kind === 'defined') {
@@ -405,10 +414,12 @@ function NodeProps({
             spec={spec}
             value={node.props[name]}
             names={names}
-            onChange={(value) =>
+            onChange={(value, discrete) =>
               onChange(
                 setProp(doc, selection.definition, selection.path, name, value),
-                `${selection.definition}/${selection.path.join('.')}/${name}`,
+                discrete
+                  ? null
+                  : `${selection.definition}/${selection.path.join('.')}/${name}#${visit.current}`,
               )
             }
           />
@@ -447,16 +458,32 @@ export default function PropertiesPane({
   doc: SceneDocument;
   selection: Selection | null;
 
-  /** A new document, and the field that made it: see `recorded` in `history`. */
-  onChange: (doc: SceneDocument, field: string) => void;
+  /**
+   * A new document, and the field that made it: see `recorded` in `history`.
+   * `null` for a click, which is a step of its own; a typed field is named for
+   * one visit to it, so a run of keystrokes there is one step and the next
+   * visit starts another.
+   */
+  onChange: (doc: SceneDocument, field: string | null) => void;
 
   /** Open a component this document defines, in its own tab. */
   onOpen: (name: string) => void;
 }): ReactElement {
   const node = selection ? selectedNode(doc, selection) : null;
 
+  // Counts every time the focus comes into the pane, which names each visit
+  // to a field. Kept here rather than in a field, so it goes on counting when
+  // a node is selected again and its fields are made afresh.
+  const visit = useRef(0);
+
   return (
-    <section className="editor__props" aria-label="Properties">
+    <section
+      className="editor__props"
+      aria-label="Properties"
+      onFocus={() => {
+        visit.current += 1;
+      }}
+    >
       <div className="editor__heading">Properties</div>
       {selection && node ? (
         <NodeProps
@@ -466,6 +493,7 @@ export default function PropertiesPane({
           doc={doc}
           selection={selection}
           node={node}
+          visit={visit}
           onChange={onChange}
           onOpen={onOpen}
         />

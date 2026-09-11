@@ -60,7 +60,9 @@ was built while gizmos were in review.
 - Watch the running scene from a component's tab. Page 8 wants a `Pendulum`
   tab to show that pendulum's frames moving as part of the rig; which instance
   a tab shows, when the scene has several, is open. Until then Play runs from
-  the scene's own tab, and a component's tab draws it as authored.
+  the scene's own tab, and a component's tab draws it as authored -- so undoing
+  an edit made in a component's tab, which returns there, pauses the run.
+  Whether undo should stay on the scene's tab while it runs is Karl's call.
 - One walk from state to pose. `FrameView`, the gizmos and
   `Scene.getPosMatrixMap` each compose a frame's pose from the state map, and
   agree because tests hold them to it. Reading the core's map everywhere,
@@ -166,7 +168,8 @@ was built while gizmos were in review.
   frame and decal, and the document says which node made each element, which
   is how a click leads back.
 - **Undo** — every edit is recorded in a history of documents, which Undo and
-  Redo walk, from the tab bar or from the keyboard outside a text field. A
-  field's run of keystrokes is one step. Undoing returns to the tab the edit
-  was made in and closes a tab whose component is gone; only a structural step
-  restarts the run and clears the selection.
+  Redo walk, from the tab bar or from the keyboard outside a text field. One
+  visit's keystrokes in a field are one step, and a click is one. Undoing
+  returns to the tab the edit was made in, closes a tab whose component is
+  gone, and puts back the selection from before the edit; redoing puts back the
+  one it made. Only a structural step restarts the run.

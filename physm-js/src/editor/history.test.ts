@@ -16,7 +16,14 @@ const [a, b, c, d] = ['A', 'B', 'C', 'D'].map(named) as [
 
 /** An edit to `doc`: a prop edit from `field`, or a structural one. */
 function edit(doc: SceneDocument, field: string | null = null): Step {
-  return { doc, focus: 'Scene', structural: field === null, field };
+  return {
+    doc,
+    focus: 'Scene',
+    structural: field === null,
+    before: null,
+    after: null,
+    field,
+  };
 }
 
 describe('history', () => {
