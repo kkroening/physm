@@ -36,6 +36,39 @@ const PROP_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** An object key that needs no quotes. */
 const BARE_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
+/** The denominators a multiple of π is written with: the common fractions of a turn. */
+const PI_DENOMINATORS = [1, 2, 3, 4, 6, 8, 12];
+
+/**
+ * A multiple of π as a person would write it -- `-Math.PI / 2`, not
+ * `-1.5707963267948966` -- or `null` for a number that is not one exactly.
+ *
+ * Exactly: the expression has to evaluate to the very number, so the code
+ * rebuilds what it was written from. It is compared as `(k * Math.PI) / d`,
+ * and written so, since `k * (Math.PI / d)` is another double for some
+ * fractions. Nor is it always in lowest terms: 495° is the double
+ * `(33 * Math.PI) / 12`, which `(11 * Math.PI) / 4` is not. And only within
+ * two turns either way: a large enough number lands on some multiple of π by
+ * chance -- nearly any past 1e15 does -- and is no angle.
+ */
+function piLiteral(value: number): string | null {
+  for (const d of PI_DENOMINATORS) {
+    const k = Math.round((value * d) / Math.PI);
+    if (k !== 0 && Math.abs(k) <= 4 * d && (k * Math.PI) / d === value) {
+      const times = Math.abs(k) === 1 ? '' : `${Math.abs(k)} * `;
+      const multiple = `${k < 0 ? '-' : ''}${times}Math.PI`;
+
+      return d === 1
+        ? multiple
+        : times
+          ? `(${multiple}) / ${d}`
+          : `${multiple} / ${d}`;
+    }
+  }
+
+  return null;
+}
+
 /** A value, as a JavaScript expression -- or a throw saying why it cannot be. */
 function literal(value: unknown): string {
   if (typeof value === 'number') {
@@ -43,7 +76,7 @@ function literal(value: unknown): string {
       throw new Error(`${value} cannot be written as source.`);
     }
 
-    return String(value);
+    return piLiteral(value) ?? String(value);
   }
 
   if (typeof value === 'string') {
