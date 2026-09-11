@@ -958,3 +958,137 @@ describe('Editor, playing', () => {
     expect(bob(container)).toBe(start);
   });
 });
+
+/** Click the scene pane at a point in its own coordinates. */
+function clickScene(
+  container: HTMLElement,
+  [x, y]: readonly [number, number],
+): void {
+  fireEvent.click(container.querySelector('.editor__scene svg')!, {
+    clientX: x,
+    clientY: y,
+  });
+}
+
+/** The centre of the one circle the scene pane draws. */
+function circleCentre(container: HTMLElement): readonly [number, number] {
+  const circle = container.querySelector('.editor__scene circle')!;
+
+  return [Number(circle.getAttribute('cx')), Number(circle.getAttribute('cy'))];
+}
+
+/** The component the properties pane is showing, or `null` for none. */
+function shown(): string | null {
+  return (
+    within(screen.getByRole('region', { name: 'Properties' })).queryByRole(
+      'heading',
+    )?.textContent ?? null
+  );
+}
+
+describe('Editor, picking', () => {
+  // Nothing is measured here, so the world's origin is the pane's corner: the
+  // cart sits at (0, 0), its box reaches 18 pixels either side and 9 above and
+  // below, and the pendulum's pivot is 9 pixels down.
+  const onCart = [0, -3] as const;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('a click selects the topmost thing it hit', () => {
+    const { container } = render(<Editor />);
+    clickScene(container, onCart);
+
+    // The cart's gizmo is drawn over its box.
+    expect(shown()).toBe('TrackFrame');
+  });
+
+  test('the same place again goes one deeper, through each node under it once', () => {
+    const { container } = render(<Editor />);
+
+    // Just above the pivot: its gizmo and the pendulum's rod, the cart's gizmo
+    // and box, and the ground. The pivot and the rod are one node here.
+    const nearPivot = [0, 8] as const;
+    const clicks: (readonly [number, number])[] = [
+      nearPivot,
+      [1, 8],
+      nearPivot,
+      nearPivot,
+      nearPivot,
+    ];
+    const picked = clicks.map((point) => {
+      clickScene(container, point);
+
+      return shown();
+    });
+
+    expect(picked).toEqual([
+      'Pendulum',
+      'TrackFrame',
+      'Box',
+      'Line',
+      'Pendulum',
+    ]);
+  });
+
+  test("a click is read in the pane's own coordinates, wherever it sits", () => {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({ x: 50, y: 20, width: 0, height: 0 }),
+    );
+    const { container } = render(<Editor />);
+    clickScene(container, [50 + onCart[0], 20 + onCart[1]]);
+
+    expect(shown()).toBe('TrackFrame');
+  });
+
+  test("a click on a component's instance selects the instance", () => {
+    const { container } = render(<Editor />);
+    clickScene(container, circleCentre(container));
+
+    expect(shown()).toBe('Pendulum');
+
+    // Somewhere else starts again from the top.
+    clickScene(container, onCart);
+
+    expect(shown()).toBe('TrackFrame');
+  });
+
+  test("on a component's tab, a click selects in that component's body", () => {
+    const { container } = render(<Editor />);
+    fireEvent.doubleClick(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
+    );
+    clickScene(container, circleCentre(container));
+
+    expect(shown()).toBe('Circle');
+  });
+
+  test('a click on nothing clears the selection', () => {
+    const { container } = render(<Editor />);
+    select('Box');
+    clickScene(container, [300, -300]);
+
+    expect(shown()).toBeNull();
+  });
+
+  test('a click in the scene closes a name being typed, for good', () => {
+    const { container } = render(<Editor />);
+    select('Box');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Extract to component' }),
+    );
+    fireEvent.change(screen.getByLabelText('Component name'), {
+      target: { value: 'Crate' },
+    });
+    clickScene(container, onCart);
+
+    expect(screen.queryByLabelText('Component name')).toBeNull();
+
+    // Back to the box, by the scene again: the form stays closed.
+    clickScene(container, onCart);
+
+    expect(shown()).toBe('Box');
+    expect(screen.queryByLabelText('Component name')).toBeNull();
+  });
+});

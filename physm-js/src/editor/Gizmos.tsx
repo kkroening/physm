@@ -1,11 +1,9 @@
-import * as mat3 from './../Mat3';
-import * as vec3 from './../Vec3';
+import placeGizmos, { ARM_LENGTH } from './placeGizmos';
 import type CoreScene from './../Scene';
-import type Frame from './../Frame';
-import type { FrameId, StateMap } from './../Frame';
+import type { GizmoPlacement } from './placeGizmos';
 import type { Mat3 } from './../Mat3';
 import type { ReactElement } from 'react';
-import type { Vec3 } from './../Vec3';
+import type { StateMap } from './../Frame';
 
 export interface GizmosProps {
   scene: CoreScene;
@@ -13,70 +11,13 @@ export interface GizmosProps {
   xformMatrix: Mat3;
 }
 
-/** How far each arm of a gizmo's cross reaches from its origin, in pixels. */
-const ARM_LENGTH = 6;
-
-type ScreenPoint = readonly [number, number];
-
-/** One frame's gizmo, placed on screen. */
-interface Placement {
-  id: FrameId;
-  origin: ScreenPoint;
-  parentOrigin: ScreenPoint;
-
-  /** Which way the frame's own axes point on screen, as unit vectors. */
-  axes: readonly [ScreenPoint, ScreenPoint];
-}
-
-/**
- * Which way `axis` points on screen under a transform, as a unit vector.
- *
- * Unit length rather than the transformed axis itself, which carries the view's
- * scale: a gizmo marks a place, it is not a shape in the scene, so it stays the
- * same size whatever the zoom.
- */
-function screenAxis(xformMatrix: Mat3, axis: Vec3): ScreenPoint {
-  const onScreen = mat3.apply(xformMatrix, axis);
-
-  return vec3.toPlanar(vec3.scale(onScreen, 1 / vec3.planarLength(onScreen)));
-}
-
-/**
- * Every frame from `frames` down, placed, each before its children.
- *
- * The pose is the one `FrameView` draws -- a frame's coordinate from
- * `stateMap`, or its `initialState` where the map has none -- so a gizmo sits
- * where its frame is drawn.
- */
-function placeAll(
-  frames: readonly Frame[],
-  stateMap: StateMap,
-  parentXform: Mat3,
-): Placement[] {
-  return frames.flatMap((frame) => {
-    const [q] = stateMap.get(frame.id) ?? frame.initialState;
-    const xform = mat3.multiply(parentXform, frame.getLocalPosMatrix(q));
-    const placement: Placement = {
-      id: frame.id,
-      origin: mat3.translationOf(xform),
-      parentOrigin: mat3.translationOf(parentXform),
-      axes: [
-        screenAxis(xform, vec3.direction(1, 0)),
-        screenAxis(xform, vec3.direction(0, 1)),
-      ],
-    };
-
-    return [placement, ...placeAll(frame.frames, stateMap, xform)];
-  });
-}
-
 /** A cross at the frame's origin, turned with its axes, and a line to its parent's. */
-function GizmoView({ placement }: { placement: Placement }): ReactElement {
+function GizmoView({ placement }: { placement: GizmoPlacement }): ReactElement {
   const [x, y] = placement.origin;
   const [parentX, parentY] = placement.parentOrigin;
 
   return (
-    <g className="editor__gizmo" data-frame-id={placement.id}>
+    <g className="editor__gizmo" data-frame-id={placement.frame.id}>
       <line
         className="editor__gizmo-link"
         x1={parentX}
@@ -119,8 +60,8 @@ export default function Gizmos({
 }: GizmosProps): ReactElement {
   return (
     <g className="editor__gizmos">
-      {placeAll(scene.frames, stateMap, xformMatrix).map((placement) => (
-        <GizmoView placement={placement} key={placement.id} />
+      {placeGizmos(scene, stateMap, xformMatrix).map((placement) => (
+        <GizmoView placement={placement} key={placement.frame.id} />
       ))}
     </g>
   );

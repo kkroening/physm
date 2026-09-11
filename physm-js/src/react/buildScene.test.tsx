@@ -551,3 +551,48 @@ describe('buildScene', () => {
     ).toThrow(/'post' names both an <Anchor> and a frame/);
   });
 });
+
+/** Assert that `actual` holds exactly `expected`, by identity, in order. */
+function expectSame(
+  actual: readonly unknown[] | undefined,
+  expected: readonly unknown[],
+): void {
+  expect(actual).toHaveLength(expected.length);
+  expected.forEach((item, index) => expect(actual![index]).toBe(item));
+}
+
+describe('buildScene, traced', () => {
+  test('trace names every frame and decal, with the elements it came from', () => {
+    // A composite between the cart and the arm, so the trail passes through an
+    // element the walk calls rather than builds.
+    const Arm = ({ children }: { children?: ReactNode }): ReactElement => (
+      <RotationalFrame id="arm">{children}</RotationalFrame>
+    );
+    const circle = <Circle radius={1} />;
+    const arm = <Arm>{circle}</Arm>;
+    const box = <Box width={1} height={1} />;
+    const root = (
+      <TrackFrame id="cart">
+        {box}
+        {arm}
+      </TrackFrame>
+    );
+    const trails = new Map<unknown, readonly ReactElement[]>();
+    const scene = buildScene(root, {
+      trace: (built, trail) => trails.set(built, trail),
+    });
+    const cart = scene.frames[0]!;
+    const armFrame = cart.frames[0]!;
+    const rendered = trails.get(armFrame)?.[2];
+
+    expect(trails.size).toBe(4);
+    expectSame(trails.get(cart), [root]);
+    expectSame(trails.get(cart.decals[0]), [root, box]);
+    expect(rendered).toMatchObject({
+      type: RotationalFrame,
+      props: { id: 'arm' },
+    });
+    expectSame(trails.get(armFrame), [root, arm, rendered]);
+    expectSame(trails.get(armFrame.decals[0]), [root, arm, rendered, circle]);
+  });
+});

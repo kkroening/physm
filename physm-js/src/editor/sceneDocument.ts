@@ -194,6 +194,12 @@ export function definitionOf(doc: SceneDocument, name: string): Definition {
   return found;
 }
 
+/** Where an element `elementOf` made came from: which definition, which node. */
+export interface ElementOrigin {
+  readonly definition: string;
+  readonly path: NodePath;
+}
+
 /**
  * A definition as a React component, and every definition it reaches.
  *
@@ -202,8 +208,17 @@ export function definitionOf(doc: SceneDocument, name: string): Definition {
  * renders or walks them -- `buildScene` expands them exactly as it would a
  * hand-written one, which is the point: an editor-defined component and a
  * hand-written one are meant to be indistinguishable to the rest of physm.
+ *
+ * `origins`, when given, is filled in with where each element came from: the
+ * definition, and the path of the node it renders. It fills as the elements are
+ * made -- for a definition's body, when its component is called -- so it is
+ * complete once the element has been built or rendered.
  */
-export function elementOf(doc: SceneDocument, name = doc.root): ReactElement {
+export function elementOf(
+  doc: SceneDocument,
+  name = doc.root,
+  origins?: WeakMap<object, ElementOrigin>,
+): ReactElement {
   const components = new Map<string, FunctionComponent>();
 
   const componentFor = (definitionName: string): FunctionComponent => {
@@ -214,7 +229,11 @@ export function elementOf(doc: SceneDocument, name = doc.root): ReactElement {
 
     const { body } = definitionOf(doc, definitionName);
     const component: FunctionComponent = () =>
-      createElement(Fragment, null, ...body.map(render));
+      createElement(
+        Fragment,
+        null,
+        ...body.map((node, index) => render(definitionName, node, [index])),
+      );
 
     // Named, so an error from inside it says which definition it came from.
     Object.defineProperty(component, 'name', { value: definitionName });
@@ -230,12 +249,22 @@ export function elementOf(doc: SceneDocument, name = doc.root): ReactElement {
 
   // Children go in as separate arguments rather than one array: an array child
   // is a list React expects keys on, and these are fixed siblings, not a list.
-  const render = (node: DocNode): ReactElement =>
-    createElement(
+  const render = (
+    definition: string,
+    node: DocNode,
+    path: NodePath,
+  ): ReactElement => {
+    const element = createElement(
       typeOf(node.type),
       node.key === undefined ? node.props : { ...node.props, key: node.key },
-      ...node.children.map(render),
+      ...node.children.map((child, index) =>
+        render(definition, child, [...path, index]),
+      ),
     );
+    origins?.set(element, { definition, path });
+
+    return element;
+  };
 
   return createElement(componentFor(name));
 }

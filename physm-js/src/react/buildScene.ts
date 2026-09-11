@@ -11,9 +11,11 @@ import type {
   SceneNodeSource,
 } from './sceneNodes';
 import type CoreScene from './../Scene';
+import type Decal from './../Decal';
+import type Frame from './../Frame';
 import type { ComponentMeta } from './componentMeta';
 import type { FrameId } from './../Frame';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 /**
  * How deep composites may nest before the walk gives up.
@@ -23,6 +25,15 @@ import type { ReactNode } from 'react';
  * stack, or hang the caller, rather than saying where it went wrong.
  */
 const MAX_DEPTH = 1000;
+
+/**
+ * The elements a built frame or decal came from: the root's first, and the one
+ * that built it last.
+ */
+export type Trail = readonly ReactElement[];
+
+/** Told of each frame and decal as it is built, and the elements it came from. */
+export type Trace = (built: Frame | Decal, trail: Trail) => void;
 
 /** Where the walk is, and where what it finds goes. */
 interface Walk {
@@ -40,6 +51,11 @@ interface Walk {
 
   readonly anchors: Map<string, AnchorPoint>;
   readonly constraints: ConstraintNode[];
+
+  /** The elements entered so far, the root's first -- for `trace`. */
+  readonly trail: Trail;
+
+  readonly trace: Trace | undefined;
 }
 
 /** An element type's `sceneNode`, if it is a binding component. */
@@ -88,12 +104,17 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
       // Children first, because a `Frame` takes them as constructor arguments.
       const into: FrameChildren = { decals: [], weights: [], frames: [] };
       walkChildren(children, { ...walk, frameId: node.id, into });
-      walk.into.frames.push(node.build(into));
+      const frame = node.build(into);
+      walk.into.frames.push(frame);
+      walk.trace?.(frame, walk.trail);
       return;
     }
-    case 'decal':
-      walk.into.decals.push(node.build());
+    case 'decal': {
+      const decal = node.build();
+      walk.into.decals.push(decal);
+      walk.trace?.(decal, walk.trail);
       return;
+    }
     case 'weight':
       walk.into.weights.push(node.build());
       return;
@@ -158,9 +179,10 @@ function walkNode(node: ReactNode, index: number, walk: Walk): void {
   // that survives siblings being inserted or removed around it.
   const path = childPath(walk.path, segmentOf(node.key, index));
   const { type, props } = node;
+  const trail = [...walk.trail, node];
 
   if (type === Fragment) {
-    walkChildren(props.children, { ...walk, path });
+    walkChildren(props.children, { ...walk, path, trail });
     return;
   }
 
@@ -197,7 +219,7 @@ function walkNode(node: ReactNode, index: number, walk: Walk): void {
       );
     }
 
-    place(node, props.children, { ...walk, path });
+    place(node, props.children, { ...walk, path, trail });
     return;
   }
 
@@ -215,7 +237,7 @@ function walkNode(node: ReactNode, index: number, walk: Walk): void {
     // throws, and anything that reads the clock or a module-level counter
     // builds a scene nobody else will reproduce.
     const rendered = (type as (props: unknown) => ReactNode)(props);
-    walkNode(rendered, 0, { ...walk, path, depth: walk.depth + 1 });
+    walkNode(rendered, 0, { ...walk, path, trail, depth: walk.depth + 1 });
     return;
   }
 
@@ -262,12 +284,17 @@ function walkChildren(children: ReactNode, walk: Walk): void {
  *   label. Mounting relies on TypeScript to rule one out, and gets whatever the
  *   component does without it.
  *
+ * `trace`, when given, is told of each frame and decal as it is built, with the
+ * elements it came from: the root's first, and the one that built it last. It
+ * is how a tool holding the rig as data leads what is drawn back to what wrote
+ * it.
+ *
  * And one thing it cannot do: **resolve an `<Anchor>` named by ref.** A ref is
  * filled in by an effect, and nothing here runs one. Name the anchor by `id`.
  */
 export default function buildScene(
   element: ReactNode,
-  { gravity }: { gravity?: number } = {},
+  { gravity, trace }: { gravity?: number; trace?: Trace } = {},
 ): CoreScene {
   const root: FrameChildren = { decals: [], weights: [], frames: [] };
   const anchors = new Map<string, AnchorPoint>();
@@ -280,6 +307,8 @@ export default function buildScene(
     into: root,
     anchors,
     constraints,
+    trail: [],
+    trace,
   });
 
   return assembleScene(root, anchors, constraints, {
