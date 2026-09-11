@@ -6,7 +6,7 @@ import PropertiesPane from './PropertiesPane';
 import SceneView from './../react/SceneView';
 import buildScene from './../react/buildScene';
 import coreComponents from './../react/coreComponents';
-import emitScene from './emitScene';
+import emitScene, { rangeKey } from './emitScene';
 import getViewXformMatrix from './../getViewXformMatrix';
 import hitsAt from './hitsAt';
 import movedPosition, { placedPosition } from './movedPosition';
@@ -1101,20 +1101,58 @@ function ScenePane({
   );
 }
 
-/** The whole module, as it would be written to a file. */
-function CodePane({ doc }: { doc: SceneDocument }): ReactElement {
-  const source = useMemo(() => {
+/**
+ * The whole module, as it would be written to a file, with the selected node's
+ * source marked -- a frame with all it holds.
+ *
+ * The mark is scrolled into view once, when the selection changes, and not on
+ * every edit: a keystroke in the properties pane would otherwise pull the view
+ * away from what is being read.
+ */
+function CodePane({
+  doc,
+  selection,
+}: {
+  doc: SceneDocument;
+  selection: Selection | null;
+}): ReactElement {
+  const emitted = useMemo(() => {
     try {
-      return emitScene(doc).source;
+      return emitScene(doc);
     } catch (error) {
-      return `// ${error instanceof Error ? error.message : String(error)}`;
+      return {
+        source: `// ${error instanceof Error ? error.message : String(error)}`,
+        ranges: new Map<string, readonly [number, number]>(),
+      };
     }
   }, [doc]);
+  const selected = selection
+    ? rangeKey(selection.definition, selection.path)
+    : null;
+  const range = selected ? emitted.ranges.get(selected) : undefined;
+  const markRef = useRef<HTMLElement>(null);
+
+  // Optional: a DOM that draws nothing, as in a test, may have no scrolling.
+  useEffect(() => {
+    markRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [selected]);
 
   return (
     <section className="editor__code" aria-label="Code">
       <pre>
-        <code>{source}</code>
+        <code>
+          {range ? (
+            <>
+              {emitted.source.slice(0, range[0])}
+              <mark ref={markRef}>
+                {emitted.source.slice(range[0], range[1])}
+              </mark>
+              {emitted.source.slice(range[1])}
+            </>
+          ) : (
+            emitted.source
+          )}
+        </code>
       </pre>
     </section>
   );
@@ -1422,7 +1460,7 @@ export default function Editor({
           </button>
         </div>
       </div>
-      <CodePane doc={doc} />
+      <CodePane doc={doc} selection={selection} />
       <div className="editor__center">
         <div className="editor__workspace">
           <TreePane

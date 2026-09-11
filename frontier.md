@@ -6,11 +6,9 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**The selection in the code.** Codegen records where each node's source sits
-in the module, so the code pane can highlight the selected node's lines, and
-scroll them into view once -- on a new selection or a change of tab -- rather
-than on every keystroke of an edit, which would pull the view away from what
-is being read.
+**Codegen polish.** Numbers written the way a person would write them: a
+multiple of π as one (`-Math.PI / 2`, not `-1.5707963267948966`), and a value
+repeated across a rig as a named constant.
 
 ## Next — the MVP
 
@@ -86,7 +84,6 @@ was built while gizmos were in review.
 - A modifier on a click in the scene, to select the expanded node itself
   rather than its nearest authored ancestor -- page 7's way to inspect one. It
   waits on the properties pane showing an expanded node, read-only.
-- Codegen polish: round numbers (`-Math.PI / 2`), constants for repeated values
 - The constraint-first direction ([0014 page 9](docs/issues/0014/09-horizon.md))
 
 ## Decisions
@@ -206,3 +203,6 @@ was built while gizmos were in review.
   spell a longer name, and the same letter again steps through the rows that
   start with it. From the tree itself, as after a delete, a search starts at
   the row Tab would reach.
+- **The selection in the code** — the code pane marks the selected node's
+  source, a frame with all it holds, and scrolls it into view once when the
+  selection changes -- not on every edit.

@@ -2228,3 +2228,79 @@ describe('Editor, the tree from the keyboard', () => {
     expect(document.activeElement).toBe(rows()[2]);
   });
 });
+
+/** The code pane's marked text: the selected node's source, if any is marked. */
+function marked(): string | null {
+  return (
+    screen.getByRole('region', { name: 'Code' }).querySelector('mark')
+      ?.textContent ?? null
+  );
+}
+
+describe('Editor, the selection in the code', () => {
+  // jsdom scrolls nothing and has no `scrollIntoView`: this one counts calls.
+  const scrolled = vi.fn();
+
+  beforeEach(() => {
+    scrolled.mockClear();
+    Element.prototype.scrollIntoView = scrolled;
+  });
+
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  test("the selected node's source is marked, and scrolled to once", () => {
+    render(<Editor />);
+
+    expect(marked()).toBeNull();
+
+    select('Box');
+
+    expect(marked()).toBe('<Box width={2} />');
+    expect(scrolled).toHaveBeenCalledTimes(1);
+
+    // An edit moves the mark with the node, and leaves the view alone.
+    fireEvent.change(within(select('Box')).getByLabelText('Width'), {
+      target: { value: '3' },
+    });
+
+    expect(marked()).toBe('<Box width={3} />');
+    expect(scrolled).toHaveBeenCalledTimes(1);
+
+    select('Weight');
+
+    expect(marked()).toBe('<Weight mass={50} />');
+    expect(scrolled).toHaveBeenCalledTimes(2);
+  });
+
+  test('a frame is marked with all it holds', () => {
+    render(<Editor />);
+    select('TrackFrame');
+
+    expect(marked()).toMatch(
+      /^<TrackFrame id="cart" resistance=\{5\}>[\s\S]*<Pendulum \/>\s*<\/TrackFrame>$/,
+    );
+  });
+
+  test("a node in a component's tab is marked in that component", () => {
+    render(<Editor />);
+    fireEvent.doubleClick(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
+    );
+    fireEvent.click(
+      within(screen.getByRole('tree', { name: 'Pendulum' })).getByText(
+        'Circle',
+      ),
+    );
+
+    expect(marked()).toBe('<Circle position={[4, 0]} radius={0.5} />');
+
+    // In the module, the mark falls inside `Pendulum`, before the scene.
+    const code = screen.getByRole('region', { name: 'Code' }).textContent!;
+    const at = code.indexOf(marked()!);
+
+    expect(at).toBeGreaterThan(code.indexOf('function Pendulum()'));
+    expect(at).toBeLessThan(code.indexOf('export default function Scene()'));
+  });
+});
