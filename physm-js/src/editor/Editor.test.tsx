@@ -1441,3 +1441,211 @@ describe('Editor, undo', () => {
     expect(code()).toContain('width={3}');
   });
 });
+
+/** Press at `from` in the scene pane, move through each of `to`, and let go at the last. */
+function dragScene(
+  container: HTMLElement,
+  from: readonly [number, number],
+  ...to: (readonly [number, number])[]
+): void {
+  const [endX, endY] = to[to.length - 1] ?? from;
+  fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
+    clientX: from[0],
+    clientY: from[1],
+  });
+  for (const [x, y] of to) {
+    fireEvent.mouseMove(window, { clientX: x, clientY: y, buttons: 1 });
+  }
+
+  fireEvent.mouseUp(window, { clientX: endX, clientY: endY });
+}
+
+describe('Editor, dragging', () => {
+  // As in picking: the cart's gizmo is at the pane's corner, and this is just
+  // above it, clear of the pivot's.
+  const onCart = [0, -3] as const;
+
+  test("dragging a frame's gizmo moves its position, as one step to undo", () => {
+    const { container } = render(<Editor />);
+    const before = code();
+    dragScene(container, onCart, [9, -3], [18, -3]);
+
+    // Eighteen pixels to the unit, and the node is selected as it moves.
+    expect(code()).toContain('position={[1, 0]}');
+    expect(shown()).toBe('TrackFrame');
+
+    // Undone, the selection is back to what it was before the drag -- none --
+    // and redone, it is the node the drag moved.
+    fireEvent.click(undoButton());
+
+    expect(code()).toBe(before);
+    expect(shown()).toBeNull();
+
+    fireEvent.click(redoButton());
+
+    expect(shown()).toBe('TrackFrame');
+  });
+
+  test('each drag is a step of its own', () => {
+    const { container } = render(<Editor />);
+    dragScene(container, onCart, [18, -3]);
+    dragScene(container, [18, -3], [36, -3]);
+    fireEvent.click(undoButton());
+
+    expect(code()).toContain('position={[1, 0]}');
+  });
+
+  test("a frame on a turned parent moves along its parent's axes", () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame id="arm" initialState={[Math.PI / 2, 0]}>
+            <TrackFrame id="tip" position={[2, 0]} />
+          </RotationalFrame>,
+        )}
+      />,
+    );
+
+    // The arm is turned a quarter, so the tip hangs two units -- 36 pixels --
+    // above the pane's corner, and up the screen is along the arm.
+    dragScene(container, [0, -36], [0, -54]);
+
+    expect(code()).toContain('position={[3, 0]}');
+  });
+
+  test('a drag goes where the pointer goes, to the nearest hundredth', () => {
+    const { container } = render(<Editor />);
+    dragScene(container, onCart, [7, -3]);
+
+    expect(code()).toContain('position={[0.39, 0]}');
+  });
+
+  test("a frame inside a component's instance does not drag, and says so", () => {
+    const { container } = render(<Editor />);
+    const before = code();
+    const svg = container.querySelector<SVGSVGElement>('.editor__scene svg')!;
+
+    // Just below the pivot, whose frame the pendulum's own body builds.
+    fireEvent.mouseMove(svg, { clientX: 0, clientY: 12 });
+
+    expect(svg.style.cursor).toBe('not-allowed');
+
+    fireEvent.mouseMove(svg, { clientX: onCart[0], clientY: onCart[1] });
+
+    expect(svg.style.cursor).toBe('grab');
+
+    fireEvent.mouseMove(svg, { clientX: 300, clientY: -300 });
+
+    expect(svg.style.cursor).toBe('');
+
+    dragScene(container, [0, 12], [18, 12]);
+
+    expect(code()).toBe(before);
+
+    // Just above the pivot, the cart's gizmo lies under the pivot's. The pivot
+    // is on top, so it blocks the press, as a click there selects the pendulum.
+    fireEvent.mouseMove(svg, { clientX: 0, clientY: 8 });
+
+    expect(svg.style.cursor).toBe('not-allowed');
+
+    dragScene(container, [0, 8], [18, 8]);
+
+    expect(code()).toBe(before);
+  });
+
+  test('the click that ends a drag picks nothing', () => {
+    const { container } = render(<Editor />);
+    dragScene(container, onCart, [18, -3]);
+
+    // The first click is the release's own. Swallowed, it leaves the next to
+    // be a first click there, on the cart's gizmo, rather than a second.
+    clickScene(container, [18, -3]);
+    clickScene(container, [18, -3]);
+
+    expect(shown()).toBe('TrackFrame');
+  });
+
+  test('a click with a pixel of wobble in it is still a click', () => {
+    const { container } = render(<Editor />);
+    const before = code();
+    dragScene(container, onCart, [1, -3]);
+
+    // The first click is the release's own, which picks as any click does.
+    clickScene(container, onCart);
+    clickScene(container, onCart);
+
+    expect(code()).toBe(before);
+    expect(undoButton()).toBeDisabled();
+    expect(shown()).toBe('Box');
+  });
+
+  test('where gizmos lie on one another, the top one drags, or the selected one', () => {
+    const rig = documentFrom(
+      <TrackFrame id="cart">
+        <RotationalFrame id="arm" />
+      </TrackFrame>,
+    );
+
+    // The arm sits on the cart's origin, and is drawn over it.
+    const { container, unmount } = render(<Editor initialDocument={rig} />);
+    dragScene(container, [0, -3], [18, -3]);
+
+    expect(code()).toContain('<TrackFrame id="cart">');
+    expect(code()).toContain('position={[1, 0]}');
+
+    unmount();
+
+    // Selected -- in the tree here, or by clicking again -- the cart drags.
+    const again = render(<Editor initialDocument={rig} />);
+    select('TrackFrame');
+    dragScene(again.container, [0, -3], [18, -3]);
+
+    expect(code()).toMatch(/<TrackFrame id="cart" position=\{\[1, 0\]\}>/);
+    expect(code()).toContain('<RotationalFrame id="arm" />');
+  });
+
+  test('only the primary button drags, and not with Ctrl', () => {
+    const { container } = render(<Editor />);
+    const before = code();
+    const svg = container.querySelector('.editor__scene svg')!;
+    for (const press of [{ button: 2 }, { button: 0, ctrlKey: true }]) {
+      fireEvent.mouseDown(svg, { clientX: 0, clientY: -3, ...press });
+      fireEvent.mouseMove(window, { clientX: 18, clientY: -3, buttons: 1 });
+      fireEvent.mouseUp(window, { clientX: 18, clientY: -3 });
+    }
+
+    expect(code()).toBe(before);
+  });
+
+  test('a drag whose release the page missed ends at the next move', () => {
+    const { container } = render(<Editor />);
+    fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
+      clientX: 0,
+      clientY: -3,
+    });
+    fireEvent.mouseMove(window, { clientX: 9, clientY: -3, buttons: 1 });
+
+    expect(code()).toContain('position={[0.5, 0]}');
+
+    // The button is up, though no release was heard: the drag is over, and
+    // stays over.
+    fireEvent.mouseMove(window, { clientX: 18, clientY: -3, buttons: 0 });
+    fireEvent.mouseMove(window, { clientX: 27, clientY: -3, buttons: 1 });
+
+    expect(code()).toContain('position={[0.5, 0]}');
+  });
+
+  test("a turned frame moves along its parent's axes, not its own", () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame id="arm" initialState={[Math.PI / 2, 0]} />,
+        )}
+      />,
+    );
+    dragScene(container, [0, -3], [18, -3]);
+
+    // The world's x: along the arm's own axes this would be [0, -1].
+    expect(code()).toContain('position={[1, 0]}');
+  });
+});

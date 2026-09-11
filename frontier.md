@@ -6,19 +6,12 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Dragging.** Dragging a node's gizmo writes its `position` prop, in the
-*parent's* frame, which is what the prop means
-([0014 page 7](docs/issues/0014/07-editing.md#dragging-in-the-scene)).
-Snapping -- to the grid, to another frame's origin, to a decal's end --
-matters more here than in a drawing tool: a rig whose frames are *nearly*
-coincident is [0002](docs/issues/0002.md)'s pinned scene waiting to happen.
-Only an authored node drags, since there is nowhere to write the result
-otherwise.
-
-- the drag first, writing `position` as it goes, one undo step per drag
-- then snapping
-- the tree stays the failsafe, so dragging can ship imperfect without blocking
-  anything
+**Snapping.** A drag writes `position` to the nearest hundredth. Snapping -- to
+the grid, to another frame's origin, to a decal's end -- matters more here than
+in a drawing tool, because a rig whose frames are *nearly* coincident is
+[0002](docs/issues/0002.md)'s pinned scene waiting to happen
+([0014 page 7](docs/issues/0014/07-editing.md#dragging-in-the-scene)). The tree
+stays the failsafe, so snapping can ship imperfect without blocking anything.
 
 ## Next — the MVP
 
@@ -68,6 +61,9 @@ was built while gizmos were in review.
 - While a drag is under way, show the parent's axes at the grabbed node. A
   drag writes `position` along them, but the grabbed gizmo shows the node's
   own +x, which for a rotational node is turned by its angle.
+- What a drag does while the scene plays. The frame drifts from the pointer,
+  since its own coordinate and its parents' keep moving: pause while a drag is
+  held, refuse one during play, or keep the live nudge. Karl's call.
 - Take an imported component's tag from the module lookup
   [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
   `Function.name`, which a production build minifies. Dev builds and the tests
@@ -179,3 +175,10 @@ was built while gizmos were in review.
   looks the same after a quarter turn. These are the axes the frame's children
   are read along -- and a drag writes along a parent's -- so this came first.
   The pointer is clicked like the cross.
+- **Dragging** — a frame's gizmo drags, writing its `position` along its
+  parent's axes to the nearest hundredth, as one step to undo. A drag starts
+  once the pointer leaves the press, with the primary button, and the node is
+  selected then; the click that ends it picks nothing. A press takes the
+  selected node if its gizmo is under the pointer, and otherwise the topmost
+  gizmo -- which blocks the press, with a not-allowed pointer, when a
+  component's instance built its frame.

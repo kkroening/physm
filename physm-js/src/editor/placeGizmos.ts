@@ -17,6 +17,9 @@ export interface GizmoPlacement {
   readonly origin: ScreenPoint;
   readonly parentOrigin: ScreenPoint;
 
+  /** The transform the frame's parent is drawn under, which its `position` is read in. */
+  readonly parentXform: Mat3;
+
   /** Which way the frame's own axes point on screen, as unit vectors. */
   readonly axes: readonly [ScreenPoint, ScreenPoint];
 
@@ -66,6 +69,7 @@ function placeAll(
       frame,
       origin,
       parentOrigin: mat3.translationOf(parentXform),
+      parentXform,
       axes: [x, screenAxis(xform, vec3.direction(0, 1))],
       pointerEnd: [
         origin[0] + 2 * ARM_LENGTH * x[0],
