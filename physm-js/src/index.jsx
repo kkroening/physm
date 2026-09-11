@@ -1,6 +1,7 @@
 import './index.css';
 import * as immer from 'immer';
 import App from './App';
+import Editor from './editor/Editor';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 
@@ -17,9 +18,14 @@ async function init() {
 }
 
 function main(rsWasmModule) {
+  // `#editor` opens the scene editor; anything else, the demo.
   createRoot(document.getElementById('root')).render(
     <React.StrictMode>
-      <App rsWasmModule={rsWasmModule} />
+      {window.location.hash === '#editor' ? (
+        <Editor />
+      ) : (
+        <App rsWasmModule={rsWasmModule} />
+      )}
     </React.StrictMode>,
   );
 }

@@ -1,0 +1,188 @@
+/* The layout: a full-width tab bar, the code pane and the properties pane
+   full-height at either side, and between them the tree and scene over the
+   library. */
+.editor {
+  display: grid;
+  grid-template-columns: minmax(18rem, 28%) 1fr minmax(14rem, 18%);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'tabs tabs tabs'
+    'code center props';
+  height: 100vh;
+
+  color: #2f3b45;
+  background-color: #a1b5d8;
+  font-size: 0.875rem;
+}
+
+.editor__tabs {
+  grid-area: tabs;
+  display: flex;
+  gap: 2px;
+  padding: 0.25rem 0.5rem 0;
+  background-color: #738290;
+}
+
+.editor__tabs button {
+  padding: 0.35rem 1rem;
+  border: none;
+  border-radius: 4px 4px 0 0;
+  background-color: #b0c4e0;
+  color: inherit;
+  font: inherit;
+}
+
+.editor__tabs button[aria-selected='true'] {
+  background-color: #cde1ef;
+  font-weight: 600;
+}
+
+.editor__code {
+  grid-area: code;
+  overflow: auto;
+  background-color: #1f262d;
+  color: #e3edf5;
+}
+
+.editor__code pre {
+  margin: 0;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+/* Two rows -- the workspace takes what the library leaves. `min-height: 0` lets
+   a grid item shrink below its content, which it otherwise refuses to do. */
+.editor__center {
+  grid-area: center;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor__workspace {
+  display: grid;
+  grid-template-columns: minmax(12rem, 32%) 1fr;
+  min-height: 0;
+}
+
+.editor__tree,
+.editor__props,
+.editor__library {
+  overflow: auto;
+  padding: 0.5rem;
+  background-color: #eef4f9;
+}
+
+.editor__tree {
+  border-right: 1px solid #a1b5d8;
+}
+
+.editor__tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.editor__tree ul ul {
+  padding-left: 1rem;
+}
+
+.editor__row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: baseline;
+  padding: 0.1rem 0.25rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.editor__row[data-kind='defined'] .editor__tag {
+  color: #2d6a4f;
+  font-weight: 600;
+}
+
+.editor__row[data-kind='imported'] .editor__tag {
+  color: #6c4f9e;
+}
+
+.editor__disclosure {
+  width: 0.75rem;
+  color: #738290;
+}
+
+.editor__summary {
+  color: #8796a3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editor__scene {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background-color: #cde1ef;
+}
+
+.editor__scene svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.editor__error {
+  position: absolute;
+  inset: auto 0.75rem 0.75rem;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  background-color: #fbe3e1;
+  color: #8a1c14;
+}
+
+.editor__props {
+  grid-area: props;
+  border-left: 1px solid #a1b5d8;
+}
+
+.editor__library {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  max-height: 11rem;
+  border-top: 1px solid #a1b5d8;
+}
+
+.editor__library ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.editor__library li {
+  padding: 0.2rem 0.55rem;
+  border-radius: 3px;
+  background-color: #dce7f2;
+}
+
+.editor__library li[data-kind='defined'] {
+  background-color: #d8eee2;
+}
+
+.editor__heading {
+  margin-bottom: 0.3rem;
+  color: #738290;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.editor__hint {
+  margin: 0;
+  color: #8796a3;
+}
