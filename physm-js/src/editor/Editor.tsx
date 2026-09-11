@@ -6,11 +6,12 @@ import PropertiesPane from './PropertiesPane';
 import SceneView from './../react/SceneView';
 import buildScene from './../react/buildScene';
 import coreComponents from './../react/coreComponents';
-import emitScene from './emitScene';
+import emitScene, { rangeKey } from './emitScene';
 import getViewXformMatrix from './../getViewXformMatrix';
 import hitsAt from './hitsAt';
 import movedPosition, { placedPosition } from './movedPosition';
 import placeGizmos from './placeGizmos';
+import scrollTopFor from './scrollTopFor';
 import snapPoints, { nearestSnap } from './snapPoints';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
@@ -1101,20 +1102,75 @@ function ScenePane({
   );
 }
 
-/** The whole module, as it would be written to a file. */
-function CodePane({ doc }: { doc: SceneDocument }): ReactElement {
-  const source = useMemo(() => {
+/**
+ * The whole module, as it would be written to a file, with the selected node's
+ * source marked -- a frame with all it holds.
+ *
+ * The mark is scrolled into view once, when the selection changes, and not on
+ * every edit: a keystroke in the properties pane would otherwise pull the view
+ * away from what is being read.
+ */
+function CodePane({
+  doc,
+  selection,
+}: {
+  doc: SceneDocument;
+  selection: Selection | null;
+}): ReactElement {
+  const emitted = useMemo(() => {
     try {
-      return emitScene(doc).source;
+      return emitScene(doc);
     } catch (error) {
-      return `// ${error instanceof Error ? error.message : String(error)}`;
+      return {
+        source: `// ${error instanceof Error ? error.message : String(error)}`,
+        ranges: new Map<string, readonly [number, number]>(),
+      };
     }
   }, [doc]);
+  const selected = selection
+    ? rangeKey(selection.definition, selection.path)
+    : null;
+  const range = selected ? emitted.ranges.get(selected) : undefined;
+  const paneRef = useRef<HTMLElement>(null);
+  const markRef = useRef<HTMLElement>(null);
+
+  // Once a selection, not on every edit, which would pull the view away from
+  // what is being read. The pane's own scroll, measured, rather than
+  // `scrollIntoView`, which would scroll the editor around the pane as well.
+  useEffect(() => {
+    const pane = paneRef.current;
+    const mark = markRef.current;
+    if (!pane || !mark) {
+      return;
+    }
+
+    // Where the top of what the pane scrolls is on screen.
+    const offset = pane.getBoundingClientRect().top - pane.scrollTop;
+    const { top, bottom } = mark.getBoundingClientRect();
+    pane.scrollTop = scrollTopFor(
+      pane.scrollTop,
+      pane.clientHeight,
+      top - offset,
+      bottom - offset,
+    );
+  }, [selected]);
 
   return (
-    <section className="editor__code" aria-label="Code">
+    <section ref={paneRef} className="editor__code" aria-label="Code">
       <pre>
-        <code>{source}</code>
+        <code>
+          {range ? (
+            <>
+              {emitted.source.slice(0, range[0])}
+              <mark ref={markRef}>
+                {emitted.source.slice(range[0], range[1])}
+              </mark>
+              {emitted.source.slice(range[1])}
+            </>
+          ) : (
+            emitted.source
+          )}
+        </code>
       </pre>
     </section>
   );
@@ -1422,7 +1478,7 @@ export default function Editor({
           </button>
         </div>
       </div>
-      <CodePane doc={doc} />
+      <CodePane doc={doc} selection={selection} />
       <div className="editor__center">
         <div className="editor__workspace">
           <TreePane

@@ -88,6 +88,14 @@
   line-height: 1.45;
 }
 
+/* The selected node's source: a band under it, faint enough on the dark code
+   to leave it readable. */
+.editor__code mark {
+  border-radius: 2px;
+  background-color: rgba(122, 170, 222, 0.28);
+  color: inherit;
+}
+
 /* Two rows -- the workspace takes what the library leaves. `min-height: 0` lets
    a grid item shrink below its content, which it otherwise refuses to do. */
 .editor__center {
