@@ -98,7 +98,7 @@ describe('Gizmos', () => {
     ).toEqual(['cart', 'pivot', 'hub']);
   });
 
-  test('a gizmo sits where its frame draws, at the pose the state map gives', () => {
+  test("a gizmo's cross and line sit where its frame draws, at the state map's pose", () => {
     const scene = buildScene(arm);
     const container = draw(scene, moved, view(18));
     const circles = [...container.querySelectorAll('.scene circle')];
@@ -107,12 +107,27 @@ describe('Gizmos', () => {
     // frame draws before its children.
     ['arm', 'slider'].forEach((id, index) => {
       const circle = circles[index]!;
-      const [, origin] = link(container, id);
-
-      expectPointsClose(origin, [
+      const centre: Point = [
         Number(circle.getAttribute('cx')),
         Number(circle.getAttribute('cy')),
-      ]);
+      ];
+      const [, origin] = link(container, id);
+      const arms = [
+        ...container.querySelectorAll(
+          `[data-frame-id="${id}"] .editor__gizmo-arm`,
+        ),
+      ];
+
+      expectPointsClose(origin, centre);
+      expect(arms).toHaveLength(2);
+
+      // The arms are symmetric about the origin, so each one's middle is the
+      // cross's centre.
+      arms.forEach((line) => {
+        const [[x1, y1], [x2, y2]] = ends(line);
+
+        expectPointsClose([(x1 + x2) / 2, (y1 + y2) / 2], centre);
+      });
     });
   });
 
@@ -150,5 +165,17 @@ describe('Gizmos', () => {
     expect(near![0]!.length).toBeGreaterThan(0);
     expect(far![0]!.length).toBeCloseTo(near![0]!.length, 9);
     expect(far![1]!.length).toBeCloseTo(near![1]!.length, 9);
+  });
+
+  test("a frame's arms turn with its parent's", () => {
+    const container = draw(buildScene(arm), moved, view(18));
+    const [x] = [
+      ...container.querySelectorAll(
+        '[data-frame-id="slider"] .editor__gizmo-arm',
+      ),
+    ].map(run);
+
+    // The slider does not turn, so its axes are the arm's, turned by 1.1.
+    expectPointsClose(x!.direction, [Math.cos(1.1), -Math.sin(1.1)]);
   });
 });
