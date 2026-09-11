@@ -3,12 +3,13 @@
    library. */
 .editor {
   display: grid;
-  grid-template-columns: minmax(18rem, 28%) 1fr minmax(14rem, 18%);
+  grid-template-columns: minmax(11rem, 26%) minmax(20rem, 1fr) minmax(9rem, 18%);
   grid-template-rows: auto 1fr;
   grid-template-areas:
     'tabs tabs tabs'
     'code center props';
   height: 100vh;
+  overflow-x: auto;
 
   color: #2f3b45;
   background-color: #a1b5d8;
@@ -63,7 +64,10 @@
 
 .editor__workspace {
   display: grid;
-  grid-template-columns: minmax(12rem, 32%) 1fr;
+  /* The scene keeps a floor of its own: a `1fr` track with no minimum is the
+     one a crowded grid squeezes to nothing, and an invisible scene is the one
+     failure here that looks like nothing is wrong. */
+  grid-template-columns: minmax(8rem, 30%) minmax(12rem, 1fr);
   min-height: 0;
 }
 
@@ -185,4 +189,24 @@
 .editor__hint {
   margin: 0;
   color: #8796a3;
+}
+
+/* Too narrow for three columns: stack them, scene first, so the thing being
+   edited is always the thing on screen. */
+@media (max-width: 48rem) {
+  .editor {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(22rem, 1fr) auto auto;
+    grid-template-areas:
+      'tabs'
+      'center'
+      'props'
+      'code';
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .editor__code {
+    max-height: 20rem;
+  }
 }
