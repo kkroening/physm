@@ -19,7 +19,7 @@ function instanceOf(name: string): DocNode {
 /**
  * What the editor opens with: a cart on a track, carrying a pendulum.
  *
- * Small on purpose, and built to exercise each thing the editor distinguishes.
+ * Small on purpose: building blocks, and a component the document defines.
  * The ground and the cart are building blocks placed directly; the pendulum is a
  * component this document *defines*, so there is a second definition to open in
  * a tab and an instance of it to find in the scene's tree.

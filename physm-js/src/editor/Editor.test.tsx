@@ -1,5 +1,7 @@
+import Box from './../react/Box';
 import Coincidence from './../react/Coincidence';
 import Editor from './Editor';
+import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import Weight from './../react/Weight';
 import coreComponents from './../react/coreComponents';
@@ -32,8 +34,9 @@ describe('Editor', () => {
     expect(within(tree).queryByText('Circle')).toBeNull();
     expect(within(tree).getByText('id="cart"')).toBeInTheDocument();
 
-    // The scene was built and drawn.
-    expect(container.querySelector('.editor__scene g.scene')).not.toBeNull();
+    // The scene was built and drawn, the pendulum's bob included -- the one part
+    // of it the tree above leaves inside its definition.
+    expect(container.querySelectorAll('.editor__scene circle')).toHaveLength(1);
     expect(screen.queryByRole('alert')).toBeNull();
 
     // The library offers every building block, and the component this
@@ -76,6 +79,47 @@ describe('Editor', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(/over-determined/);
     expect(screen.getByRole('tree', { name: 'Scene' })).toBeVisible();
+  });
+
+  test('a scene that cannot be written says why, and the editor stays up', () => {
+    // The builder never reads a definition's name, so this scene builds and
+    // draws -- but no module can declare a component called `scene`.
+    render(
+      <Editor
+        initialDocument={documentFrom(<Line endPos={[1, 0]} />, 'scene')}
+      />,
+    );
+
+    expect(screen.getByRole('region', { name: 'Code' })).toHaveTextContent(
+      /cannot be a component name/,
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('an unkeyed row and a sibling keyed with the same digits stay two rows', () => {
+    // React holds keys as strings, so index 0 and key "0" must not meet.
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      render(
+        <Editor
+          initialDocument={documentFrom(
+            <>
+              <Line endPos={[1, 0]} />
+              <Box key="0" />
+            </>,
+          )}
+        />,
+      );
+
+      expect(
+        error.mock.calls.some(([message]) =>
+          String(message).includes('same key'),
+        ),
+      ).toBe(false);
+      expect(screen.getAllByRole('treeitem')).toHaveLength(2);
+    } finally {
+      error.mockRestore();
+    }
   });
 
   test('a scene that does not build says why, and the editor stays up', () => {

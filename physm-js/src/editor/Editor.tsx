@@ -41,6 +41,17 @@ function summaryOf(node: DocNode): string {
     .join(' ');
 }
 
+/**
+ * A tree row's React key: its index, or `$` and its document key.
+ *
+ * React holds every key as a string, so an unkeyed row at index 0 and a sibling
+ * keyed `"0"` would otherwise share one -- the same rule `segmentOf` in
+ * `buildScene` applies to frame ids.
+ */
+function rowKey(node: DocNode, index: number): string {
+  return node.key === undefined ? String(index) : `$${node.key}`;
+}
+
 /** One node of the tree, and everything under it. */
 function TreeRow({ node }: { node: DocNode }): ReactElement {
   const summary = summaryOf(node);
@@ -57,7 +68,7 @@ function TreeRow({ node }: { node: DocNode }): ReactElement {
       {node.children.length ? (
         <ul role="group">
           {node.children.map((child, index) => (
-            <TreeRow node={child} key={child.key ?? index} />
+            <TreeRow node={child} key={rowKey(child, index)} />
           ))}
         </ul>
       ) : null}
@@ -80,7 +91,7 @@ function TreePane({
       <div className="editor__heading">{focus}</div>
       <ul role="tree" aria-label={focus}>
         {body.map((node, index) => (
-          <TreeRow node={node} key={node.key ?? index} />
+          <TreeRow node={node} key={rowKey(node, index)} />
         ))}
       </ul>
     </section>

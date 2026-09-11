@@ -42,6 +42,10 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Further out
 
+- Keep the last scene that built drawn, dimmed, under a build error, reset on
+  a change of focus. With every keystroke a new document, an edit can pass
+  through states that do not build -- retyping a position under a stated
+  length, say -- and a blank pane hides what the edit is doing to the rig.
 - Take an imported component's tag from the module lookup
   [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
   `Function.name`, which a production build minifies. Dev builds and the tests

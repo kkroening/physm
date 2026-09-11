@@ -19,6 +19,8 @@ async function init() {
 
 function main(rsWasmModule) {
   // `#editor` opens the scene editor; anything else, the demo.
+  // Read at load, so a change of hash reloads the page to switch.
+  window.addEventListener('hashchange', () => window.location.reload());
   createRoot(document.getElementById('root')).render(
     <React.StrictMode>
       {window.location.hash === '#editor' ? (
