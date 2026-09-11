@@ -1,6 +1,7 @@
 import Anchor from './../react/Anchor';
 import Coincidence from './../react/Coincidence';
 import Line from './../react/Line';
+import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import starterDocument from './starterDocument';
 import { extractComponent, removeNode } from './sceneDocument';
@@ -129,6 +130,31 @@ describe('refusalOf, for ids', () => {
         defined('Cart'),
       ),
     ).toBeNull();
+  });
+});
+
+describe('refusalOf, for ids already in use', () => {
+  test('refuses even a first instance whose ids the scene already uses', () => {
+    const frame = (id: string) => ({
+      type: core(TrackFrame),
+      props: { id },
+      children: [],
+    });
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        { name: 'Scene', body: [frame('cart')] },
+        // Never instantiated, but its `cart` would meet the scene's.
+        { name: 'Arm', body: [frame('cart')] },
+        { name: 'Spare', body: [frame('spare')] },
+      ],
+    };
+    const atRoot = insertionPoint(doc, 'Scene', null);
+
+    expect(refusalOf(doc, 'Scene', atRoot, defined('Arm'))).toMatch(
+      /Arm names 'cart', which the scene already uses/,
+    );
+    expect(refusalOf(doc, 'Scene', atRoot, defined('Spare'))).toBeNull();
   });
 });
 

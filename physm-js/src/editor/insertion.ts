@@ -123,8 +123,8 @@ function instancesOf(doc: SceneDocument, name: string): number {
  * a frame could, which holds because every body is held to the root's rules:
  * see `insertionPoint`. A component the document defines
  * cannot go anywhere inside itself, which would recurse without end. And one
- * whose subtree names ids cannot be added a second time: ids are scene-wide,
- * so the second instance would repeat them.
+ * whose subtree names ids cannot go where the scene already uses them -- a
+ * second instance of itself included: ids are scene-wide.
  */
 export function refusalOf(
   doc: SceneDocument,
@@ -144,10 +144,26 @@ export function refusalOf(
   }
 
   if (ref.kind === 'defined') {
-    const [id] = idsNamedBy(doc, ref.name);
-    if (id !== undefined && instancesOf(doc, ref.name) > 0) {
+    const ids = idsNamedBy(doc, ref.name);
+    // The component's own definitions aside, everything else in the document
+    // ends up in the same scene -- so an id there is an id already taken.
+    const own = new Set([ref.name, ...definitionsUsedBy(doc, ref.name)]);
+    const used = new Set(
+      doc.definitions
+        .filter(({ name }) => !own.has(name))
+        .flatMap(({ body }) => idsIn(body)),
+    );
+    const taken = ids.find((id) => used.has(id));
+    if (taken !== undefined) {
       return (
-        `${ref.name} names '${id}', and ids are scene-wide: a second ` +
+        `${ref.name} names '${taken}', which the scene already uses: ids ` +
+        'are scene-wide.'
+      );
+    }
+
+    if (ids.length && instancesOf(doc, ref.name) > 0) {
+      return (
+        `${ref.name} names '${ids[0]}', and ids are scene-wide: a second ` +
         `${ref.name} would repeat it.`
       );
     }
