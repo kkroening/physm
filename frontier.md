@@ -6,12 +6,10 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Snapping to the grid.** A dragged frame's origin snaps to the grid's
-crossings as it does to any other point, a frame's origin or a decal's point
-first where both are in reach. Whose grid a nested frame snaps to is the
-question to settle first: the world's puts its origin on a crossing but
-leaves its numbers ragged under a moved or turned parent, and its parent's
-keeps them round -- drawn, then, while the drag lasts.
+**Find a node by its id or its props.** Type-ahead spells a row's tag, as the
+ARIA tree pattern asks, so in a rig of many `TrackFrame`s the id one would
+look for is out of its reach. A search field over the tree: the rows whose id
+or props match what is typed, stepped through in order.
 
 ## Next — the MVP
 
@@ -41,9 +39,6 @@ was built while gizmos were in review.
 
 ## Further out
 
-- Find a node by its id or its props. Type-ahead spells a row's tag, as the
-  ARIA tree pattern asks, so in a rig of many `TrackFrame`s the id one would
-  look for is out of its reach: a search of its own.
 - Draw a pose that does not build. Retyping a position under a stated length
   fails at nearly every keystroke, so the kept scene shows the pose from
   before the edit, not what the edit is doing. Drawing the failing pose, with
@@ -62,9 +57,9 @@ was built while gizmos were in review.
 - Constants for repeated values in the code: a value used across a rig -- a
   rod's length by its line, its circle and its weight -- written once, as a
   named constant the rest refer to. Naming them is most of the problem.
-- Snapping to a box's corners and centre, and to the world's origin. Neither
-  is a target yet, though the origin is where a top-level frame most often
-  goes back to. Karl's call.
+- Snapping to a box's corners and centre, and to the world's origin as a
+  point. Neither is a target yet -- Karl's call -- though a frame at the top
+  reaches the origin as a crossing of the grid.
 - What a drag does while the scene plays. The frame drifts from the pointer,
   since its own coordinate and its parents' keep moving: pause while a drag is
   held, refuse one during play, or keep the live nudge. Karl's call.
@@ -224,3 +219,9 @@ was built while gizmos were in review.
 - **A grid** — the scene pane draws a faint line at every whole unit of the
   world under the scene, and the world's own axes a shade darker, whether the
   scene builds or not. Like the gizmos, it never reaches the code.
+- **Snapping to the grid** — a dragged frame's `position` snaps to whole
+  units, each coordinate on its own within four pixels, on the grid of its
+  parent's axes -- so the code keeps whole numbers under a moved or turned
+  parent -- and that grid is drawn in the world's place while the drag lasts.
+  A point in reach comes first, Alt places freely, and a run's pose has no
+  grid to snap to.

@@ -1,48 +1,64 @@
 import * as mat3 from './../Mat3';
 import * as vec3 from './../Vec3';
 import type { Mat3 } from './../Mat3';
+import type { ScreenPoint } from './placeGizmos';
 
-/** One line of the grid: the whole unit of the world it marks, and where it is drawn on screen. */
+/** One line of a grid: the whole unit it marks, and its two ends on screen. */
 export interface GridLine {
   readonly unit: number;
-  readonly at: number;
+  readonly from: ScreenPoint;
+  readonly to: ScreenPoint;
 }
 
-/** The whole numbers from the lesser of `a` and `b` to the greater, both included. */
-function wholeNumbersBetween(a: number, b: number): number[] {
-  const from = Math.ceil(Math.min(a, b));
-  const to = Math.floor(Math.max(a, b));
+/** The whole numbers from `low` to `high`, both included. */
+function wholeNumbersBetween(low: number, high: number): number[] {
+  const from = Math.ceil(low);
 
-  // Between two units there are none: `to` is then `from - 1`, a length of
-  // zero.
-  return Array.from({ length: to - from + 1 }, (_, index) => from + index);
+  // Between two units there are none: the floor of `high` is then `from - 1`,
+  // a length of zero.
+  return Array.from(
+    { length: Math.floor(high) - from + 1 },
+    (_, index) => from + index,
+  );
 }
 
 /**
- * Where the grid's lines go across a pane: one at every whole unit of the
- * world in view -- `vertical` at each x, `horizontal` at each y -- with the
- * screen coordinate each is drawn at.
+ * The lines of a grid across a pane: one at every whole unit the pane reaches
+ * -- `xLines` at each x, `yLines` at each y -- with its ends on screen.
  *
- * The view scales and moves the world but never turns it, so a line of the
- * world's x is a line of the screen's, and the pane's corners bound the units
- * in view.
+ * `lattice` takes the grid's units to the screen: the view itself for the
+ * world's grid, or a turned and moved one for a frame's parent. The pane's
+ * corners, taken into the grid's units, bound the lines, so a turned grid's
+ * run past the pane's edges, where the SVG clips them.
  */
 export default function gridLines(
-  xformMatrix: Mat3,
+  lattice: Mat3,
   [width, height]: readonly [number, number],
-): { vertical: GridLine[]; horizontal: GridLine[] } {
-  const toWorld = mat3.invert(xformMatrix);
-  const [left, top] = mat3.apply(toWorld, vec3.point(0, 0));
-  const [right, bottom] = mat3.apply(toWorld, vec3.point(width, height));
+): { xLines: GridLine[]; yLines: GridLine[] } {
+  const toUnits = mat3.invert(lattice);
+  const corners = [
+    [0, 0],
+    [width, 0],
+    [0, height],
+    [width, height],
+  ].map(([x, y]) => mat3.apply(toUnits, vec3.point(x!, y!)));
+  const left = Math.min(...corners.map(([x]) => x));
+  const right = Math.max(...corners.map(([x]) => x));
+  const bottom = Math.min(...corners.map(([, y]) => y));
+  const top = Math.max(...corners.map(([, y]) => y));
+  const onScreen = (x: number, y: number): ScreenPoint =>
+    vec3.toPlanar(mat3.apply(lattice, vec3.point(x, y)));
 
   return {
-    vertical: wholeNumbersBetween(left, right).map((unit) => ({
+    xLines: wholeNumbersBetween(left, right).map((unit) => ({
       unit,
-      at: mat3.apply(xformMatrix, vec3.point(unit, 0))[0],
+      from: onScreen(unit, bottom),
+      to: onScreen(unit, top),
     })),
-    horizontal: wholeNumbersBetween(top, bottom).map((unit) => ({
+    yLines: wholeNumbersBetween(bottom, top).map((unit) => ({
       unit,
-      at: mat3.apply(xformMatrix, vec3.point(0, unit))[1],
+      from: onScreen(left, unit),
+      to: onScreen(right, unit),
     })),
   };
 }

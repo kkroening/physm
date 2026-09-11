@@ -1957,11 +1957,11 @@ describe('Editor, dragging', () => {
   test('nothing that moves with the frame is a target', () => {
     const { container } = render(<Editor />);
 
-    // Three pixels from where the pivot is -- but the pivot rides on the cart,
-    // so it would only follow the drag.
-    dragScene(container, onCart, [3, 5]);
+    // Five pixels from where the pivot is -- but the pivot rides on the cart,
+    // so it would only follow the drag. Clear of the grid's lines, too.
+    dragScene(container, onCart, [5, 6]);
 
-    expect(code()).toContain('position={[0.17, -0.44]}');
+    expect(code()).toContain('position={[0.28, -0.5]}');
   });
 
   test("a frame snaps onto another's origin, finer than a hundredth", () => {
@@ -2001,6 +2001,82 @@ describe('Editor, dragging', () => {
     // One unit along the arm's x and one against its y. Read in the world's
     // axes, it would be [3, 1].
     expect(code()).toContain('position={[3, -1]}');
+  });
+
+  test('short of a point, each coordinate snaps to a whole unit on its own', () => {
+    const { container } = render(<Editor />);
+
+    // Three pixels short of two units across, and seven short of one up.
+    dragScene(container, onCart, [33, -14]);
+
+    expect(code()).toContain('position={[2, 0.61]}');
+  });
+
+  test("a nested frame snaps to its parent's grid, drawn while the drag lasts", () => {
+    // A pane of 400 by 300, so the grid has lines to draw, and the world's
+    // origin at its middle.
+    const width = vi
+      .spyOn(Element.prototype, 'clientWidth', 'get')
+      .mockReturnValue(400);
+    const height = vi
+      .spyOn(Element.prototype, 'clientHeight', 'get')
+      .mockReturnValue(300);
+    try {
+      const { container } = render(
+        <Editor
+          initialDocument={documentFrom(
+            <RotationalFrame id="arm" initialState={[Math.PI / 6, 0]}>
+              <TrackFrame id="tip" position={[2, 0]} />
+            </RotationalFrame>,
+          )}
+        />,
+      );
+      const svg = container.querySelector('.editor__scene svg')!;
+
+      /** Which way a grid line runs, and whether it goes through the arm's origin. */
+      const lineOf = (
+        selector: string,
+      ): { run: readonly number[]; throughArm: boolean } => {
+        const line = svg.querySelector(selector)!;
+        const [x1, y1, x2, y2] = ['x1', 'y1', 'x2', 'y2'].map((name) =>
+          Number(line.getAttribute(name)),
+        );
+        const length = Math.hypot(x2! - x1!, y2! - y1!);
+        const [dx, dy] = [(x2! - x1!) / length, (y2! - y1!) / length];
+
+        return {
+          // One way round, whichever end the line starts at.
+          run: (dy < 0 ? [dx, dy] : [-dx, -dy]).map(
+            (value) => Math.round(value * 1e6) / 1e6 || 0,
+          ),
+          throughArm: Math.abs((200 - x1!) * dy - (150 - y1!) * dx) < 1e-6,
+        };
+      };
+
+      // The tip is two units along the arm, turned 30 degrees: press on it,
+      // and move a unit along the arm and two pixels across.
+      fireEvent.mouseDown(svg, { clientX: 231, clientY: 132 });
+      fireEvent.mouseMove(window, { clientX: 246, clientY: 121, buttons: 1 });
+
+      // The grid is the arm's while the drag lasts: its line of x = 0 runs
+      // along the arm's y, through the arm's origin.
+      expect(lineOf('[data-x="0"]')).toEqual({
+        run: [-0.5, -0.866025],
+        throughArm: true,
+      });
+
+      fireEvent.mouseUp(window, { clientX: 246, clientY: 121 });
+
+      // Whole numbers along the arm's axes -- and the world's grid again.
+      expect(code()).toContain('position={[3, 0]}');
+      expect(lineOf('[data-x="0"]')).toEqual({
+        run: [0, -1],
+        throughArm: true,
+      });
+    } finally {
+      width.mockRestore();
+      height.mockRestore();
+    }
   });
 
   test('a paused run offers nothing to snap to, and Reset brings it back', () => {
@@ -2044,6 +2120,33 @@ describe('Editor, dragging', () => {
       expect(container.querySelector('.editor__snap')).not.toBeNull();
 
       fireEvent.mouseUp(window, { clientX: 213, clientY: 4 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  test("in a run's pose there is no grid to snap to either", () => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
+    });
+    try {
+      const { container } = render(<Editor />);
+      fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+
+      // Just above the cart's origin, wherever the run has taken it, and
+      // three pixels short of two units across and seven short of one up.
+      const link = container.querySelector(
+        '.editor__gizmo .editor__gizmo-link',
+      )!;
+      const x = Math.round(Number(link.getAttribute('x2')));
+      const y = Math.round(Number(link.getAttribute('y2'))) - 3;
+      dragScene(container, [x, y], [x + 33, y - 11]);
+
+      // In the pose the code builds, this would be [2, 0.61].
+      expect(code()).toContain('position={[1.83, 0.61]}');
     } finally {
       vi.useRealTimers();
     }
