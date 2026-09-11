@@ -7,7 +7,8 @@ import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import coreComponents from './../react/coreComponents';
 import { documentFrom, nodesFrom } from './sceneDocument';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { vi } from 'vitest';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 
 describe('Editor', () => {
@@ -746,5 +747,79 @@ describe('Editor, components and tabs', () => {
       'title',
       expect.stringMatching(/names 'cart'/),
     );
+  });
+});
+
+/** The pendulum bob's centre on screen -- the one circle the starter scene draws. */
+function bob(container: HTMLElement): string {
+  const circle = container.querySelector('.editor__scene circle')!;
+
+  return `${circle.getAttribute('cx')},${circle.getAttribute('cy')}`;
+}
+
+describe('Editor, playing', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Let `ms` of animation frames pass. */
+  const run = (ms: number): void => {
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+  };
+
+  test('play runs the scene forward, and pause holds it', () => {
+    const { container } = render(<Editor />);
+    const start = bob(container);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    const moved = bob(container);
+
+    expect(moved).not.toBe(start);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    run(300);
+
+    expect(bob(container)).toBe(moved);
+  });
+
+  test('reset returns to the start', () => {
+    const { container } = render(<Editor />);
+    const start = bob(container);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    expect(bob(container)).toBe(start);
+  });
+
+  test('a prop edit carries the motion over, and a structural edit starts it over', () => {
+    const { container } = render(<Editor />);
+    const start = bob(container);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    const moved = bob(container);
+
+    fireEvent.change(within(select('Box')).getByLabelText('Width'), {
+      target: { value: '3' },
+    });
+
+    expect(bob(container)).toBe(moved);
+
+    // An added line moves no frame, but it changes the structure -- and the
+    // decision is that a structural edit restarts, not that one moving a frame
+    // does.
+    fireEvent.click(within(library()).getByRole('button', { name: 'Line' }));
+
+    expect(bob(container)).toBe(start);
   });
 });

@@ -430,6 +430,35 @@
   margin-top: 0.6rem;
 }
 
+/* Play, pause and reset, over the scene they run. */
+.editor__playback {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.editor__playback button {
+  min-width: 4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #a1b5d8;
+  border-radius: 4px;
+  background-color: #eef4f9;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor__playback button:hover:enabled {
+  background-color: #dce7f2;
+}
+
+.editor__playback button:disabled {
+  color: #a3b1bd;
+  cursor: default;
+}
+
 /* Too narrow for three columns: stack them, scene first, so the thing being
    edited is always the thing on screen. */
 @media (max-width: 48rem) {
