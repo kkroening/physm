@@ -41,6 +41,10 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Further out
 
+- Take an imported component's tag from the module lookup
+  [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
+  `Function.name`, which a production build minifies. Dev builds and the tests
+  keep real names, so nothing shows it yet.
 - Refuse children under a non-frame in `buildScene`. They are dropped silently
   today, which changes the answer rather than the picture -- for a document,
   only `canContain` stands in the way.

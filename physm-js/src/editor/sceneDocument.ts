@@ -100,14 +100,46 @@ function refOf(type: unknown): ComponentRef {
     : { kind: 'imported', name: nameOf(component), component };
 }
 
+/** `nodes`, once no two of them share a key. */
+function refuseRepeatedKeys(nodes: DocNode[]): DocNode[] {
+  const keys = new Set<string>();
+  for (const { key } of nodes) {
+    if (key !== undefined && keys.has(key)) {
+      throw new Error(
+        `Two siblings share the key '${key}'. In JSX a key only has to ` +
+          'differ within its own array or fragment, but a document holds a ' +
+          "node's siblings as one list -- give them distinct keys.",
+      );
+    }
+
+    if (key !== undefined) {
+      keys.add(key);
+    }
+  }
+
+  return nodes;
+}
+
 /**
  * Children, read as document nodes.
  *
  * Fragments and arrays flatten into their parent's children: a fragment is a
  * way of *writing* several siblings, not a node of its own. Nothing is called --
  * an element is a description of a call, and reading it does not make one.
+ *
+ * **Keys are unique among a node's siblings in a document**, which JSX does not
+ * promise: there a key need only differ within its own array or fragment, and
+ * two `.map`s that each number their children from zero become one list once
+ * flattened. Such a list is refused rather than repaired, because the editor
+ * does not invent keys -- and two siblings with one key would build as two
+ * frames with one id.
  */
 export function nodesFrom(children: ReactNode): DocNode[] {
+  return refuseRepeatedKeys(flatten(children));
+}
+
+/** `nodesFrom`, before the flattened list's keys are checked. */
+function flatten(children: ReactNode): DocNode[] {
   if (children === null || children === undefined) {
     return [];
   }
@@ -117,7 +149,7 @@ export function nodesFrom(children: ReactNode): DocNode[] {
   }
 
   if (Array.isArray(children)) {
-    return children.flatMap((child: ReactNode) => nodesFrom(child));
+    return children.flatMap((child: ReactNode) => flatten(child));
   }
 
   if (!isValidElement<{ children?: ReactNode }>(children)) {
@@ -127,7 +159,7 @@ export function nodesFrom(children: ReactNode): DocNode[] {
   }
 
   if (children.type === Fragment) {
-    return nodesFrom(children.props.children);
+    return flatten(children.props.children);
   }
 
   const { children: grandchildren, ...props } = children.props;
@@ -316,7 +348,7 @@ export function setProp(
 
         return {
           ...node,
-          props: value === undefined ? rest : { ...rest, [prop]: value },
+          props: value === undefined ? rest : { ...node.props, [prop]: value },
         };
       }),
     ),
@@ -339,6 +371,16 @@ export function insertNode(
       if (index < 0 || index > siblings.length) {
         throw new Error(
           `Cannot insert at ${index} among ${siblings.length} siblings.`,
+        );
+      }
+
+      if (
+        node.key !== undefined &&
+        siblings.some((sibling) => sibling.key === node.key)
+      ) {
+        throw new Error(
+          `The list already has a node keyed '${node.key}', and a key is a ` +
+            "node's identity among its siblings.",
         );
       }
 
@@ -384,8 +426,14 @@ function afterRemoval(path: NodePath, removed: NodePath): NodePath {
  * Move the node at `from` into the list at `parent`, so that it lands at
  * `index` in that list *as it reads after the move*.
  *
+ * The two are read at different moments. `parent` is the list's path as the
+ * document reads *before* the move, and is corrected for the removal; `index`
+ * counts in that list once the node has left it. So a node moved into a later
+ * sibling names that sibling's current path.
+ *
  * Refuses to move a node into itself or anything beneath it, which would detach
- * it from the tree entirely.
+ * it from the tree entirely -- and, through `insertNode`, into a list that
+ * already has a node with its key.
  */
 export function moveNode(
   doc: SceneDocument,

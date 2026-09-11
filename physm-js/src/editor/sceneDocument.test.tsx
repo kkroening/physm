@@ -231,6 +231,92 @@ describe('sceneDocument', () => {
     );
   });
 
+  test('reading calls no composite, even one that throws when called', () => {
+    function Explodes(): never {
+      throw new Error('called while reading');
+    }
+
+    expect(() => documentFrom(<Explodes />)).not.toThrow();
+  });
+
+  test("round-trips the demo's authored body, not just a node wrapping it", () => {
+    // A top-level fragment, keyed `.map`s, and imported composites carrying
+    // authored children -- every reading rule, through `elementOf` and back.
+    const doc = documentFrom(CartAndRope());
+
+    expect(doc.definitions[0]!.body.length).toBeGreaterThan(1);
+    expect(normalized(buildScene(elementOf(doc)))).toEqual(
+      normalized(buildScene(<CartAndRope />)),
+    );
+  });
+
+  test('a key reaches the scene the document builds', () => {
+    const doc = documentFrom(
+      <TrackFrame id="cart">
+        <RotationalFrame key="wheel" />
+      </TrackFrame>,
+    );
+    const [wheel] = buildScene(elementOf(doc)).frameMap.get('cart')!.frames;
+
+    expect(wheel!.id).toMatch(/\.\$wheel$/);
+  });
+
+  test('refuses siblings that share a key once read, rather than losing frames', () => {
+    // Valid JSX -- each `.map` numbers its own children -- but one list once
+    // flattened, where two frames would build with one id.
+    expect(() =>
+      documentFrom(
+        <TrackFrame id="cart">
+          {[-1, 1].map((x, i) => (
+            <RotationalFrame key={i} position={[x, 0]} />
+          ))}
+          {[-2, 2].map((x, i) => (
+            <RotationalFrame key={i} position={[x, 0]} />
+          ))}
+        </TrackFrame>,
+      ),
+    ).toThrow(/Two siblings share the key '0'/);
+  });
+
+  test('insertNode and moveNode refuse a key the list already has', () => {
+    const doc = documentFrom(
+      <>
+        <TrackFrame id="a">
+          <RotationalFrame key="k" />
+        </TrackFrame>
+        <TrackFrame id="b">
+          <RotationalFrame key="k" />
+          <RotationalFrame key="m" />
+        </TrackFrame>
+      </>,
+    );
+
+    expect(() => moveNode(doc, 'Scene', [0, 0], [1], 0)).toThrow(
+      /already has a node keyed 'k'/,
+    );
+    expect(() =>
+      insertNode(doc, 'Scene', [1], 0, nodeAt(doc, 'Scene', [0, 0])),
+    ).toThrow(/already has a node keyed 'k'/);
+
+    // Among its own siblings a keyed node moves freely: it leaves the list
+    // before it is put back.
+    const reordered = moveNode(doc, 'Scene', [1, 0], [1], 1);
+
+    expect(
+      nodeAt(reordered, 'Scene', [1]).children.map(({ key }) => key),
+    ).toEqual(['m', 'k']);
+  });
+
+  test('setProp keeps an edited prop where it was', () => {
+    const doc = documentFrom(<TrackFrame id="cart" resistance={5} />);
+    const next = setProp(doc, 'Scene', [0], 'id', 'wagon');
+
+    expect(Object.keys(nodeAt(next, 'Scene', [0]).props)).toEqual([
+      'id',
+      'resistance',
+    ]);
+  });
+
   test('a path that names nothing is refused', () => {
     expect(() => nodeAt(twoPoles(), 'Scene', [0, 9])).toThrow(/No node at/);
     expect(() => nodeAt(twoPoles(), 'Nope', [0])).toThrow(/no component named/);
