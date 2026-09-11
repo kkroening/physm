@@ -21,7 +21,8 @@ import {
   setProp,
 } from './sceneDocument';
 import type CoreScene from './../Scene';
-import type { DocNode, SceneDocument } from './sceneDocument';
+import type { DocNode, ElementOrigin, SceneDocument } from './sceneDocument';
+import type { ReactElement } from 'react';
 
 /**
  * A scene's serialization with frame ids replaced by position.
@@ -416,5 +417,64 @@ describe('extracting a component', () => {
     expect(() => extractComponent(doc, 'Scene', [0], 'Box')).toThrow(
       /already a building block/,
     );
+  });
+});
+
+describe('elementOf, with origins', () => {
+  test('origins say which definition and node made each element', () => {
+    const [cart] = nodesFrom(
+      <TrackFrame id="cart">
+        <Box width={1} height={1} />
+      </TrackFrame>,
+    );
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Pendulum',
+          body: nodesFrom(
+            <RotationalFrame>
+              <Circle radius={1} />
+            </RotationalFrame>,
+          ),
+        },
+        {
+          name: 'Scene',
+          body: [
+            {
+              ...cart!,
+              children: [
+                ...cart!.children,
+                {
+                  type: { kind: 'defined', name: 'Pendulum' },
+                  props: {},
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const origins = new WeakMap<object, ElementOrigin>();
+    const trails = new Map<unknown, readonly ReactElement[]>();
+    const scene = buildScene(elementOf(doc, 'Scene', origins), {
+      trace: (built, trail) => trails.set(built, trail),
+    });
+    const bob = scene.frames[0]!.frames[0]!.decals[0]!;
+
+    // The root's own element and each body's fragment render no node, so they
+    // have no origin.
+    expect(
+      trails
+        .get(bob)!
+        .map((element) => origins.get(element))
+        .filter(Boolean),
+    ).toEqual([
+      { definition: 'Scene', path: [0] },
+      { definition: 'Scene', path: [0, 1] },
+      { definition: 'Pendulum', path: [0] },
+      { definition: 'Pendulum', path: [0, 0] },
+    ]);
   });
 });

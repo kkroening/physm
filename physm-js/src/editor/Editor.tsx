@@ -6,6 +6,7 @@ import buildScene from './../react/buildScene';
 import coreComponents from './../react/coreComponents';
 import emitScene from './emitScene';
 import getViewXformMatrix from './../getViewXformMatrix';
+import hitsAt from './hitsAt';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
 import useSimulation from './useSimulation';
@@ -23,17 +24,22 @@ import {
 import { insertionPoint, newNode, refusalOf } from './insertion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
+import type Decal from './../Decal';
+import type Frame from './../Frame';
 import type { StateMap } from './../Frame';
 import type {
   ComponentRef,
   CoreComponent,
   DocNode,
+  ElementOrigin,
   NodePath,
   SceneDocument,
 } from './sceneDocument';
 import type { InsertionPoint } from './insertion';
-import type { ReactElement } from 'react';
+import type { MouseEvent, ReactElement } from 'react';
+import type { ScreenPoint } from './placeGizmos';
 import type { Selection } from './PropertiesPane';
+import type { Trail } from './../react/buildScene';
 
 /** Pixels per scene unit. */
 const VIEW_SCALE = 18;
@@ -267,9 +273,15 @@ function TreePane({
   onExtract: (path: NodePath, name: string) => void;
 }): ReactElement {
   // The path the name is being typed for: the form shows only while that is
-  // still the selection, and a selection made in the tree clears it.
+  // still the selection, and a new selection clears it -- one made in the tree,
+  // or by a click in the scene.
   const [naming, setNaming] = useState<string | null>(null);
   const selectedKey = selectedPath ? selectedPath.join('.') : null;
+
+  if (naming !== null && naming !== selectedKey) {
+    setNaming(null);
+  }
+
   const extractRefusal = selectedPath
     ? extractionRefusal(doc, focus, selectedPath)
     : null;
@@ -384,6 +396,50 @@ function TreePane({
   );
 }
 
+/** A built scene, and the way back from what it draws to the node that wrote it. */
+interface Built {
+  readonly scene: CoreScene;
+  readonly initial: StateMap;
+
+  /** The focused body's node nearest to what built a frame or decal. */
+  readonly authoredPathOf: (built: Frame | Decal) => NodePath | null;
+}
+
+/**
+ * The focused body's node nearest to what built something: the last element on
+ * its trail that the focused body wrote. A frame inside a component's instance
+ * leads back to the instance, since that is the node a person can act on.
+ */
+function authoredPathOf(
+  trail: Trail,
+  origins: WeakMap<object, ElementOrigin>,
+  focus: string,
+): NodePath | null {
+  const authored = trail
+    .map((element) => origins.get(element))
+    .filter((origin) => origin?.definition === focus);
+
+  return authored[authored.length - 1]?.path ?? null;
+}
+
+/**
+ * How near a click must land to the last one, in pixels, to count as clicking
+ * the same place again.
+ */
+const SAME_PLACE = 3;
+
+/** The nodes a click's hits lead back to, each once, in the order hit. */
+function distinctPaths(paths: readonly (NodePath | null)[]): NodePath[] {
+  const byKey = new Map<string, NodePath>();
+  for (const path of paths) {
+    if (path && !byKey.has(path.join('.'))) {
+      byKey.set(path.join('.'), path);
+    }
+  }
+
+  return [...byKey.values()];
+}
+
 /**
  * A scene and the state it starts in, or the reason there is not one.
  *
@@ -395,12 +451,21 @@ function TreePane({
 function useBuiltScene(
   doc: SceneDocument,
   focus: string,
-): { scene: CoreScene; initial: StateMap } | { error: string } {
+): Built | { error: string } {
   return useMemo(() => {
     try {
-      const scene = buildScene(elementOf(doc, focus));
+      const origins = new WeakMap<object, ElementOrigin>();
+      const trails = new Map<Frame | Decal, Trail>();
+      const scene = buildScene(elementOf(doc, focus, origins), {
+        trace: (built, trail) => trails.set(built, trail),
+      });
 
-      return { scene, initial: scene.getInitialStateMap() };
+      return {
+        scene,
+        initial: scene.getInitialStateMap(),
+        authoredPathOf: (built) =>
+          authoredPathOf(trails.get(built) ?? [], origins, focus),
+      };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
     }
@@ -416,6 +481,10 @@ function useBuiltScene(
  * would do with no world around it is a question it leaves open. So a
  * component's tab draws it as authored, and the scene's run waits for its tab.
  *
+ * A click selects what it hit, as the node in the focused body nearest to it --
+ * so a click on a component's instance selects the instance. Clicking the same
+ * place again goes one deeper, through everything under the click.
+ *
  * A scene that fails to build shows why instead of taking the editor down with
  * it: a half-made rig is the normal state of a document being edited, and the
  * message is the thing the person needs to see.
@@ -424,11 +493,19 @@ function ScenePane({
   doc,
   focus,
   structure,
+  selectedPath,
+  onPick,
 }: {
   doc: SceneDocument;
   focus: string;
   /** How many structural edits there have been -- see `useSimulation`. */
   structure: number;
+
+  /** The selected node, if the focused body holds it. */
+  selectedPath: NodePath | null;
+
+  /** A click in the scene, as the node it selects: `null` when it hit nothing. */
+  onPick: (path: NodePath | null) => void;
 }): ReactElement {
   const svgRef = useRef<SVGSVGElement>(null);
   const size = useElementSize(svgRef);
@@ -448,9 +525,40 @@ function ScenePane({
       ? { scene: built.scene, stateMap: simulation.stateMap ?? built.initial }
       : null;
 
+  // Where the last click landed: a click there again goes one past the
+  // selection, when the selection is among what it hits.
+  const lastPick = useRef<ScreenPoint | null>(null);
+
+  const pick = (event: MouseEvent<SVGSVGElement>): void => {
+    if (!('scene' in built) || !drawn) {
+      return;
+    }
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const point: ScreenPoint = [
+      event.clientX - bounds.left,
+      event.clientY - bounds.top,
+    ];
+    const paths = distinctPaths(
+      hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point).map(
+        built.authoredPathOf,
+      ),
+    );
+    const last = lastPick.current;
+    const again =
+      last !== null &&
+      Math.hypot(point[0] - last[0], point[1] - last[1]) <= SAME_PLACE;
+    const selected =
+      again && selectedPath
+        ? paths.findIndex((path) => path.join('.') === selectedPath.join('.'))
+        : -1;
+    lastPick.current = point;
+    onPick(paths[(selected + 1) % paths.length] ?? null);
+  };
+
   return (
     <section className="editor__scene" aria-label="Scene">
-      <svg ref={svgRef}>
+      <svg ref={svgRef} onClick={pick}>
         {drawn ? (
           <>
             <SceneView {...drawn} xformMatrix={xformMatrix} />
@@ -706,7 +814,15 @@ export default function Editor({
             }}
             {...actions}
           />
-          <ScenePane doc={doc} focus={focus} structure={structure} />
+          <ScenePane
+            doc={doc}
+            focus={focus}
+            structure={structure}
+            selectedPath={selectedPath}
+            onPick={(path) =>
+              path ? actions.onSelect(path) : actions.onDeselect()
+            }
+          />
         </div>
         <LibraryPane
           doc={doc}

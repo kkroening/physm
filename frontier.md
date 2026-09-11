@@ -13,16 +13,14 @@ edit here already returns a new document, so undo is a stack of past ones. What
 needs deciding is what one step is -- page 7 coalesces a field's run of
 keystrokes into one -- and where the selection and focus go back to.
 
-After it, from [page 7](docs/issues/0014/07-editing.md), in this order:
+After it, from [page 7](docs/issues/0014/07-editing.md):
 
-- picking: decals hit-test their own geometry, frames their gizmo, topmost
-  first, and a click selects the nearest *authored* ancestor of what it hit
 - dragging: a gizmo's drag writes `position` in the parent's frame, with
   snapping to the grid and to other origins, and only an authored node drags.
   It needs undo most -- a drag is a stream of edits, and a slip is easy -- and
   gizmos that show which way +x points, since a drag writes along the parent's
   axes and today's cross looks the same after a quarter turn
-- the tree stays the failsafe, so either can ship imperfect without blocking
+- the tree stays the failsafe, so dragging can ship imperfect without blocking
   anything
 
 ## Next — the MVP
@@ -49,7 +47,8 @@ waits on Karl's call below. Everything else is done: load a scene, see its
 tree, edit props, add, delete and reorder nodes, extract a component and reuse
 it -- one that names no id, for now -- export TSX that rebuilds to the same
 scene, and see every frame in the scene pane, one that draws nothing included.
-Play came forward because the shell made it cheap.
+Play came forward because the shell made it cheap, and picking because it
+was built while gizmos were in review.
 
 ## Further out
 
@@ -82,6 +81,9 @@ Play came forward because the shell made it cheap.
   sets a count -- page 8's `segmentCount` -- changes the structure but arrives
   as a prop edit, which carries the run over; whether it resets instead, and
   how the editor tells, is part of the same call.
+- A modifier on a click in the scene, to select the expanded node itself
+  rather than its nearest authored ancestor -- page 7's way to inspect one. It
+  waits on the properties pane showing an expanded node, read-only.
 - Code pane highlighting, and scroll-once on focus change
 - Codegen polish: round numbers (`-Math.PI / 2`), constants for repeated values
 - The constraint-first direction ([0014 page 9](docs/issues/0014/09-horizon.md))
@@ -159,3 +161,9 @@ Play came forward because the shell made it cheap.
   its parent's origin, the world's at the top. The editor draws them over the
   scene from the same pose, so a frame that draws nothing can still be seen,
   and none reaches the scene or the code written from it.
+- **Picking** — a click in the scene selects the node in the focused body
+  nearest to what it hit: decals on their own geometry, frames on their gizmo,
+  topmost first, and the same place again goes one deeper. A frame inside an
+  instance selects the instance. The build reports the elements behind each
+  frame and decal, and the document says which node made each element, which
+  is how a click leads back.

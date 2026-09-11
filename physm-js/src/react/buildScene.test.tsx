@@ -551,3 +551,60 @@ describe('buildScene', () => {
     ).toThrow(/'post' names both an <Anchor> and a frame/);
   });
 });
+
+/** Assert that `actual` holds exactly `expected`, by identity, in order. */
+function expectSame(
+  actual: readonly unknown[] | undefined,
+  expected: readonly unknown[],
+): void {
+  expect(actual).toHaveLength(expected.length);
+  expected.forEach((item, index) => expect(actual![index]).toBe(item));
+}
+
+describe('buildScene, traced', () => {
+  test('trace names every frame and decal, with the elements it came from', () => {
+    // A composite between the cart and the arm, so the trail passes through an
+    // element the walk calls rather than builds.
+    const Arm = ({ children }: { children?: ReactNode }): ReactElement => (
+      <RotationalFrame id="arm">{children}</RotationalFrame>
+    );
+    const circle = <Circle radius={1} />;
+    const arm = <Arm>{circle}</Arm>;
+    const box = <Box width={1} height={1} />;
+    // A fragment between the cart and its children, so the trail also passes
+    // through an element that is neither built nor called.
+    const fragment = (
+      <>
+        {box}
+        {arm}
+      </>
+    );
+    const root = <TrackFrame id="cart">{fragment}</TrackFrame>;
+    const calls: [unknown, readonly ReactElement[]][] = [];
+    const scene = buildScene(root, {
+      trace: (built, trail) => calls.push([built, trail]),
+    });
+    const trailOf = (built: unknown): readonly ReactElement[] | undefined =>
+      calls.find(([reported]) => reported === built)?.[1];
+    const cart = scene.frames[0]!;
+    const armFrame = cart.frames[0]!;
+    const rendered = trailOf(armFrame)?.[3];
+
+    // Two frames and two decals, each reported once.
+    expect(calls).toHaveLength(4);
+    expectSame(trailOf(cart), [root]);
+    expectSame(trailOf(cart.decals[0]), [root, fragment, box]);
+    expect(rendered).toMatchObject({
+      type: RotationalFrame,
+      props: { id: 'arm' },
+    });
+    expectSame(trailOf(armFrame), [root, fragment, arm, rendered]);
+    expectSame(trailOf(armFrame.decals[0]), [
+      root,
+      fragment,
+      arm,
+      rendered,
+      circle,
+    ]);
+  });
+});
