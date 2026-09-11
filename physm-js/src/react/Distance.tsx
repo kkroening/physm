@@ -16,10 +16,11 @@ export interface DistanceProps {
 /**
  * Two frame-relative points held a fixed distance apart.
  *
- * Either end may be a frame's id or an `<Anchor>` ref, and the anchor form is
- * the one that composes: a generated subtree names none of its frames, so a
- * chain marks its own tip and hands the mark out rather than the author
- * predicting an id.
+ * Either end may name a frame, name an `<Anchor>` by its `id`, or be an
+ * `<Anchor>` ref. The anchor forms are the ones that compose: a generated
+ * subtree names none of its frames, so a chain marks its own tip rather than
+ * the author predicting an id. A name that matches an anchor resolves to it
+ * before any frame of the same id -- see `resolveAnchor`.
  *
  * Belongs beside the frames rather than inside either one it names -- the two
  * can be in different subtrees. Nesting one inside a frame is tolerated and
@@ -43,9 +44,9 @@ export default function Distance({
         `a <Distance> between ` +
         `${typeof frame1 === 'string' ? `'${frame1}'` : 'an anchor'} and ` +
         `${typeof frame2 === 'string' ? `'${frame2}'` : 'an anchor'}`,
-      build: () => {
-        const end1 = resolveAnchor(frame1, position1);
-        const end2 = resolveAnchor(frame2, position2 ?? undefined);
+      build: (anchors) => {
+        const end1 = resolveAnchor(frame1, position1, anchors);
+        const end2 = resolveAnchor(frame2, position2 ?? undefined, anchors);
         if (!end1 || !end2) {
           return null;
         }

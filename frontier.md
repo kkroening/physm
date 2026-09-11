@@ -6,22 +6,25 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**De-ref the demo.** `CartAndRope` holds its two rope tips in `useRef` so its
-`<Coincidence>` can name them, and a hook cannot run outside a render — so a
-tree walk cannot evaluate the demo at all.
+**Tree-walk builder.** `buildScene(element)`: walk an element tree, call each
+composite with its props, and build a `Scene` from the core components it bottoms
+out in — with no renderer, no effects and no second render.
 
-- `<Anchor id="left-tip" />` registers its point under that id
-- a constraint end that names an anchor id resolves to the anchor's point,
-  before falling back to a frame of that id
-- `CartAndRope` uses ids and calls no hooks
+- each core binding component exposes how it builds, as data both the walker
+  and the mounted component use, so the two cannot drift
+- composites are called; the binding's own components are not
+- sibling order is JSX order by construction, which is what
+  [0005](docs/issues/0005.md) asks for
+- checked against the mounted route: `buildScene(<CartAndRope />)` must equal
+  what `<Scene>` assembles — same frames, decals, weights and constraints, in
+  the same order
 
 ## Next — the MVP
 
 Roughly one PR each.
 
-1. **De-ref the demo** — *in view*
-2. **Tree-walk builder** — `buildScene(element)` with no renderer, checked
-   against the mounted route on the demo
+1. ~~**De-ref the demo**~~ — done
+2. **Tree-walk builder** — *in view*
 3. **Core metadata** — prop schemas for the nine core components
 4. **Document model** — a module of definitions, immutable edits, element ↔
    document conversion
@@ -53,4 +56,6 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Done
 
-Nothing yet.
+- **De-ref the demo** — `<Anchor id>` names a point, a constraint end resolves
+  an anchor id before a frame id, and `CartAndRope` calls no hooks. A test walks
+  every composite in the rig outside a render.

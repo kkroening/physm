@@ -1,34 +1,33 @@
-import type { AnchorHandle } from './sceneNodes';
+import type { AnchorHandle, AnchorLookup, AnchorPoint } from './sceneNodes';
 import type { FrameId } from './../Frame';
 import type { PositionLike } from './../Scene';
 
-/** Either end of a constraint: a frame by name, or an `<Anchor>` by ref. */
+/**
+ * Either end of a constraint: a name, or an `<Anchor>` by ref.
+ *
+ * A name is an anchor's `id` where one exists and a frame's id otherwise -- see
+ * `resolveAnchor`.
+ */
 export type ConstraintEnd = FrameId | AnchorHandle;
 
+/** A constraint end, as the core constructor wants it. */
+export interface ResolvedEnd {
+  readonly frameId: FrameId;
+  readonly position: PositionLike | undefined;
+}
+
 /**
- * One end of a constraint, as the core constructor wants it.
+ * An anchor's point, combined with a position the caller also supplied.
  *
- * `null` when the end is an anchor that has not reported yet -- see the
- * `constraint` slot in `sceneNodes`. A named frame always resolves, because a
- * name needs nothing to have mounted.
+ * The anchor's own point wins where it has one, because it is the thing that
+ * knows -- but an anchor may deliberately state none, which is how a
+ * `CoincidenceConstraint`'s solved attachment stays expressible. In that case
+ * the caller's `position` is what there is.
  */
-export default function resolveAnchor(
-  end: ConstraintEnd,
+function fromAnchor(
+  point: AnchorPoint,
   position: PositionLike | undefined,
-): { frameId: FrameId; position: PositionLike | undefined } | null {
-  if (typeof end === 'string') {
-    return { frameId: end, position };
-  }
-
-  const point = end.current;
-  if (!point) {
-    return null;
-  }
-
-  // The anchor's own point wins where it has one, because it is the thing that
-  // knows -- but an anchor may deliberately state none, which is how a
-  // `CoincidenceConstraint`'s solved attachment stays expressible. In that case
-  // the caller's `position` is what there is.
+): ResolvedEnd {
   if (point.position !== undefined && position !== undefined) {
     console.warn(
       `physm: a position was given alongside an <Anchor> on frame ` +
@@ -39,4 +38,33 @@ export default function resolveAnchor(
   }
 
   return { frameId: point.frameId, position: point.position ?? position };
+}
+
+/**
+ * One end of a constraint, as the core constructor wants it.
+ *
+ * **A name resolves to an anchor before a frame.** An anchor with that `id`
+ * wins over a frame with that id, because the anchor is the more specific
+ * thing: it names a point, where a frame id names only an origin. A name that
+ * matches no anchor is a frame id, and passes through untouched.
+ *
+ * `null` when the end is a ref whose anchor has not reported yet -- see the
+ * `constraint` slot in `sceneNodes`. A name never returns `null`: an anchor
+ * named by id is collected before any constraint is built, and a frame name
+ * needs nothing to have mounted.
+ */
+export default function resolveAnchor(
+  end: ConstraintEnd,
+  position: PositionLike | undefined,
+  anchors: AnchorLookup,
+): ResolvedEnd | null {
+  if (typeof end === 'string') {
+    const named = anchors.get(end);
+
+    return named ? fromAnchor(named, position) : { frameId: end, position };
+  }
+
+  const point = end.current;
+
+  return point ? fromAnchor(point, position) : null;
 }

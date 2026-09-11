@@ -6,27 +6,33 @@ import type { PositionLike } from './../Scene';
 import type { Ref } from 'react';
 
 export interface AnchorProps {
+  id?: string;
   position?: PositionLike;
   ref?: Ref<AnchorPoint>;
 }
 
 /**
- * A named point on the enclosing frame, handed out by ref.
+ * A named point on the enclosing frame.
  *
  * What a constraint is wired from when the frames were *generated* rather than
  * written. A `RopeChain` produces five frames and names none of them, so
  * nothing outside it can say `frame1="chainL4"` -- and asking the author to
  * predict a generated id is the problem the JSX authoring was meant to remove,
- * reappearing one level up. An anchor lets the chain mark its own tip and hand
- * the mark out:
+ * reappearing one level up. An anchor lets the chain mark its own tip, and a
+ * constraint names the mark:
  *
  * ```jsx
  * <RopeChain segments={5}>
- *   <Anchor ref={leftTip} position={[1.4, 0]} />
+ *   <Anchor id="left-tip" position={[1.4, 0]} />
  * </RopeChain>
  *
- * <Coincidence frame1={leftTip} frame2={rightTip} />
+ * <Coincidence frame1="left-tip" frame2="right-tip" />
  * ```
+ *
+ * **Prefer `id` to `ref`.** Both work, and a ref is still accepted, but a ref
+ * is a cell a hook creates: the component holding it cannot be evaluated
+ * outside a render, and nothing can serialize it. An id is a string, so a rig
+ * written with ids is plain data all the way down.
  *
  * **Omitting `position` is meaningful**, not merely a default. A
  * `CoincidenceConstraint` solves for the attachment it is not given, which is
@@ -40,7 +46,7 @@ export interface AnchorProps {
  * a ref does not re-render anybody, so without the bump a constraint assembled
  * before the anchor mounted would stay unresolved with nothing to retry it.
  */
-export default function Anchor({ position, ref }: AnchorProps): null {
+export default function Anchor({ id, position, ref }: AnchorProps): null {
   const frameId = useContext(FrameIdContext);
 
   if (!frameId) {
@@ -66,10 +72,15 @@ export default function Anchor({ position, ref }: AnchorProps): null {
   // value, so the handle re-runs at least as often: safe in the direction that
   // matters, wasteful in the other, and cheap either way.
   useImperativeHandle(ref, makePoint, [frameId, position]);
-  useSceneNode(useId(), { slot: 'anchor', build: makePoint }, [
-    frameId,
-    JSON.stringify(position),
-  ]);
+  useSceneNode(
+    useId(),
+    {
+      slot: 'anchor',
+      ...(id === undefined ? {} : { id }),
+      build: makePoint,
+    },
+    [id, frameId, JSON.stringify(position)],
+  );
 
   return null;
 }

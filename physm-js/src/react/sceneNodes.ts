@@ -33,6 +33,9 @@ export interface AnchorPoint {
 /** What an `<Anchor>` hands back through its ref. */
 export type AnchorHandle = { readonly current: AnchorPoint | null };
 
+/** Anchors that declared an `id`, by that id, as assembly collects them. */
+export type AnchorLookup = ReadonlyMap<string, AnchorPoint>;
+
 /**
  * What a registered component contributes to a scene.
  *
@@ -44,7 +47,19 @@ export type SceneNode =
       readonly slot: 'frame';
       readonly build: (children: FrameChildren) => Frame;
     }
-  | { readonly slot: 'anchor'; readonly build: () => AnchorPoint }
+  | {
+      readonly slot: 'anchor';
+
+      /**
+       * The name a constraint end can use for this anchor, if it has one.
+       *
+       * The declarative alternative to a ref. A ref is a mutable cell a hook
+       * creates, so a component that makes one cannot be evaluated outside a
+       * render -- and a document cannot hold one at all. A name is data.
+       */
+      readonly id?: string;
+      readonly build: () => AnchorPoint;
+    }
   | { readonly slot: 'decal'; readonly build: () => Decal }
   | { readonly slot: 'weight'; readonly build: () => Weight }
   | {
@@ -58,7 +73,7 @@ export type SceneNode =
        * treats a frame that is mid-unmount: wait, and report if it never
        * resolves.
        */
-      readonly build: () => Constraint | null;
+      readonly build: (anchors: AnchorLookup) => Constraint | null;
 
       /**
        * What to call this in a warning when `build` returns `null`.

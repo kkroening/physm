@@ -10,6 +10,7 @@ import {
 } from './sceneNodes';
 import { useEffect, useMemo, useRef } from 'react';
 import type Constraint from './../Constraint';
+import type { AnchorLookup, AnchorPoint, SceneRegistry } from './sceneNodes';
 import type { Mat3 } from './../Mat3';
 import type { ReactElement, ReactNode } from 'react';
 import type { StateMap } from './../Frame';
@@ -22,6 +23,37 @@ export interface SceneProps {
 
   /** Called with the assembled scene whenever it changes. */
   onSceneChange?: ((scene: CoreScene) => void) | undefined;
+}
+
+/**
+ * Every live anchor that declared an `id`, by that id.
+ *
+ * Collected before any constraint is built, so a constraint naming an anchor
+ * by id never has to wait for it the way a ref-named one can.
+ *
+ * Two anchors sharing an id are refused rather than resolved either way. Picking
+ * one would weld a constraint to whichever happened to register first, which
+ * changes the answer rather than the picture -- the same reason a root
+ * `<Weight>` is refused below.
+ */
+function collectAnchors(entries: SceneRegistry['entries']): AnchorLookup {
+  const anchors = new Map<string, AnchorPoint>();
+  for (const { node, live } of entries.values()) {
+    if (!live || node.slot !== 'anchor' || node.id === undefined) {
+      continue;
+    }
+
+    if (anchors.has(node.id)) {
+      throw new Error(
+        `Two <Anchor>s share the id '${node.id}'. A constraint naming it ` +
+          'would be welded to whichever registered first; give each its own.',
+      );
+    }
+
+    anchors.set(node.id, node.build());
+  }
+
+  return anchors;
 }
 
 /**
@@ -95,6 +127,7 @@ export default function Scene({
 
     // After the tree, because `addConstraint` solves against the pose the
     // frames are actually in.
+    const anchors = collectAnchors(registry.entries);
     for (const { node, live } of registry.entries.values()) {
       if (!live || node.slot !== 'constraint') {
         continue;
@@ -112,7 +145,7 @@ export default function Scene({
       // how that surfaces once nothing is moving.
       // `null` is the same "wait" answer one step earlier: an `<Anchor>` this
       // constraint names has not handed out its point yet.
-      const constraint = node.build();
+      const constraint = node.build(anchors);
       if (!constraint) {
         unresolvedAnchors.push(node.describe?.() ?? 'a constraint');
         continue;

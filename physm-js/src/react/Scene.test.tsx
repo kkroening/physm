@@ -584,6 +584,107 @@ describe('Scene (authoring)', () => {
     expect(scene.constraints).toHaveLength(0);
   });
 
+  test('an anchor named by id wires a constraint, with no ref anywhere', () => {
+    // The declarative form, and the one a document can hold. `Rig` below makes
+    // no hook call, so it can be evaluated outside a render -- which a ref-based
+    // rig cannot, because `useRef` has no dispatcher to run against there.
+    //
+    // The frames are deliberately unnamed, so the test is about the anchor ids
+    // resolving to *generated* frame ids rather than about names that happen
+    // to match.
+    function Rig(): ReactElement {
+      return (
+        <>
+          <TrackFrame id="cart">
+            <RotationalFrame position={[-2, 0]} initialState={[0.3, 0]}>
+              <Anchor id="left" position={[1, 0]} />
+            </RotationalFrame>
+            <RotationalFrame position={[2, 0]} initialState={[-0.7, 0]}>
+              {/* No position: the attachment on this end is solved. */}
+              <Anchor id="right" />
+            </RotationalFrame>
+          </TrackFrame>
+          <Coincidence frame1="left" frame2="right" />
+        </>
+      );
+    }
+
+    expect(() => Rig()).not.toThrow();
+
+    const scene = assemble(<Rig />);
+
+    expect(scene.constraints).toHaveLength(1);
+
+    const solved = scene.constraints[0] as CoreCoincidenceConstraint;
+
+    // Neither end is `left`, `right` or `cart`: the ids resolved through the
+    // anchors to the frames they sit on, which nobody named.
+    for (const frameId of [solved.frameId1, solved.frameId2]) {
+      expect(scene.frameMap.has(frameId)).toBe(true);
+      expect(['left', 'right', 'cart']).not.toContain(frameId);
+    }
+    expect(solved.frameId1).not.toBe(solved.frameId2);
+
+    // The right anchor states no point, so `position2` is solved and the two
+    // ends meet -- having genuinely been apart, so this is the solve working.
+    expect(
+      scene.getSeparation(
+        solved.frameId1,
+        [1, 0],
+        solved.frameId2,
+        solved.localPosition2,
+      ).distance,
+    ).toBeCloseTo(0, 9);
+    expect(
+      scene.getSeparation(solved.frameId1, [1, 0], solved.frameId2, [1, 0])
+        .distance,
+    ).toBeGreaterThan(0.5);
+  });
+
+  test('an anchor id wins over a frame with the same id', () => {
+    // A name is ambiguous when an anchor and a frame share it, and the anchor
+    // is the more specific thing -- it names a point, where a frame id names
+    // only an origin. So the constraint lands on the anchor's frame, at the
+    // anchor's point, rather than on the frame called `post`.
+    function Rig(): ReactElement {
+      return (
+        <>
+          <RotationalFrame id="post" position={[0, 0]} />
+          <RotationalFrame id="arm" position={[5, 0]}>
+            <Anchor id="post" position={[1, 0]} />
+          </RotationalFrame>
+          <RotationalFrame id="other" position={[9, 0]} />
+          <Coincidence frame1="post" frame2="other" />
+        </>
+      );
+    }
+
+    const scene = assemble(<Rig />);
+    const solved = scene.constraints[0] as CoreCoincidenceConstraint;
+
+    expect(solved.frameId1).toBe('arm');
+    expect(solved.localPosition1).toEqual([1, 0]);
+  });
+
+  test('two anchors sharing an id are refused', () => {
+    // Resolving either way would weld the constraint to whichever registered
+    // first -- an answer, silently chosen, that the JSX does not show.
+    function Rig(): ReactElement {
+      return (
+        <>
+          <RotationalFrame id="a">
+            <Anchor id="tip" />
+          </RotationalFrame>
+          <RotationalFrame id="b">
+            <Anchor id="tip" />
+          </RotationalFrame>
+        </>
+      );
+    }
+
+    expect(() => assemble(<Rig />)).toThrow(/share the id 'tip'/);
+  });
+
   test('an Anchor outside any frame is refused', () => {
     // It marks a point *on a frame*, and there is no frame at the root of a
     // scene for it to mark.
