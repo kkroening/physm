@@ -492,3 +492,46 @@ describe('emitScene', () => {
     expect(text([0])).toMatch(/^<TrackFrame id="cart">[\s\S]*<\/TrackFrame>$/);
   });
 });
+
+describe('emitScene, numbers', () => {
+  test.each([
+    [Math.PI, 'Math.PI'],
+    [-Math.PI / 2, '-Math.PI / 2'],
+    [Math.PI / 3, 'Math.PI / 3'],
+    [(3 * Math.PI) / 4, '3 * Math.PI / 4'],
+    [-Math.PI / 6, '-Math.PI / 6'],
+    [(3 * Math.PI) / 8, '3 * Math.PI / 8'],
+    [(5 * Math.PI) / 12, '5 * Math.PI / 12'],
+    // Its quotient by π comes out a hair under 11: the search rounds, not floors.
+    [(11 * Math.PI) / 6, '11 * Math.PI / 6'],
+    [2 * Math.PI, '2 * Math.PI'],
+    [-4 * Math.PI, '-4 * Math.PI'],
+  ])('%s is written as %s, which rebuilds it', (angle, text) => {
+    const source = expectRoundTrip(
+      documentFrom(<Box width={1} height={1} angle={angle} />),
+    );
+
+    expect(source).toContain(`angle={${text}}`);
+  });
+
+  test.each([
+    ['a quarter turn to four places', 1.5708],
+    ['a double one step past a quarter turn', Math.PI / 2 + Number.EPSILON],
+    ['a multiple past two turns', 5 * Math.PI],
+    ['a number nowhere near one', -0.6],
+  ])('%s is written as it is', (_, angle) => {
+    const source = expectRoundTrip(
+      documentFrom(<Box width={1} height={1} angle={angle} />),
+    );
+
+    expect(source).toContain(`angle={${angle}}`);
+  });
+
+  test('a state is written the same way, value and rate', () => {
+    const source = expectRoundTrip(
+      documentFrom(<RotationalFrame initialState={[Math.PI / 2, 0]} />),
+    );
+
+    expect(source).toContain('initialState={[Math.PI / 2, 0]}');
+  });
+});

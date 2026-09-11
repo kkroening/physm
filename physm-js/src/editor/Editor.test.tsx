@@ -338,7 +338,8 @@ describe('Editor, editing props', () => {
 
     fireEvent.change(angle, { target: { value: '90' } });
 
-    expect(code()).toContain(`angle={${Math.PI / 2}}`);
+    // A quarter turn typed in degrees is written as one.
+    expect(code()).toContain('angle={Math.PI / 2}');
 
     fireEvent.blur(angle);
 
@@ -371,9 +372,7 @@ describe('Editor, editing props', () => {
       target: { value: '90' },
     });
 
-    expect(code()).toContain(
-      `initialState={[${Math.PI / 2}, ${90 / (180 / Math.PI)}]}`,
-    );
+    expect(code()).toContain('initialState={[Math.PI / 2, Math.PI / 2]}');
   });
 
   test('a point or state written as a bare number is read as the core reads it', () => {
