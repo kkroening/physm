@@ -1,6 +1,7 @@
 import CoreWeight from './../Weight';
 import { useId } from 'react';
 import { useSceneNode } from './sceneNodes';
+import type { ComponentMeta } from './componentMeta';
 import type { SceneNode } from './sceneNodes';
 import type { WeightOptions } from './../Weight';
 
@@ -20,3 +21,21 @@ export default function Weight(props: WeightProps): null {
 }
 
 Weight.sceneNode = describeWeight;
+
+Weight.meta = {
+  name: 'Weight',
+  category: 'Physics',
+  slot: 'weight',
+  description: 'A point mass.',
+  props: {
+    mass: {
+      kind: 'number',
+      label: 'Mass',
+      required: true,
+      initial: 1,
+      summary: true,
+    },
+    position: { kind: 'point', label: 'Position', default: [0, 0] },
+    drag: { kind: 'number', label: 'Drag', default: 0 },
+  },
+} satisfies ComponentMeta<WeightProps>;

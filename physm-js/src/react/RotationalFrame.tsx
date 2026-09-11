@@ -2,6 +2,7 @@ import CoreRotationalFrame from './../RotationalFrame';
 import FrameIdContext from './FrameIdContext';
 import { ParentKeyContext, useSceneNode } from './sceneNodes';
 import { useContext, useId } from 'react';
+import type { ComponentMeta } from './componentMeta';
 import type { FrameId } from './../Frame';
 import type { FrameNode, SceneNodeContext } from './sceneNodes';
 import type { ReactElement, ReactNode } from 'react';
@@ -63,3 +64,16 @@ export default function RotationalFrame(
 }
 
 RotationalFrame.sceneNode = describeRotationalFrame;
+
+RotationalFrame.meta = {
+  name: 'RotationalFrame',
+  category: 'Frames',
+  slot: 'frame',
+  description: 'A revolute joint: one coordinate, rotating about its position.',
+  props: {
+    id: { kind: 'name', label: 'Id', summary: true },
+    position: { kind: 'point', label: 'Position', default: [0, 0] },
+    initialState: { kind: 'state', label: 'Initial state', default: [0, 0] },
+    resistance: { kind: 'number', label: 'Resistance', default: 0 },
+  },
+} satisfies ComponentMeta<RotationalFrameProps>;

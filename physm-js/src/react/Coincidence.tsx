@@ -2,6 +2,7 @@ import resolveAnchor from './resolveAnchor';
 import { CoincidenceConstraint } from './../Constraint';
 import { useId } from 'react';
 import { useSceneNode } from './sceneNodes';
+import type { ComponentMeta } from './componentMeta';
 import type { ConstraintEnd } from './resolveAnchor';
 import type { ConstraintNode } from './sceneNodes';
 import type { PositionLike } from './../Scene';
@@ -65,3 +66,28 @@ export default function Coincidence(props: CoincidenceProps): null {
 }
 
 Coincidence.sceneNode = describeCoincidence;
+
+Coincidence.meta = {
+  name: 'Coincidence',
+  category: 'Constraints',
+  slot: 'constraint',
+  description: 'Two points welded together.',
+  props: {
+    frame1: {
+      kind: 'end',
+      label: 'First end',
+      required: true,
+      summary: true,
+    },
+    frame2: {
+      kind: 'end',
+      label: 'Second end',
+      required: true,
+      summary: true,
+    },
+    position1: { kind: 'point', label: 'First point', default: [0, 0] },
+
+    // No default: an omitted second point is solved for, from the pose.
+    position2: { kind: 'point', label: 'Second point' },
+  },
+} satisfies ComponentMeta<CoincidenceProps>;

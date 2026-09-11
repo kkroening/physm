@@ -1,6 +1,7 @@
 import FrameIdContext from './FrameIdContext';
 import { useContext, useId, useImperativeHandle } from 'react';
 import { useSceneNode } from './sceneNodes';
+import type { ComponentMeta } from './componentMeta';
 import type { AnchorNode, AnchorPoint, SceneNodeContext } from './sceneNodes';
 import type { PositionLike } from './../Scene';
 import type { Ref } from 'react';
@@ -93,3 +94,17 @@ export default function Anchor(props: AnchorProps): null {
 }
 
 Anchor.sceneNode = describeAnchor;
+
+Anchor.meta = {
+  name: 'Anchor',
+  category: 'Constraints',
+  slot: 'anchor',
+  description: 'A named point on a frame, for a constraint to attach to.',
+  props: {
+    id: { kind: 'name', label: 'Id', summary: true },
+
+    // No default: an anchor without a position has its point solved for, and
+    // no `[x, y]` says that.
+    position: { kind: 'point', label: 'Position' },
+  },
+} satisfies ComponentMeta<AnchorProps>;
