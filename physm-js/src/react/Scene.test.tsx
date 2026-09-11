@@ -389,6 +389,20 @@ describe('Scene (authoring)', () => {
     ).toThrow(/must be inside a frame/);
   });
 
+  test('a Weight alone at the root is refused too, not taken for an empty scene', () => {
+    // A tree with nothing to draw yet assembles to no scene at all -- which a
+    // root weight must not pass for, or it would be dropped after all.
+    expect(() =>
+      render(
+        <svg>
+          <Scene>
+            <Weight mass={5} />
+          </Scene>
+        </svg>,
+      ),
+    ).toThrow(/must be inside a frame/);
+  });
+
   test('an anchor wires a constraint to a frame nobody named', () => {
     // The case the string-id form cannot express. `Chain` generates its frames
     // and names none of them, so an author outside it has no id to write --

@@ -71,6 +71,28 @@ export default function resolveAnchor(
 }
 
 /**
+ * Add an id-named anchor to `anchors`, refusing a second with the same id.
+ *
+ * Picking either would weld a constraint to whichever came first, which
+ * changes the answer rather than the picture. Shared, like
+ * `refuseAnchorFrameCollisions`, by every route that collects anchors.
+ */
+export function addAnchor(
+  anchors: Map<string, AnchorPoint>,
+  id: string,
+  point: AnchorPoint,
+): void {
+  if (anchors.has(id)) {
+    throw new Error(
+      `Two <Anchor>s share the id '${id}'. A constraint naming it would be ` +
+        'welded to whichever came first; give each its own.',
+    );
+  }
+
+  anchors.set(id, point);
+}
+
+/**
  * Refuse a name that means both an anchor and a frame.
  *
  * Resolved as the anchor, it would silently move every constraint end that

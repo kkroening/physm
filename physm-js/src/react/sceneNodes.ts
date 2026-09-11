@@ -45,6 +45,15 @@ export type AnchorLookup = ReadonlyMap<string, AnchorPoint>;
 export type SceneNode =
   | {
       readonly slot: 'frame';
+
+      /**
+       * The frame's id: its `id` prop, or the context key when it has none.
+       *
+       * Carried on the node so that whoever walks the tree knows what id the
+       * frame's children sit in without recomputing the fallback -- which is a
+       * rule, and a rule stated twice is a rule that can drift.
+       */
+      readonly id: FrameId;
       readonly build: (children: FrameChildren) => Frame;
     }
   | {
@@ -84,6 +93,45 @@ export type SceneNode =
        */
       readonly describe?: () => string;
     };
+
+/** A frame's node, narrowed -- what a frame component's `sceneNode` returns. */
+export type FrameNode = Extract<SceneNode, { slot: 'frame' }>;
+
+/** A constraint's node, narrowed. */
+export type ConstraintNode = Extract<SceneNode, { slot: 'constraint' }>;
+
+/** An anchor's node, narrowed. */
+export type AnchorNode = Extract<SceneNode, { slot: 'anchor' }>;
+
+/** What a component's `sceneNode` is told about where it sits. */
+export interface SceneNodeContext {
+  /**
+   * Stable for this instance, and the id an unnamed frame falls back to.
+   *
+   * The mounted binding passes its `useId`; `buildScene` passes the element's
+   * path through the tree. Either way it is the same value every time the same
+   * instance is built, which is what keeps a state map keyed to it valid.
+   */
+  readonly key: string;
+
+  /** The enclosing frame's id, or `null` at the root. */
+  readonly frameId: FrameId | null;
+}
+
+/**
+ * How a binding component turns its props into a scene node, as a plain
+ * function.
+ *
+ * Each binding component carries one as its static `sceneNode`. The mounted
+ * component registers what it returns; `buildScene` calls it directly while
+ * walking an element tree. One description, two callers -- so the two routes
+ * build the same scene from the same props because there is only one place
+ * that says how.
+ */
+export type SceneNodeSource<P> = (
+  props: P,
+  context: SceneNodeContext,
+) => SceneNode;
 
 /** What a frame's builder receives, grouped by what each child registered as. */
 export interface FrameChildren {
@@ -154,8 +202,11 @@ export const ParentKeyContext = createContext<string | null>(null);
  * registration, the parent key it hands its children, and the id it falls back
  * to when the author gives none.
  *
- * `deps` is the caller's own list, exactly as `useEffect` would take it: this
- * hook cannot know which of a component's props the node was built from.
+ * `inputs` is everything the node was built from -- the component's props, and
+ * the enclosing frame where its describer reads that. It is compared as a JSON
+ * signature rather than listed prop by prop, so a describer that starts reading
+ * a new prop cannot leave a hand-kept list behind it. `children` and `ref` are
+ * structure rather than inputs, and are left out.
  *
  * **Sibling order is first-registration order**, which is JSX order for a tree
  * whose shape does not change: React runs sibling effects left to right. A
@@ -170,7 +221,7 @@ export const ParentKeyContext = createContext<string | null>(null);
 export function useSceneNode(
   key: string,
   node: SceneNode,
-  deps: readonly unknown[],
+  inputs: object,
 ): void {
   const registry = useContext(RegistryContext);
   const parentKey = useContext(ParentKeyContext);
@@ -180,6 +231,10 @@ export function useSceneNode(
       'physm components must be rendered inside a <Scene>: no registry found',
     );
   }
+
+  const signature = JSON.stringify(inputs, (name, value: unknown) =>
+    name === 'children' || name === 'ref' ? undefined : value,
+  );
 
   useEffect(() => {
     registry.entries.set(key, { parentKey, node, live: true });
@@ -195,10 +250,9 @@ export function useSceneNode(
       registry.bump();
     };
     // `node` is deliberately absent: it is rebuilt on every render, so
-    // including it would re-register forever. The caller names the props it
-    // was built from instead.
+    // including it would re-register forever. `signature` stands in for it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, registry, parentKey, ...deps]);
+  }, [key, registry, parentKey, signature]);
 }
 
 /**
