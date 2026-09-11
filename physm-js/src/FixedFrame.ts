@@ -37,6 +37,10 @@ export default class FixedFrame extends Frame {
     return [cos, -sin, x, sin, cos, y, 0, 0, 1];
   }
 
+  override isJoint(): boolean {
+    return false;
+  }
+
   override toJsonObj(
     options: { includeDecals?: boolean } = {},
   ): Record<string, unknown> {

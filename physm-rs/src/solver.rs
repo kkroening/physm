@@ -795,17 +795,20 @@ fn stabilize_mut(
     if constraints.is_empty() {
         return;
     }
-    let frame_count = frames.len();
+    // Joints, not frames: a fixed frame's coordinate moves nothing, so no
+    // constraint row can be held against it. The two were the same number
+    // until fixed frames, and `Scene.getStabilizedState` counts the same way.
+    let joint_count = frames.iter().filter(|frame| frame.is_joint()).count();
     let row_count: usize = constraints.iter().map(|c| c.row_count()).sum();
     // Up front, and by row count rather than by a failed solve: an over-determined
     // scene also produces a singular gram, so without this it would reach the skip
     // below wearing the taut chain's costume and be skipped silently forever.
     assert!(
-        row_count <= frame_count,
-        "scene is over-determined: {} constraint rows against {} coordinates; \
+        row_count <= joint_count,
+        "scene is over-determined: {} constraint rows against {} joints; \
          some of these constraints cannot hold at the same time",
         row_count,
-        frame_count,
+        joint_count,
     );
 
     let mut trial: Vec<State> = states.to_vec();
@@ -2342,6 +2345,35 @@ mod tests {
 
         let independent = vec![vec![1., 0., 0.], vec![0., 1., 0.]];
         assert!(super::solve_metric_correction(&mass_matrix, &independent, &[1., -1.]).is_some());
+    }
+
+    #[test]
+    #[should_panic(expected = "over-determined")]
+    fn test_stabilize_mut_counts_joints_rather_than_frames() {
+        // Two rows against one joint, however many fixed frames hold it up.
+        // `Scene.getStabilizedState` throws on this scene; so does this, rather
+        // than reaching the skip below in the taut chain's costume.
+        let scene_frames: Vec<FrameBox> = vec![Box::new(
+            FixedFrame::new("mount".into()).add_child(Box::new(
+                FixedFrame::new("plate".into()).add_child(Box::new(
+                    RotationalFrame::new("arm".into())
+                        .add_weight(Weight::new(2.).set_position(Position([3., 0.]))),
+                )),
+            )),
+        )];
+        let frames = super::sort_frames(&scene_frames);
+        let index_path_map = super::get_index_path_map(&frames);
+        let constraint: ConstraintBox = Box::new(
+            CoincidenceConstraint::new("arm".into(), "mount".into())
+                .set_positions(Position([3., 0.]), Position([3., 0.])),
+        );
+        let constraints = std::slice::from_ref(&constraint);
+        let indices = super::get_constraint_frame_indices(&frames, constraints);
+        let mut states: Vec<State> = (0..frames.len())
+            .map(|_| State { q: 0.05, qd: 0. })
+            .collect();
+
+        super::stabilize_mut(&frames, &index_path_map, constraints, &indices, &mut states);
     }
 
     #[test]

@@ -1,4 +1,5 @@
 import FixedFrame from './FixedFrame';
+import Frame from './Frame';
 import JsSolver from './JsSolver';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
@@ -61,6 +62,29 @@ describe('FixedFrame', () => {
     expect(new FixedFrame().isJoint()).toBe(false);
     expect(new RotationalFrame().isJoint()).toBe(true);
     expect(new TrackFrame().isJoint()).toBe(true);
+  });
+
+  test('every frame says what its own derivative says', () => {
+    // A joint is a frame its coordinate moves, which is `∂L/∂q` being
+    // something other than zero. A class that forgot to say so would have its
+    // inertia replaced with another joint's, and nothing else would complain.
+    const frames = [
+      new Frame(),
+      new FixedFrame({ position: [2, 1], angle: 0.4 }),
+      new RotationalFrame({ position: [2, 1] }),
+      new TrackFrame({ position: [2, 1], angle: 0.4 }),
+    ];
+
+    frames.forEach((frame) => {
+      const moves = frame
+        .getLocalVelMatrix(0.3)
+        .some((entry: number) => entry !== 0);
+
+      expect([frame.typeName, frame.isJoint()]).toEqual([
+        frame.typeName,
+        moves,
+      ]);
+    });
   });
 
   test('a pendulum on a fixed frame swings as one placed there directly', () => {
@@ -157,7 +181,7 @@ describe('FixedFrame', () => {
     );
 
     expect(() => scene.getStabilizedState(scene.getInitialStateMap())).toThrow(
-      /over-determined: 2 constraint rows against 1 coordinates/,
+      /over-determined: 2 constraint rows against 1 joints/,
     );
   });
 });

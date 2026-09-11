@@ -743,8 +743,8 @@ export default class Scene {
     if (rowCount > this.jointCount()) {
       throw new Error(
         `Scene is over-determined: ${rowCount} constraint rows against ` +
-          `${this.jointCount()} coordinates. Some of these constraints ` +
-          'cannot hold at the same time.',
+          `${this.jointCount()} joints. Some of these constraints cannot ` +
+          'hold at the same time.',
       );
     }
     let correction: number[];
@@ -860,8 +860,8 @@ export default class Scene {
     if (rowCount > this.jointCount()) {
       throw new Error(
         `Scene is over-determined: ${rowCount} constraint rows against ` +
-          `${this.jointCount()} coordinates. Some of these constraints ` +
-          'cannot hold at the same time.',
+          `${this.jointCount()} joints. Some of these constraints cannot ` +
+          'hold at the same time.',
       );
     }
 

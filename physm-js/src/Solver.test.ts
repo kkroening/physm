@@ -233,27 +233,45 @@ describeCrossValidation('tree scene', getTreeScene, {
 describeCrossValidation('rope scene', getRopeScene);
 
 /**
- * A cart carrying a pendulum on a fixed frame raised and turned off it, and a
- * slider on a fixed frame of its own: coordinates that move nothing, which
- * both solvers have to give the same inertia.
+ * Fixed frames where their placement shows in the motion: a bracket off a
+ * turning arm, offset along it, turned again, and carrying a weight of its
+ * own, with a joint beyond it; and a ramp fixed at an angle with a slider on
+ * it.
+ *
+ * Under a pure translation a fixed frame's offset is invisible to the
+ * dynamics, so a scene of those would pin only the angles. This one puts the
+ * position, the angle and the weights of a fixed frame where a difference
+ * between the two solvers would show.
+ *
+ * It starts at rest. The chain is a double pendulum in all but name, and given
+ * velocities to begin with, the two integrators part company inside these
+ * fifty steps -- which says nothing about whether the two *solvers* agree.
  */
 function getFixedFrameScene() {
   return new Scene({
     frames: [
       new TrackFrame({
         id: 'cart',
-        initialState: [1, 0.5],
+        initialState: [1, 0],
         weights: [new Weight(20)],
         frames: [
-          new FixedFrame({
-            id: 'mount',
-            position: [0, 2],
-            angle: 0.5,
+          new RotationalFrame({
+            id: 'arm',
+            initialState: [0.3, 0],
+            weights: [new Weight(5, { position: [6, 0] })],
             frames: [
-              new RotationalFrame({
-                id: 'pendulum',
-                initialState: [0.3, -1.2],
-                weights: [new Weight(5, { position: [10, 0] })],
+              new FixedFrame({
+                id: 'bracket',
+                position: [4, 0],
+                angle: 0.7,
+                weights: [new Weight(10, { position: [2, 0] })],
+                frames: [
+                  new RotationalFrame({
+                    id: 'tip',
+                    initialState: [-0.4, 0],
+                    weights: [new Weight(2, { position: [3, 0] })],
+                  }),
+                ],
               }),
             ],
           }),
@@ -266,7 +284,7 @@ function getFixedFrameScene() {
         frames: [
           new TrackFrame({
             id: 'slider',
-            initialState: [0, 0.5],
+            initialState: [0, 0],
             weights: [new Weight(3)],
           }),
         ],
