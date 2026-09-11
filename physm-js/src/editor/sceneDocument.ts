@@ -81,6 +81,18 @@ export interface SceneDocument {
  */
 export type NodePath = readonly number[];
 
+/**
+ * What a node of `ref`'s kind is called, wherever one is named to a person --
+ * a refusal, a heading over its props.
+ */
+export function nodeName(ref: ComponentRef): string {
+  return ref.kind === 'core'
+    ? ref.component.meta.name
+    : ref.kind === 'children'
+      ? 'Children'
+      : ref.name;
+}
+
 /** A component's name, as generated source will write its tag. */
 function nameOf(component: AnyComponent): string {
   const { displayName, name } = component as { displayName?: string } & {

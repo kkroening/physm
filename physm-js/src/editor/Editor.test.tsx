@@ -1155,10 +1155,12 @@ describe('Editor, playing', () => {
 function clickScene(
   container: HTMLElement,
   [x, y]: readonly [number, number],
+  held: { shiftKey?: boolean } = {},
 ): void {
   fireEvent.click(container.querySelector('.editor__scene svg')!, {
     clientX: x,
     clientY: y,
+    ...held,
   });
 }
 
@@ -1223,6 +1225,143 @@ describe('Editor, picking', () => {
       'Box',
       'Line',
     ]);
+  });
+
+  test('with Shift, a click selects the node that built what it hit', () => {
+    const { container } = render(<Editor />);
+    const nearPivot = [0, 8] as const;
+    clickScene(container, nearPivot);
+
+    // Plainly, the instance the scene's body holds; with Shift, the frame the
+    // component's own body writes.
+    expect(shown()).toBe('Pendulum');
+
+    clickScene(container, nearPivot, { shiftKey: true });
+
+    expect(shown()).toBe('RotationalFrame');
+  });
+
+  test('with Shift, the same place goes deeper through what a component wrote', () => {
+    const { container } = render(<Editor />);
+    const nearPivot = [0, 8] as const;
+    const clicks: (readonly [number, number])[] = [
+      nearPivot,
+      [1, 8],
+      nearPivot,
+      nearPivot,
+      nearPivot,
+      nearPivot,
+    ];
+    const picked = clicks.map((point) => {
+      clickScene(container, point, { shiftKey: true });
+
+      return shown();
+    });
+
+    // Six nodes where a plain click finds five. Gizmos come before decals, so
+    // the frames go first -- the pendulum's own, the fixed frame the cart
+    // hangs it from, and the cart's -- and then the pendulum's rod, which a
+    // plain click never tells apart from its pivot, both being the instance
+    // there. The cart's box and the ground follow.
+    expect(picked).toEqual([
+      'RotationalFrame',
+      'FixedFrame',
+      'TrackFrame',
+      'Line',
+      'Box',
+      'Line',
+    ]);
+  });
+
+  test('an expanded node is shown, not edited, and says where it is written', () => {
+    const { container } = render(<Editor />);
+    clickScene(container, [0, 8], { shiftKey: true });
+    const pane = screen.getByRole('region', { name: 'Properties' });
+
+    expect(pane.textContent).toContain('Written in Pendulum');
+    expect(within(pane).queryAllByRole('textbox')).toHaveLength(0);
+
+    // Its props as the component writes them.
+    expect(pane.textContent).toContain('resistance');
+
+    // Nothing in this body is selected, so the tree's actions stay out.
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+  });
+
+  test('from an expanded node, back to what produced it, or into its body', () => {
+    const { container } = render(<Editor />);
+    clickScene(container, [0, 8], { shiftKey: true });
+    const pane = (): HTMLElement =>
+      screen.getByRole('region', { name: 'Properties' });
+    fireEvent.click(
+      within(pane()).getByRole('button', { name: 'Select what produced it' }),
+    );
+
+    // The instance in this body, which the tree shows selected.
+    expect(shown()).toBe('Pendulum');
+    expect(screen.getByRole('treeitem', { name: 'Pendulum' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    clickScene(container, [0, 8], { shiftKey: true });
+    fireEvent.click(
+      within(pane()).getByRole('button', { name: 'Open Pendulum' }),
+    );
+
+    expect(screen.getByRole('tab', { name: 'Pendulum' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  test('what this body wrote is still edited, Shift or no Shift', () => {
+    const { container } = render(<Editor />);
+    clickScene(container, onCart, { shiftKey: true });
+    const pane = screen.getByRole('region', { name: 'Properties' });
+
+    // The cart is the scene's own node, so inspecting it is selecting it.
+    expect(shown()).toBe('TrackFrame');
+    expect(pane.textContent).not.toContain('Written in');
+    expect(within(pane).queryAllByRole('textbox').length).toBeGreaterThan(0);
+  });
+
+  test('with Shift, the code marks the node in the body that wrote it', () => {
+    const { container } = render(<Editor />);
+    clickScene(container, [0, 8], { shiftKey: true });
+
+    // The scene's own tab is still the focused one, and the mark has gone
+    // into the pendulum's definition: a third answer to what wrote this,
+    // alongside the properties pane and the way into the component's tab.
+    expect(screen.getByRole('tab', { name: 'Scene' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(marked()).toContain('<RotationalFrame');
+
+    const { ranges } = emitScene(starterDocument());
+
+    expect(markOffset()).toBe(ranges.get(rangeKey('Pendulum', [0]))![0]);
+  });
+
+  test('what an imported component built falls back to the plain answer', () => {
+    function Gadget({ size }: { size: number }): ReactElement {
+      return <TrackFrame id={`gadget-${size}`} />;
+    }
+
+    const { container } = render(
+      <Editor initialDocument={documentFrom(<Gadget size={2} />)} />,
+    );
+
+    // The frame is the gadget's own business, written in a module the
+    // document cannot name, so nothing here built it. Shift lands where a
+    // plain click would rather than doing less than not holding it.
+    clickScene(container, [0, -3], { shiftKey: true });
+
+    expect(shown()).toBe('Gadget');
+    expect(
+      screen.getByRole('region', { name: 'Properties' }).textContent,
+    ).toContain('Imported from its own module');
   });
 
   test("a click is read in the pane's own coordinates, wherever it sits", () => {

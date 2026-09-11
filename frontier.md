@@ -6,12 +6,10 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Inspect an expanded node.** A click in the scene selects the node in the
-focused body nearest to what it hit, so what a component's instance built can
-only be looked at by opening the component.
-[0014 page 7](docs/issues/0014/07-editing.md) has a modifier on the click
-select the expanded node itself, and the properties pane show its props
-read-only, with a way to select what produced it.
+**Drag a row onto another.** The tree moves a node in and out a level at a
+time, with Alt+Shift and an arrow or the toolbar's buttons. A drag would move
+it anywhere in one gesture: dropped onto a row it goes inside, held to the
+same rules as adding there, and dropped between two rows it goes among them.
 
 ## Next — the MVP
 
@@ -80,9 +78,6 @@ was built while gizmos were in review.
   sets a count -- page 8's `segmentCount` -- changes the structure but arrives
   as a prop edit, which carries the run over; whether it resets instead, and
   how the editor tells, is part of the same call.
-- Drag a row onto another to move it inside, or between two to move it
-  among them. The keys and the toolbar move a node in and out a level at a
-  time; a drag would move it anywhere in one gesture, held to the same rules.
 - The focused component's definition marked in the code on a change of tab,
   as [0014 page 3](docs/issues/0014/03-focus.md#what-is-global-and-what-belongs-to-a-tab)
   has it. A tab change clears the selection, so after one nothing is marked
@@ -256,3 +251,9 @@ was built while gizmos were in review.
   browser's. The tree's toolbar has both, and says why when it cannot. Each
   is held to the rules of adding there, keeps the focus on the row, and is
   one step to undo.
+- **Inspect an expanded node** — Shift and a click in the scene select the
+  node that *built* what it hit, in whatever body wrote it, rather than the
+  instance standing for it here; clicking again goes deeper, through nodes a
+  plain click never tells apart. A node another body wrote is shown read-only,
+  saying where it is written, with the way back to the node here that produced
+  it and a way into that component's own tab.

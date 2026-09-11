@@ -1,5 +1,5 @@
 import { Fragment, useId, useRef, useState } from 'react';
-import { nodeAt, setProp } from './sceneDocument';
+import { nodeAt, nodeName, setProp } from './sceneDocument';
 import type { DocNode, NodePath, SceneDocument } from './sceneDocument';
 import type { PropSpec } from './../react/componentMeta';
 import type { ReactElement } from 'react';
@@ -361,7 +361,7 @@ function NodeProps({
 
     return (
       <>
-        <h2 className="editor__selected">{node.type.name}</h2>
+        <h2 className="editor__selected">{nodeName(node.type)}</h2>
         <p className="editor__hint">
           Defined in this scene. It takes no props.
         </p>
@@ -379,7 +379,7 @@ function NodeProps({
   if (node.type.kind === 'children') {
     return (
       <>
-        <h2 className="editor__selected">Children</h2>
+        <h2 className="editor__selected">{nodeName(node.type)}</h2>
         <p className="editor__hint">
           The children an instance of {selection.definition} is given go here:
           at the origin of the frame this sits in, at the top of the body with
@@ -393,7 +393,7 @@ function NodeProps({
   if (node.type.kind === 'imported') {
     return (
       <>
-        <h2 className="editor__selected">{node.type.name}</h2>
+        <h2 className="editor__selected">{nodeName(node.type)}</h2>
         <p className="editor__hint">
           Imported from its own module, which does not describe its props -- so
           they are shown here, but not edited.
@@ -419,7 +419,7 @@ function NodeProps({
 
   return (
     <>
-      <h2 className="editor__selected">{meta.name}</h2>
+      <h2 className="editor__selected">{nodeName(node.type)}</h2>
       <p className="editor__hint">{meta.description}</p>
       <div className="editor__fields">
         {Object.entries(meta.props).map(([name, spec]) => (
@@ -456,7 +456,66 @@ function selectedNode(
 }
 
 /**
- * The selected node's props, edited in place.
+ * A node another body wrote, reached by inspecting what it built in the scene.
+ *
+ * Read-only: the node lives in a component, where one node stands behind every
+ * instance of it, so editing here would change every instance at once and in a
+ * tab that does not show it. The two ways on are the node here that produced
+ * it, and the component's own tab.
+ */
+function ExpandedProps({
+  selection,
+  node,
+  producer,
+  onProduce,
+  onOpen,
+}: {
+  selection: Selection;
+  node: DocNode;
+  producer: NodePath | null;
+  onProduce: (path: NodePath) => void;
+  onOpen: (name: string) => void;
+}): ReactElement {
+  const { definition } = selection;
+
+  return (
+    <>
+      <h2 className="editor__selected">{nodeName(node.type)}</h2>
+      <p className="editor__hint">
+        Written in {definition}, which this tab does not edit. Its props are
+        shown as that component writes them.
+      </p>
+      <dl className="editor__readonly">
+        {Object.entries(node.props).map(([name, value]) => (
+          <Fragment key={name}>
+            <dt>{name}</dt>
+            <dd>{JSON.stringify(value)}</dd>
+          </Fragment>
+        ))}
+      </dl>
+      {producer ? (
+        <button
+          type="button"
+          className="editor__open"
+          onClick={() => onProduce(producer)}
+        >
+          Select what produced it
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="editor__open"
+        onClick={() => onOpen(definition)}
+      >
+        Open {definition}
+      </button>
+    </>
+  );
+}
+
+/**
+ * The selected node: its props edited in place, or -- for a node another body
+ * wrote -- shown as that body writes them.
  *
  * Every accepted keystroke is a new document, so the tree, scene and code
  * follow as it is typed. Which widget a prop gets comes from its component's
@@ -465,12 +524,21 @@ function selectedNode(
  */
 export default function PropertiesPane({
   doc,
+  focus,
   selection,
+  producer,
   onChange,
+  onProduce,
   onOpen,
 }: {
   doc: SceneDocument;
+
+  /** The body being edited: a selection outside it is shown, not edited. */
+  focus: string;
   selection: Selection | null;
+
+  /** The node here that produced the selection: see `Editor`. */
+  producer: NodePath | null;
 
   /**
    * A new document, and the field that made it: see `recorded` in `history`.
@@ -479,6 +547,9 @@ export default function PropertiesPane({
    * visit starts another.
    */
   onChange: (doc: SceneDocument, field: string | null) => void;
+
+  /** Select a node in the focused body, which the scene never picked. */
+  onProduce: (path: NodePath) => void;
 
   /** Open a component this document defines, in its own tab. */
   onOpen: (name: string) => void;
@@ -499,7 +570,16 @@ export default function PropertiesPane({
       }}
     >
       <div className="editor__heading">Properties</div>
-      {selection && node ? (
+      {selection && node && selection.definition !== focus ? (
+        <ExpandedProps
+          key={`${selection.definition}/${selection.path.join('.')}`}
+          selection={selection}
+          node={node}
+          producer={producer}
+          onProduce={onProduce}
+          onOpen={onOpen}
+        />
+      ) : selection && node ? (
         <NodeProps
           // A fresh set of fields per node, so nothing typed into one is
           // still there when another is selected.
