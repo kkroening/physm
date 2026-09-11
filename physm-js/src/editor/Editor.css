@@ -167,14 +167,66 @@
   list-style: none;
 }
 
-.editor__library li {
+.editor__library button {
   padding: 0.2rem 0.55rem;
+  border: 0;
   border-radius: 3px;
+  background-color: #dce7f2;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor__library button:hover:enabled {
+  background-color: #c9d9ea;
+}
+
+.editor__library button[data-kind='defined'] {
+  background-color: #d8eee2;
+}
+
+.editor__library button:disabled {
+  background-color: #e6edf4;
+  color: #a3b1bd;
+  cursor: not-allowed;
+}
+
+.editor__placement {
+  flex-basis: 100%;
+}
+
+/* The tree's heading carries the tools that reshape it. */
+.editor__toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.editor__actions {
+  display: flex;
+  gap: 0.1rem;
+}
+
+.editor__actions button {
+  padding: 0.05rem 0.4rem;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: #4a5a68;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.editor__actions button:hover:enabled {
   background-color: #dce7f2;
 }
 
-.editor__library li[data-kind='defined'] {
-  background-color: #d8eee2;
+.editor__actions button:disabled {
+  color: #b5c3cf;
+  cursor: default;
 }
 
 .editor__heading {

@@ -1,0 +1,120 @@
+import Anchor from './../react/Anchor';
+import Coincidence from './../react/Coincidence';
+import Line from './../react/Line';
+import Weight from './../react/Weight';
+import starterDocument from './starterDocument';
+import { insertionPoint, newNode, refusalOf } from './insertion';
+import type {
+  ComponentRef,
+  CoreComponent,
+  SceneDocument,
+} from './sceneDocument';
+
+/** A building block, as a document refers to it. */
+function core(component: unknown): ComponentRef {
+  return { kind: 'core', component: component as CoreComponent };
+}
+
+/** An instance of a component the document defines. */
+function defined(name: string): ComponentRef {
+  return { kind: 'defined', name };
+}
+
+describe('insertionPoint', () => {
+  // Scene: [Line, TrackFrame [Box, Weight, Pendulum]].
+  const doc = starterDocument();
+
+  test('with nothing selected, the end of the body', () => {
+    expect(insertionPoint(doc, 'Scene', null)).toEqual({
+      parent: [],
+      index: 2,
+      holder: 'root',
+    });
+  });
+
+  test('with a frame selected, inside it after its last child', () => {
+    expect(insertionPoint(doc, 'Scene', [1])).toEqual({
+      parent: [1],
+      index: 3,
+      holder: 'frame',
+    });
+  });
+
+  test('with anything else selected, just after it among its siblings', () => {
+    expect(insertionPoint(doc, 'Scene', [1, 0])).toEqual({
+      parent: [1],
+      index: 1,
+      holder: 'frame',
+    });
+    expect(insertionPoint(doc, 'Scene', [0])).toEqual({
+      parent: [],
+      index: 1,
+      holder: 'root',
+    });
+  });
+});
+
+describe('refusalOf', () => {
+  const doc = starterDocument();
+  const atRoot = insertionPoint(doc, 'Scene', null);
+  const inCart = insertionPoint(doc, 'Scene', [1]);
+
+  test('refuses at the root what the builders refuse there', () => {
+    expect(refusalOf(doc, 'Scene', atRoot, core(Weight))).toMatch(
+      /Weight has to go inside a frame/,
+    );
+    expect(refusalOf(doc, 'Scene', atRoot, core(Anchor))).toMatch(
+      /Anchor has to go inside a frame/,
+    );
+    expect(refusalOf(doc, 'Scene', atRoot, core(Line))).toBeNull();
+    expect(refusalOf(doc, 'Scene', atRoot, core(Coincidence))).toBeNull();
+    expect(refusalOf(doc, 'Scene', inCart, core(Weight))).toBeNull();
+  });
+
+  test('refuses a defined component inside itself', () => {
+    const inPendulum = insertionPoint(doc, 'Pendulum', null);
+
+    expect(refusalOf(doc, 'Pendulum', inPendulum, defined('Pendulum'))).toMatch(
+      /Pendulum cannot go inside itself/,
+    );
+    expect(refusalOf(doc, 'Scene', inCart, defined('Pendulum'))).toBeNull();
+  });
+
+  test('refuses a defined component inside one it contains, at any depth', () => {
+    const instance = (name: string) => ({
+      type: defined(name),
+      props: {},
+      children: [],
+    });
+    // A contains B, which contains C: A inside C would recurse through both.
+    const chain: SceneDocument = {
+      root: 'A',
+      definitions: [
+        { name: 'A', body: [instance('B')] },
+        { name: 'B', body: [instance('C')] },
+        { name: 'C', body: [] },
+      ],
+    };
+
+    expect(
+      refusalOf(chain, 'C', insertionPoint(chain, 'C', null), defined('A')),
+    ).toMatch(/A cannot go inside C, which it contains/);
+    expect(
+      refusalOf(chain, 'A', insertionPoint(chain, 'A', null), defined('C')),
+    ).toBeNull();
+  });
+});
+
+describe('newNode', () => {
+  test('starts required props at their initial values, and nothing else', () => {
+    expect(newNode(core(Weight)).props).toEqual({ mass: 1 });
+    expect(newNode(core(Line)).props).toEqual({ endPos: [1, 0] });
+    // Which two things a constraint joins is the person's to pick.
+    expect(newNode(core(Coincidence)).props).toStrictEqual({});
+    expect(newNode(defined('Pendulum'))).toEqual({
+      type: defined('Pendulum'),
+      props: {},
+      children: [],
+    });
+  });
+});

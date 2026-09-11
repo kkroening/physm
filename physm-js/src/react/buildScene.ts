@@ -10,6 +10,7 @@ import type {
   SceneNodeSource,
 } from './sceneNodes';
 import type CoreScene from './../Scene';
+import type { ComponentMeta } from './componentMeta';
 import type { FrameId } from './../Frame';
 import type { ReactNode } from 'react';
 
@@ -107,6 +108,31 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
   }
 }
 
+/**
+ * Refuse a building block missing a prop it cannot be built without.
+ *
+ * Written source never gets here -- TypeScript refuses it -- but a document
+ * can: a constraint just added from an editor's library has no ends picked
+ * yet. Named by the label a person sees, rather than left to whatever the
+ * build trips over first.
+ */
+function refuseMissingProps(type: unknown, props: object): void {
+  const { meta } = type as { meta?: ComponentMeta<Record<string, unknown>> };
+  const missing = Object.entries(meta?.props ?? {})
+    .filter(
+      ([name, spec]) =>
+        spec.required && (props as Record<string, unknown>)[name] === undefined,
+    )
+    .map(([, spec]) => spec.label);
+
+  if (meta && missing.length) {
+    throw new Error(
+      `A <${meta.name}> needs ${missing.join(' and ')} set before it can ` +
+        'be built.',
+    );
+  }
+}
+
 /** Walk one node of the element tree -- `index` is its position among siblings. */
 function walkNode(node: ReactNode, index: number, walk: Walk): void {
   if (node === null || node === undefined || typeof node === 'boolean') {
@@ -161,6 +187,7 @@ function walkNode(node: ReactNode, index: number, walk: Walk): void {
       );
     }
 
+    refuseMissingProps(type, props);
     place(
       sceneNode(props, { key: `@${path}`, frameId: walk.frameId }),
       props.children,
