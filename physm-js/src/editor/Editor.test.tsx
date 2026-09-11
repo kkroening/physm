@@ -6,7 +6,7 @@ import RotationalFrame from './../react/RotationalFrame';
 import Weight from './../react/Weight';
 import coreComponents from './../react/coreComponents';
 import { documentFrom } from './sceneDocument';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 describe('Editor', () => {
   test('opens on the starter scene, with every pane showing it', () => {
@@ -133,5 +133,189 @@ describe('Editor', () => {
     expect(screen.getByRole('region', { name: 'Code' }).textContent).toContain(
       '<Weight mass={1} />',
     );
+  });
+});
+
+/** The code pane's text: the whole module, as it would be written to a file. */
+function code(): string {
+  return screen.getByRole('region', { name: 'Code' }).textContent!;
+}
+
+/** Click the scene tree's row for `tag`, and return the properties pane. */
+function select(tag: string): HTMLElement {
+  const tree = screen.getByRole('tree', { name: 'Scene' });
+  fireEvent.click(within(tree).getByText(tag));
+
+  return screen.getByRole('region', { name: 'Properties' });
+}
+
+describe('Editor, editing props', () => {
+  test('a selected node shows its props, and an edit reaches scene and code', () => {
+    const { container } = render(<Editor />);
+    const drawn = (): string =>
+      container.querySelector('.editor__scene svg')!.innerHTML;
+    const before = drawn();
+
+    const props = select('Box');
+
+    const selected = screen.getAllByRole('treeitem', { selected: true });
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toHaveTextContent('Box');
+    expect(within(props).getByRole('heading', { name: 'Box' })).toBeVisible();
+
+    const width = within(props).getByLabelText('Width');
+    expect(width).toHaveValue('2');
+
+    fireEvent.change(width, { target: { value: '3.5' } });
+
+    expect(code()).toContain('<Box width={3.5} />');
+    expect(drawn()).not.toBe(before);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('selection follows the click, and the keyboard', () => {
+    render(<Editor />);
+    select('Box');
+    const props = select('TrackFrame');
+
+    const selected = screen.getAllByRole('treeitem', { selected: true });
+    expect(selected).toHaveLength(1);
+    expect(
+      within(props).getByRole('heading', { name: 'TrackFrame' }),
+    ).toBeVisible();
+
+    const tree = screen.getByRole('tree', { name: 'Scene' });
+    fireEvent.keyDown(within(tree).getByText('Weight'), { key: 'Enter' });
+
+    expect(
+      within(props).getByRole('heading', { name: 'Weight' }),
+    ).toBeVisible();
+  });
+
+  test('a half-typed number stays as typed, and commits what it can', () => {
+    render(<Editor />);
+    const width = within(select('Box')).getByLabelText('Width');
+
+    fireEvent.change(width, { target: { value: '3.' } });
+
+    expect(width).toHaveValue('3.');
+    expect(code()).toContain('<Box width={3} />');
+
+    fireEvent.change(width, { target: { value: '-' } });
+
+    expect(width).toHaveValue('-');
+    expect(width).toHaveAttribute('aria-invalid', 'true');
+    expect(code()).toContain('<Box width={3} />');
+
+    // Leaving the field shows the value the document holds.
+    fireEvent.blur(width);
+
+    expect(width).toHaveValue('3');
+    expect(width).not.toHaveAttribute('aria-invalid');
+  });
+
+  test('nothing typed into one node is still there when another is selected', () => {
+    render(<Editor />);
+    fireEvent.change(within(select('Box')).getByLabelText('Position x'), {
+      target: { value: '-' },
+    });
+
+    // Box and TrackFrame both have a `position`: without a fresh set of
+    // fields, the cart's would open showing the box's half-typed text.
+    const props = select('TrackFrame');
+
+    expect(within(props).getByLabelText('Position x')).toHaveValue('');
+  });
+
+  test('an angle is edited in degrees and stored in radians', () => {
+    render(<Editor />);
+    const angle = within(select('TrackFrame')).getByLabelText('Angle');
+
+    expect(angle).toHaveAttribute('placeholder', '0');
+
+    fireEvent.change(angle, { target: { value: '90' } });
+
+    expect(code()).toContain(`angle={${Math.PI / 2}}`);
+
+    fireEvent.blur(angle);
+
+    expect(angle).toHaveValue('90');
+  });
+
+  test('emptying a field returns the prop to its default', () => {
+    render(<Editor />);
+
+    fireEvent.change(within(select('Box')).getByLabelText('Width'), {
+      target: { value: '' },
+    });
+
+    expect(code()).toContain('<Box />');
+  });
+
+  test('a required prop cannot be emptied, and a length cannot go negative', () => {
+    render(<Editor />);
+    const mass = within(select('Weight')).getByLabelText('Mass');
+
+    fireEvent.change(mass, { target: { value: '' } });
+
+    expect(mass).toHaveAttribute('aria-invalid', 'true');
+    expect(code()).toContain('<Weight mass={50} />');
+
+    const width = within(select('Box')).getByLabelText('Width');
+    fireEvent.change(width, { target: { value: '-1' } });
+
+    expect(width).toHaveAttribute('aria-invalid', 'true');
+    expect(code()).toContain('<Box width={2} />');
+  });
+
+  test('reset takes a set prop back to its default', () => {
+    render(<Editor />);
+    const props = select('TrackFrame');
+
+    expect(within(props).queryByLabelText('Reset Angle')).toBeNull();
+
+    fireEvent.click(within(props).getByLabelText('Reset Resistance'));
+
+    expect(code()).toContain('<TrackFrame id="cart">');
+  });
+
+  test('a point is edited a coordinate at a time', () => {
+    render(<Editor />);
+    const props = select('Line');
+    const endX = within(props).getByLabelText('End x');
+
+    expect(endX).toHaveValue('12');
+
+    fireEvent.change(endX, { target: { value: '8' } });
+
+    expect(code()).toContain('endPos={[8, -0.5]}');
+
+    // One half emptied is refused: the reset button unsets the pair.
+    const endY = within(props).getByLabelText('End y');
+    fireEvent.change(endY, { target: { value: '' } });
+
+    expect(endY).toHaveAttribute('aria-invalid', 'true');
+    expect(code()).toContain('endPos={[8, -0.5]}');
+  });
+
+  test('a flag is a checkbox showing its default', () => {
+    render(<Editor />);
+    const solid = within(select('Box')).getByLabelText('Solid');
+
+    expect(solid).toBeChecked();
+
+    fireEvent.click(solid);
+
+    expect(code()).toContain('solid={false}');
+  });
+
+  test('a component the document defines says it takes no props', () => {
+    render(<Editor />);
+    const props = select('Pendulum');
+
+    expect(
+      within(props).getByRole('heading', { name: 'Pendulum' }),
+    ).toBeVisible();
+    expect(props).toHaveTextContent('It takes no props.');
   });
 });
