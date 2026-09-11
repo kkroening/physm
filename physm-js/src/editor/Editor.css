@@ -205,6 +205,12 @@
   stroke-dasharray: 2 3;
 }
 
+/* The last scene that built, drawn under a build error: there to show what the
+   edit is doing to the rig, and faint enough not to pass for the live one. */
+.editor__stale {
+  opacity: 0.35;
+}
+
 .editor__error {
   position: absolute;
   inset: auto 0.75rem 0.75rem;

@@ -680,7 +680,9 @@ function useBuiltScene(
  *
  * A scene that fails to build shows why instead of taking the editor down with
  * it: a half-made rig is the normal state of a document being edited, and the
- * message is the thing the person needs to see.
+ * message is the thing the person needs to see. Under it, the last scene this
+ * tab drew stays, dimmed, until a scene builds -- in this tab or another -- or
+ * its component goes.
  */
 function ScenePane({
   doc,
@@ -720,6 +722,31 @@ function ScenePane({
   const drawn =
     'scene' in built
       ? { scene: built.scene, stateMap: simulation.stateMap ?? built.initial }
+      : null;
+
+  // The last scene that built, as it was last drawn, and the tab it was drawn
+  // in. While an edit passes through a state that does not build, it stays on
+  // screen, dimmed under the error, so the pane does not go blank on what the
+  // edit is doing to the rig. Another tab's is not this one's to show.
+  const lastDrawn = useRef<{
+    focus: string;
+    drawn: { scene: CoreScene; stateMap: StateMap };
+  } | null>(null);
+  if (drawn) {
+    lastDrawn.current = { focus, drawn };
+  }
+
+  // Its component gone, it goes too: a later one of the same name is not it.
+  if (
+    lastDrawn.current &&
+    !doc.definitions.some(({ name }) => name === lastDrawn.current?.focus)
+  ) {
+    lastDrawn.current = null;
+  }
+
+  const stale =
+    !drawn && lastDrawn.current?.focus === focus
+      ? lastDrawn.current.drawn
       : null;
 
   // Where the last click landed: a click there again goes one past the
@@ -968,6 +995,11 @@ function ScenePane({
             ) : null}
           </>
         ) : null}
+        {stale ? (
+          <g className="editor__stale">
+            <SceneView {...stale} xformMatrix={xformMatrix} />
+          </g>
+        ) : null}
       </svg>
       <div className="editor__playback">
         {playable ? null : (
@@ -984,7 +1016,7 @@ function ScenePane({
         </button>
         <button
           type="button"
-          disabled={!playable || !simulation.started}
+          disabled={!playable || !simulation.started || 'error' in built}
           onClick={simulation.reset}
         >
           Reset
