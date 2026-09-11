@@ -745,6 +745,13 @@ function extract(name: string): void {
   fireEvent.click(screen.getByRole('button', { name: 'Extract' }));
 }
 
+/** The hint beside the name being typed for an extraction. */
+function extractHint(): HTMLElement {
+  return within(
+    screen.getByRole('textbox', { name: 'Component name' }).closest('form')!,
+  ).getByRole('status');
+}
+
 describe('Editor, components and tabs', () => {
   test('double-clicking a defined instance opens it in a tab', () => {
     render(<Editor />);
@@ -820,14 +827,12 @@ describe('Editor, components and tabs', () => {
 
     fireEvent.change(name, { target: { value: 'Box' } });
 
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'already a building block',
-    );
+    expect(extractHint()).toHaveTextContent('already a building block');
     expect(screen.getByRole('button', { name: 'Extract' })).toBeDisabled();
 
     fireEvent.change(name, { target: { value: 'Pendulum' } });
 
-    expect(screen.getByRole('status')).toHaveTextContent('already a component');
+    expect(extractHint()).toHaveTextContent('already a component');
   });
 
   test('a weight alone cannot be extracted, and the button says why', () => {
@@ -2670,5 +2675,174 @@ describe('Editor, the selection in the code', () => {
 
     expect(code()).toBe(source);
     expect(markOffset()).toBe(ranges.get(rangeKey('Pendulum', [0, 1]))![0]);
+  });
+});
+
+/** The tree's find field. */
+function findField(): HTMLElement {
+  return screen.getByRole('searchbox', { name: 'Find a node' });
+}
+
+/** Type `text` into the find field, all at once. */
+function find(text: string): void {
+  fireEvent.change(findField(), { target: { value: text } });
+}
+
+/** What the find field says it turned up, as its description. */
+function foundStatus(): string {
+  return document.getElementById(findField().getAttribute('aria-describedby')!)!
+    .textContent!;
+}
+
+/** The rows find has marked, by what each shows. */
+function marks(): (string | null)[] {
+  return rows()
+    .filter((row) => row.firstElementChild!.hasAttribute('data-match'))
+    .map((row) => row.getAttribute('aria-label'));
+}
+
+describe('Editor, finding a node', () => {
+  test('what is typed selects the first node whose tag, id or props hold it', () => {
+    render(<Editor />);
+
+    // The spaces around it are no part of it.
+    find(' cart ');
+
+    expect(shown()).toBe('TrackFrame');
+    expect(foundStatus()).toBe('1 of 1');
+
+    // A prop as the row writes it, whatever the case; and a tag.
+    find('MASS=50');
+
+    expect(shown()).toBe('Weight');
+
+    find('box');
+
+    expect(shown()).toBe('Box');
+  });
+
+  test('Enter steps to the next, round to the first, and Shift+Enter back', () => {
+    render(<Editor />);
+    find('width');
+
+    // The line's `lineWidth` and the box's `width`, in the tree's order.
+    expect(shown()).toBe('Line');
+    expect(foundStatus()).toBe('1 of 2');
+
+    fireEvent.keyDown(findField(), { key: 'Enter' });
+
+    expect(shown()).toBe('Box');
+    expect(foundStatus()).toBe('2 of 2');
+
+    fireEvent.keyDown(findField(), { key: 'Enter' });
+
+    expect(shown()).toBe('Line');
+
+    fireEvent.keyDown(findField(), { key: 'Enter', shiftKey: true });
+
+    expect(shown()).toBe('Box');
+
+    fireEvent.keyDown(findField(), { key: 'Enter', shiftKey: true });
+
+    expect(shown()).toBe('Line');
+  });
+
+  test('from a selection it did not make, it goes on from there', () => {
+    render(<Editor />);
+
+    // From the cart, between the line and the box: on to the box, and back
+    // to the line.
+    select('TrackFrame');
+    find('width');
+
+    expect(shown()).toBe('Box');
+    expect(foundStatus()).toBe('2 of 2');
+
+    select('TrackFrame');
+
+    expect(foundStatus()).toBe('2 found');
+
+    fireEvent.keyDown(findField(), { key: 'Enter', shiftKey: true });
+
+    expect(shown()).toBe('Line');
+  });
+
+  test('while the selection still matches, typing more keeps it', () => {
+    render(<Editor />);
+    find('width');
+    fireEvent.keyDown(findField(), { key: 'Enter' });
+    find('width=');
+
+    expect(shown()).toBe('Box');
+    expect(foundStatus()).toBe('2 of 2');
+  });
+
+  test('a search that turns up nothing says so, and leaves the selection', () => {
+    render(<Editor />);
+    select('Box');
+    find('zzz');
+
+    expect(foundStatus()).toBe('No match');
+    expect(shown()).toBe('Box');
+
+    // A blank one turns up nothing, and says nothing.
+    find('  ');
+
+    expect(foundStatus()).toBe('');
+    expect(marks()).toEqual([]);
+  });
+
+  test('what it turns up is marked, and Escape clears it for the tree', () => {
+    render(<Editor />);
+    find('width');
+
+    expect(marks()).toEqual(['Line', 'Box']);
+
+    // On to the box, which is not the first row.
+    fireEvent.keyDown(findField(), { key: 'Enter' });
+    fireEvent.keyDown(findField(), { key: 'Escape' });
+
+    expect(findField()).toHaveValue('');
+    expect(marks()).toEqual([]);
+
+    // Back in the tree, on the node it found.
+    expect(document.activeElement).toBe(rows()[2]);
+  });
+
+  test('the rows scroll to a node selected out of their sight, and only they', () => {
+    // jsdom lays nothing out: the tree's rows in a list 100 pixels high at the
+    // top of the screen, and the selected row 300 pixels down what it scrolls.
+    const spies = [
+      vi
+        .spyOn(Element.prototype, 'clientHeight', 'get')
+        .mockImplementation(function (this: Element) {
+          return this.matches('.editor__tree [role="tree"]') ? 100 : 0;
+        }),
+      vi
+        .spyOn(Element.prototype, 'getBoundingClientRect')
+        .mockImplementation(function (this: Element) {
+          const list = this.closest('.editor__tree [role="tree"]');
+          const [top, bottom] = this.matches('.editor__tree [role="tree"]')
+            ? [0, 100]
+            : list && this.matches('[aria-selected="true"] > .editor__row')
+              ? [300 - list.scrollTop, 320 - list.scrollTop]
+              : [0, 0];
+
+          return new DOMRect(0, top, 0, bottom - top);
+        }),
+    ];
+    try {
+      const { container } = render(<Editor />);
+      find('mass=50');
+
+      expect(
+        container.querySelector('.editor__tree [role="tree"]')!.scrollTop,
+      ).toBe(220);
+
+      // The pane around them, with the find field in it, stays where it was.
+      expect(container.querySelector('.editor__tree')!.scrollTop).toBe(0);
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
   });
 });

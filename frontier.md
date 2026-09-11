@@ -6,10 +6,18 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Find a node by its id or its props.** Type-ahead spells a row's tag, as the
-ARIA tree pattern asks, so in a rig of many `TrackFrame`s the id one would
-look for is out of its reach. A search field over the tree: the rows whose id
-or props match what is typed, stepped through in order.
+**Components that take children.** Nesting one pendulum in another should
+make a double pendulum, but a component this document defines takes no
+children, so a rig of any size has to be built from the core frames. A
+`Children` placeholder in a component's body -- at most one, in whichever
+frame and at whatever position its author chooses -- says where an
+instance's children go. An instance of such a component then accepts
+children in the tree and the library, and the code writes
+`function Pendulum({ children })` and `<Pendulum><Pendulum /></Pendulum>`.
+First the placeholder at its frame's origin, then its position, which puts a
+nested pendulum at the bob: a frame without a coordinate in the core, or an
+offset the builder applies to what sits in the placeholder -- Karl's call.
+Karl named this the most pressing pain point (2026-09-11).
 
 ## Next — the MVP
 
@@ -78,9 +86,12 @@ was built while gizmos were in review.
   sets a count -- page 8's `segmentCount` -- changes the structure but arrives
   as a prop edit, which carries the run over; whether it resets instead, and
   how the editor tells, is part of the same call.
-- A modifier on a click in the scene, to select the expanded node itself
-  rather than its nearest authored ancestor -- page 7's way to inspect one. It
-  waits on the properties pane showing an expanded node, read-only.
+- Inspect an expanded node. A click in the scene selects the node in the
+  focused body nearest to what it hit, so what a component's instance built
+  can only be looked at by opening the component.
+  [0014 page 7](docs/issues/0014/07-editing.md) has a modifier on the click
+  select the expanded node itself, and the properties pane show its props
+  read-only, with a way to select what produced it.
 - The focused component's definition marked in the code on a change of tab,
   as [0014 page 3](docs/issues/0014/03-focus.md#what-is-global-and-what-belongs-to-a-tab)
   has it. A tab change clears the selection, so after one nothing is marked
@@ -92,7 +103,7 @@ was built while gizmos were in review.
 
 - **A structural edit resets simulation state; a prop edit carries it over.**
   Recorded in [0014 page 8](docs/issues/0014/08-play.md#editing-while-it-runs).
-  *(Karl, 2026-09-11)*
+  _(Karl, 2026-09-11)_
 
 ## Done
 
@@ -226,3 +237,8 @@ was built while gizmos were in review.
   parent -- and that grid is drawn in the world's place while the drag lasts.
   A point in reach comes first, Alt places freely, and a run's pose has no
   grid to snap to.
+- **Find a node** — a field over the tree selects the first node, from the
+  selection on, whose tag, id or props hold what is typed, and says which of
+  how many; Enter and Shift+Enter step through the rest. What it turns up is
+  marked while it holds anything, Escape clears it and returns to the tree,
+  and the tree scrolls to the selection when it changes.
