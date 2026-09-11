@@ -61,6 +61,9 @@ was built while gizmos were in review.
 - While a drag is under way, show the parent's axes at the grabbed node. A
   drag writes `position` along them, but the grabbed gizmo shows the node's
   own +x, which for a rotational node is turned by its angle.
+- What a drag does while the scene plays. The frame drifts from the pointer,
+  since its own coordinate and its parents' keep moving: pause while a drag is
+  held, refuse one during play, or keep the live nudge. Karl's call.
 - Take an imported component's tag from the module lookup
   [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
   `Function.name`, which a production build minifies. Dev builds and the tests
@@ -173,7 +176,9 @@ was built while gizmos were in review.
   are read along -- and a drag writes along a parent's -- so this came first.
   The pointer is clicked like the cross.
 - **Dragging** — a frame's gizmo drags, writing its `position` along its
-  parent's axes to the nearest hundredth, as one step to undo. The node is
-  selected as the drag begins, and the click that ends it picks nothing. Only a
-  frame the focused body wrote drags: over one inside an instance the pointer
-  says not allowed, and the frame stays put.
+  parent's axes to the nearest hundredth, as one step to undo. A drag starts
+  once the pointer leaves the press, with the primary button, and the node is
+  selected then; the click that ends it picks nothing. A press takes the
+  selected node if its gizmo is under the pointer, and otherwise the topmost
+  gizmo -- which blocks the press, with a not-allowed pointer, when a
+  component's instance built its frame.

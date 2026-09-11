@@ -1454,7 +1454,7 @@ function dragScene(
     clientY: from[1],
   });
   for (const [x, y] of to) {
-    fireEvent.mouseMove(window, { clientX: x, clientY: y });
+    fireEvent.mouseMove(window, { clientX: x, clientY: y, buttons: 1 });
   }
 
   fireEvent.mouseUp(window, { clientX: endX, clientY: endY });
@@ -1541,6 +1541,16 @@ describe('Editor, dragging', () => {
     dragScene(container, [0, 12], [18, 12]);
 
     expect(code()).toBe(before);
+
+    // Just above the pivot, the cart's gizmo lies under the pivot's. The pivot
+    // is on top, so it blocks the press, as a click there selects the pendulum.
+    fireEvent.mouseMove(svg, { clientX: 0, clientY: 8 });
+
+    expect(svg.style.cursor).toBe('not-allowed');
+
+    dragScene(container, [0, 8], [18, 8]);
+
+    expect(code()).toBe(before);
   });
 
   test('the click that ends a drag picks nothing', () => {
@@ -1553,5 +1563,89 @@ describe('Editor, dragging', () => {
     clickScene(container, [18, -3]);
 
     expect(shown()).toBe('TrackFrame');
+  });
+
+  test('a click with a pixel of wobble in it is still a click', () => {
+    const { container } = render(<Editor />);
+    const before = code();
+    dragScene(container, onCart, [1, -3]);
+
+    // The first click is the release's own, which picks as any click does.
+    clickScene(container, onCart);
+    clickScene(container, onCart);
+
+    expect(code()).toBe(before);
+    expect(undoButton()).toBeDisabled();
+    expect(shown()).toBe('Box');
+  });
+
+  test('where gizmos lie on one another, the top one drags, or the selected one', () => {
+    const rig = documentFrom(
+      <TrackFrame id="cart">
+        <RotationalFrame id="arm" />
+      </TrackFrame>,
+    );
+
+    // The arm sits on the cart's origin, and is drawn over it.
+    const { container, unmount } = render(<Editor initialDocument={rig} />);
+    dragScene(container, [0, -3], [18, -3]);
+
+    expect(code()).toContain('<TrackFrame id="cart">');
+    expect(code()).toContain('position={[1, 0]}');
+
+    unmount();
+
+    // Selected -- in the tree here, or by clicking again -- the cart drags.
+    const again = render(<Editor initialDocument={rig} />);
+    select('TrackFrame');
+    dragScene(again.container, [0, -3], [18, -3]);
+
+    expect(code()).toMatch(/<TrackFrame id="cart" position=\{\[1, 0\]\}>/);
+    expect(code()).toContain('<RotationalFrame id="arm" />');
+  });
+
+  test('only the primary button drags, and not with Ctrl', () => {
+    const { container } = render(<Editor />);
+    const before = code();
+    const svg = container.querySelector('.editor__scene svg')!;
+    for (const press of [{ button: 2 }, { button: 0, ctrlKey: true }]) {
+      fireEvent.mouseDown(svg, { clientX: 0, clientY: -3, ...press });
+      fireEvent.mouseMove(window, { clientX: 18, clientY: -3, buttons: 1 });
+      fireEvent.mouseUp(window, { clientX: 18, clientY: -3 });
+    }
+
+    expect(code()).toBe(before);
+  });
+
+  test('a drag whose release the page missed ends at the next move', () => {
+    const { container } = render(<Editor />);
+    fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
+      clientX: 0,
+      clientY: -3,
+    });
+    fireEvent.mouseMove(window, { clientX: 9, clientY: -3, buttons: 1 });
+
+    expect(code()).toContain('position={[0.5, 0]}');
+
+    // The button is up, though no release was heard: the drag is over, and
+    // stays over.
+    fireEvent.mouseMove(window, { clientX: 18, clientY: -3, buttons: 0 });
+    fireEvent.mouseMove(window, { clientX: 27, clientY: -3, buttons: 1 });
+
+    expect(code()).toContain('position={[0.5, 0]}');
+  });
+
+  test("a turned frame moves along its parent's axes, not its own", () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame id="arm" initialState={[Math.PI / 2, 0]} />,
+        )}
+      />,
+    );
+    dragScene(container, [0, -3], [18, -3]);
+
+    // The world's x: along the arm's own axes this would be [0, -1].
+    expect(code()).toContain('position={[1, 0]}');
   });
 });

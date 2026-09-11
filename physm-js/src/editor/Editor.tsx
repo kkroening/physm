@@ -612,32 +612,58 @@ function ScenePane({
           .map((frame) => ({ frame, path: built.ownPathOf(frame) }))
       : [];
 
+  /**
+   * The frame a press at `point` would drag, and the node that built it: the
+   * selected node, when its gizmo is under the pointer -- which is how click
+   * cycling reaches one in a stack -- and otherwise the topmost gizmo, when its
+   * frame can be dragged. A gizmo on top that cannot drag blocks the press, as
+   * a click there would select something else.
+   */
+  const dragTargetAt = (
+    point: ScreenPoint,
+  ): { frame: Frame; path: NodePath } | null => {
+    const gizmos = gizmosAt(point);
+    const selected = selectedPath
+      ? gizmos.find(({ path }) => path?.join('.') === selectedPath.join('.'))
+      : undefined;
+    const target = selected ?? gizmos[0];
+
+    return target?.path ? { frame: target.frame, path: target.path } : null;
+  };
+
   const hover = (event: MouseEvent<SVGSVGElement>): void => {
     if (drag.current) {
       return;
     }
 
-    const gizmos = gizmosAt(pointOf(event));
+    const point = pointOf(event);
     setCursor(
-      gizmos.length === 0
-        ? ''
-        : gizmos.some(({ path }) => path)
-          ? 'grab'
-          : 'not-allowed',
+      dragTargetAt(point)
+        ? 'grab'
+        : gizmosAt(point).length
+          ? 'not-allowed'
+          : '',
     );
   };
 
   const startDrag = (event: MouseEvent<SVGSVGElement>): void => {
     dragged.current = false;
+
+    // The primary button alone, as d3-drag has it: Ctrl with a click is the
+    // secondary button on a Mac.
+    if (event.button !== 0 || event.ctrlKey) {
+      return;
+    }
+
     const from = pointOf(event);
-    const target = gizmosAt(from).find(({ path }) => path !== null);
+    const target = dragTargetAt(from);
     const placement =
       target && drawn
         ? placeGizmos(drawn.scene, drawn.stateMap, xformMatrix).find(
             ({ frame }) => frame === target.frame,
           )
         : undefined;
-    if (!target?.path || !placement) {
+    if (!target || !placement) {
       return;
     }
 
@@ -658,9 +684,37 @@ function ScenePane({
     };
     setCursor('grabbing');
 
+    // Both listeners go when the drag ends.
+    const listening = new AbortController();
+
+    const end = (): void => {
+      listening.abort();
+      dragged.current = drag.current?.moved ?? false;
+      drag.current = null;
+      setCursor('');
+    };
+
     const move = (moveEvent: globalThis.MouseEvent): void => {
       const current = drag.current;
       if (!current) {
+        return;
+      }
+
+      // The button came up where the page could not hear it -- over a context
+      // menu, say -- so the drag is over.
+      if (moveEvent.buttons % 2 === 0) {
+        end();
+        return;
+      }
+
+      // Not a drag until the pointer leaves the press: a click with a pixel of
+      // wobble in it is still a click.
+      const to = pointOf(moveEvent);
+      if (
+        !current.moved &&
+        Math.hypot(to[0] - current.from[0], to[1] - current.from[1]) <=
+          SAME_PLACE
+      ) {
         return;
       }
 
@@ -673,7 +727,7 @@ function ScenePane({
         current.position,
         current.parentXform,
         current.from,
-        pointOf(moveEvent),
+        to,
       );
       onEdit(
         setProp(
@@ -688,16 +742,8 @@ function ScenePane({
       );
     };
 
-    const end = (): void => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', end);
-      dragged.current = drag.current?.moved ?? false;
-      drag.current = null;
-      setCursor('');
-    };
-
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', end);
+    window.addEventListener('mousemove', move, { signal: listening.signal });
+    window.addEventListener('mouseup', end, { signal: listening.signal });
   };
 
   const pick = (event: MouseEvent<SVGSVGElement>): void => {
