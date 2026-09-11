@@ -15,9 +15,7 @@ coincident is [0002](docs/issues/0002.md)'s pinned scene waiting to happen.
 Only an authored node drags, since there is nowhere to write the result
 otherwise.
 
-- first, gizmos that show which way +x points, since a drag writes along the
-  parent's axes and today's cross looks the same after a quarter turn
-- then the drag, writing `position` as it goes, one undo step per drag
+- the drag first, writing `position` as it goes, one undo step per drag
 - then snapping
 - the tree stays the failsafe, so dragging can ship imperfect without blocking
   anything
@@ -67,6 +65,9 @@ was built while gizmos were in review.
   `Scene.getPosMatrixMap` each compose a frame's pose from the state map, and
   agree because tests hold them to it. Reading the core's map everywhere,
   composed with the view, would make the agreement structural.
+- While a drag is under way, show the parent's axes at the grabbed node. A
+  drag writes `position` along them, but the grabbed gizmo shows the node's
+  own +x, which for a rotational node is turned by its angle.
 - Take an imported component's tag from the module lookup
   [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
   `Function.name`, which a production build minifies. Dev builds and the tests
@@ -173,3 +174,8 @@ was built while gizmos were in review.
   returns to the tab the edit was made in, closes a tab whose component is
   gone, and puts back the selection from before the edit; redoing puts back the
   one it made. Only a structural step restarts the run.
+- **+x on every gizmo** — a gizmo's +x arm runs on as far again, so which way
+  a frame's x axis points can be read off the picture, where a plain cross
+  looks the same after a quarter turn. These are the axes the frame's children
+  are read along -- and a drag writes along a parent's -- so this came first.
+  The pointer is clicked like the cross.

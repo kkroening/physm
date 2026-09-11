@@ -11,10 +11,17 @@ export interface GizmosProps {
   xformMatrix: Mat3;
 }
 
-/** A cross at the frame's origin, turned with its axes, and a line to its parent's. */
+/**
+ * A cross at the frame's origin, turned with its axes, and a line to its
+ * parent's. The +x arm runs on as far again, so which way the frame's x axis
+ * points can be read off the picture: a plain cross looks the same after a
+ * quarter turn, and a child's `position` is read along these axes.
+ */
 function GizmoView({ placement }: { placement: GizmoPlacement }): ReactElement {
   const [x, y] = placement.origin;
   const [parentX, parentY] = placement.parentOrigin;
+  const [[pointX, pointY]] = placement.axes;
+  const [endX, endY] = placement.pointerEnd;
 
   return (
     <g className="editor__gizmo" data-frame-id={placement.frame.id}>
@@ -35,6 +42,13 @@ function GizmoView({ placement }: { placement: GizmoPlacement }): ReactElement {
           key={index}
         />
       ))}
+      <line
+        className="editor__gizmo-pointer"
+        x1={x + pointX * ARM_LENGTH}
+        y1={y + pointY * ARM_LENGTH}
+        x2={endX}
+        y2={endY}
+      />
     </g>
   );
 }

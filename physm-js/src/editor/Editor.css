@@ -179,12 +179,14 @@
 }
 
 .editor__gizmo-arm,
+.editor__gizmo-pointer,
 .editor__gizmo-link {
   stroke: #28506b;
   stroke-linecap: round;
 }
 
-.editor__gizmo-arm {
+.editor__gizmo-arm,
+.editor__gizmo-pointer {
   stroke-width: 1.5;
 }
 
