@@ -6,16 +6,18 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Codegen.** A document written out as the TSX module a person keeps: one way,
-never parsed back.
+**Editor shell.** One document, shown five ways and read-only: the tab bar,
+code pane and library are global, and the tree, scene and properties panes
+follow the focused tab.
 
-- one module: definitions in dependency order, the scene last as the default
-  export
-- a prop at its default is omitted, so the output reads like code a person
-  would write
-- checked by compiling the emitted source and rebuilding it: it has to build
-  the same scene as the document
-- where each node landed is recorded, for the code pane to use
+- the scene is built from the document with `buildScene` and drawn at its
+  authored pose; a rig that fails to build, or has no consistent start, shows
+  why in the pane rather than taking the editor down
+- the code pane holds the whole module `emitScene` writes
+- the library lists the building blocks by category, and the document's own
+  components
+- a starter document with a component it defines, so every kind of node is
+  present
 
 ## Next — the MVP
 
@@ -25,8 +27,8 @@ Roughly one PR each.
 2. ~~**Tree-walk builder**~~ — done
 3. ~~**Core metadata**~~ — done
 4. ~~**Document model**~~ — done
-5. **Codegen** — *in view*
-6. **Editor shell** — tab bar, code, tree, scene, properties, library; read-only
+5. ~~**Codegen**~~ — done
+6. **Editor shell** — *in view*
 7. **Selection and prop editing**
 8. **Insert, delete, reorder** from the library
 9. **Extract to component, and tabs** — ids, a frame's or an anchor's, are
@@ -94,3 +96,8 @@ the same scene. Play is cheap once the shell exists and may come forward.
   document, and nodes are addressed by index path. A document reads from JSX
   without calling anything, and renders back to an element `buildScene`
   builds.
+- **Codegen** — a document written out as one TSX module: definitions in
+  dependency order with the scene as the default export, props at their
+  defaults omitted, a cycle or a prop that is not plain data refused, and each
+  node's place in the source recorded. Held to the document by compiling the
+  output and rebuilding it.
