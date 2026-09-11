@@ -6,8 +6,6 @@ import Line from './react/Line';
 import RotationalFrame from './react/RotationalFrame';
 import TrackFrame from './react/TrackFrame';
 import Weight from './react/Weight';
-import { useRef } from 'react';
-import type { AnchorPoint } from './react/sceneNodes';
 import type { ReactElement, ReactNode } from 'react';
 
 /**
@@ -218,9 +216,6 @@ function RopeChain({
  * round numbers above leave.
  */
 export default function CartAndRope(): ReactElement {
-  const leftTip = useRef<AnchorPoint>(null);
-  const rightTip = useRef<AnchorPoint>(null);
-
   return (
     <>
       <Line
@@ -250,7 +245,7 @@ export default function CartAndRope(): ReactElement {
         ))}
 
         <RopeChain anchor={POLE_TIPS[0]!}>
-          <Anchor ref={leftTip} position={TIP} />
+          <Anchor id="left-tip" position={TIP} />
 
           {/*
            * Hung from the left chain's tip, which *is* the rope's midpoint:
@@ -263,11 +258,11 @@ export default function CartAndRope(): ReactElement {
         </RopeChain>
         <RopeChain anchor={POLE_TIPS[1]!} mirror>
           {/* No position: this is the attachment the constraint solves for. */}
-          <Anchor ref={rightTip} />
+          <Anchor id="right-tip" />
         </RopeChain>
       </TrackFrame>
 
-      <Coincidence frame1={leftTip} frame2={rightTip} />
+      <Coincidence frame1="left-tip" frame2="right-tip" />
     </>
   );
 }

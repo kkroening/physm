@@ -584,6 +584,145 @@ describe('Scene (authoring)', () => {
     expect(scene.constraints).toHaveLength(0);
   });
 
+  test('an anchor named by id wires a constraint, with no ref anywhere', () => {
+    // The declarative form, and the one a document can hold.
+    //
+    // The frames are deliberately unnamed, so the test is about the anchor ids
+    // resolving to *generated* frame ids rather than about names that happen
+    // to match.
+    function Rig(): ReactElement {
+      return (
+        <>
+          <TrackFrame id="cart">
+            <RotationalFrame position={[-2, 0]} initialState={[0.3, 0]}>
+              <Anchor id="left" position={[1, 0]} />
+            </RotationalFrame>
+            <RotationalFrame position={[2, 0]} initialState={[-0.7, 0]}>
+              {/* No position: the attachment on this end is solved. */}
+              <Anchor id="right" />
+            </RotationalFrame>
+          </TrackFrame>
+          <Coincidence frame1="left" frame2="right" />
+        </>
+      );
+    }
+
+    const scene = assemble(<Rig />);
+
+    expect(scene.constraints).toHaveLength(1);
+
+    const solved = scene.constraints[0] as CoreCoincidenceConstraint;
+
+    // Neither end is `left`, `right` or `cart`: the ids resolved through the
+    // anchors to the frames they sit on, which nobody named.
+    for (const frameId of [solved.frameId1, solved.frameId2]) {
+      expect(scene.frameMap.has(frameId)).toBe(true);
+      expect(['left', 'right', 'cart']).not.toContain(frameId);
+    }
+    expect(solved.frameId1).not.toBe(solved.frameId2);
+
+    // The right anchor states no point, so `position2` is solved and the two
+    // ends meet -- having genuinely been apart, so this is the solve working.
+    expect(
+      scene.getSeparation(
+        solved.frameId1,
+        [1, 0],
+        solved.frameId2,
+        solved.localPosition2,
+      ).distance,
+    ).toBeCloseTo(0, 9);
+    expect(
+      scene.getSeparation(solved.frameId1, [1, 0], solved.frameId2, [1, 0])
+        .distance,
+    ).toBeGreaterThan(0.5);
+  });
+
+  test('a name that means both an anchor and a frame is refused', () => {
+    // Resolved as the anchor, it would silently move a constraint end -- and
+    // the position it states -- onto a frame its author never named. The same
+    // reason two anchors sharing an id are refused.
+    function Rig(): ReactElement {
+      return (
+        <>
+          <RotationalFrame id="post" position={[0, 0]} />
+          <RotationalFrame id="arm" position={[5, 0]}>
+            <Anchor id="post" />
+          </RotationalFrame>
+          <RotationalFrame id="other" position={[9, 0]} />
+          <Coincidence frame1="post" frame2="other" />
+        </>
+      );
+    }
+
+    expect(() => assemble(<Rig />)).toThrow(
+      /'post' names both an <Anchor> and a frame/,
+    );
+  });
+
+  test('an id-named anchor that moves takes its constraint with it', () => {
+    // A move is an unmount plus a mount, and the old registration is only
+    // reaped after assembly -- so for one assembly both are in the map, and only
+    // the dead flag keeps that from reading as two anchors sharing the id.
+    let scene: CoreScene | null = null;
+
+    function Rig({ onB }: { onB: boolean }): ReactElement {
+      return (
+        <>
+          <RotationalFrame id="a" position={[1, 0]}>
+            {onB ? null : <Anchor id="tip" />}
+          </RotationalFrame>
+          <RotationalFrame id="b" position={[2, 0]}>
+            {onB ? <Anchor id="tip" /> : null}
+          </RotationalFrame>
+          <RotationalFrame id="other" position={[3, 0]} />
+          <Coincidence frame1="other" frame2="tip" />
+        </>
+      );
+    }
+
+    // `Rig` outside `tree`, for the same reason as in the anchor-mounting test
+    // above: declared inside, it is a new type on every call, and the full
+    // remount would hide the dead entry.
+    const tree = (onB: boolean): ReactElement => (
+      <svg>
+        <Scene onSceneChange={(built) => (scene = built)}>
+          <Rig onB={onB} />
+        </Scene>
+      </svg>
+    );
+
+    const { rerender } = render(tree(false));
+
+    expect((scene!.constraints[0] as CoreCoincidenceConstraint).frameId2).toBe(
+      'a',
+    );
+
+    rerender(tree(true));
+
+    expect((scene!.constraints[0] as CoreCoincidenceConstraint).frameId2).toBe(
+      'b',
+    );
+  });
+
+  test('two anchors sharing an id are refused', () => {
+    // Resolving either way would weld the constraint to whichever registered
+    // first -- an answer, silently chosen, that the JSX does not show.
+    function Rig(): ReactElement {
+      return (
+        <>
+          <RotationalFrame id="a">
+            <Anchor id="tip" />
+          </RotationalFrame>
+          <RotationalFrame id="b">
+            <Anchor id="tip" />
+          </RotationalFrame>
+        </>
+      );
+    }
+
+    expect(() => assemble(<Rig />)).toThrow(/share the id 'tip'/);
+  });
+
   test('an Anchor outside any frame is refused', () => {
     // It marks a point *on a frame*, and there is no frame at the root of a
     // scene for it to mark.

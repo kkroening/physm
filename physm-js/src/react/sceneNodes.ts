@@ -21,8 +21,8 @@ import type { PositionLike } from './../Scene';
  * always stated a point could never express it, and the constraint would check
  * the geometry and throw instead of solving it.
  *
- * So `<Anchor ref={tip} position={[1.4, 0]} />` names a point, and
- * `<Anchor ref={tip} />` names only the frame and leaves the point to be
+ * So `<Anchor id="tip" position={[1.4, 0]} />` names a point, and
+ * `<Anchor id="tip" />` names only the frame and leaves the point to be
  * solved.
  */
 export interface AnchorPoint {
@@ -32,6 +32,9 @@ export interface AnchorPoint {
 
 /** What an `<Anchor>` hands back through its ref. */
 export type AnchorHandle = { readonly current: AnchorPoint | null };
+
+/** Anchors that declared an `id`, by that id, as assembly collects them. */
+export type AnchorLookup = ReadonlyMap<string, AnchorPoint>;
 
 /**
  * What a registered component contributes to a scene.
@@ -44,7 +47,19 @@ export type SceneNode =
       readonly slot: 'frame';
       readonly build: (children: FrameChildren) => Frame;
     }
-  | { readonly slot: 'anchor'; readonly build: () => AnchorPoint }
+  | {
+      readonly slot: 'anchor';
+
+      /**
+       * The name a constraint end can use for this anchor, if it has one.
+       *
+       * The declarative alternative to a ref. A ref is a mutable cell a hook
+       * creates, so a component that makes one cannot be evaluated outside a
+       * render -- and a document cannot hold one at all. A name is data.
+       */
+      readonly id?: string;
+      readonly build: () => AnchorPoint;
+    }
   | { readonly slot: 'decal'; readonly build: () => Decal }
   | { readonly slot: 'weight'; readonly build: () => Weight }
   | {
@@ -58,7 +73,7 @@ export type SceneNode =
        * treats a frame that is mid-unmount: wait, and report if it never
        * resolves.
        */
-      readonly build: () => Constraint | null;
+      readonly build: (anchors: AnchorLookup) => Constraint | null;
 
       /**
        * What to call this in a warning when `build` returns `null`.
@@ -251,9 +266,9 @@ export function buildChildren(
         children.frames.push(node.build(buildChildren(entries, key)));
         break;
       case 'anchor':
-        // Registered only so that mounting one bumps the version and forces a
-        // reassembly. The point itself travels by ref, because a constraint
-        // reads it during assembly rather than during render -- see `Anchor`.
+        // Part of no frame. An id-named anchor's point is collected by
+        // `<Scene>` before constraints are built; a ref-named one travels by
+        // ref. Either way it contributes nothing here -- see `Anchor`.
         break;
       case 'constraint':
         // Constraints belong to the scene, not to a frame: they name two

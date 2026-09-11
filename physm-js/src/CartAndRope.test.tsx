@@ -1,9 +1,12 @@
 import CartAndRope, { ARC, CART_FRAME_ID, RIG } from './CartAndRope';
+import * as binding from './react';
 import JsSolver from './JsSolver';
 import Scene from './react/Scene';
+import { isValidElement } from 'react';
 import { render } from '@testing-library/react';
 import type CoreScene from './Scene';
 import type { CoincidenceConstraint } from './Constraint';
+import type { ReactNode } from 'react';
 
 /**
  * The rig, assembled.
@@ -184,6 +187,57 @@ describe('CartAndRope', () => {
       ).distance,
     ).toBeCloseTo(0, 9);
   });
+});
+
+/**
+ * Evaluate every composite in a tree, the way a renderer-free builder would.
+ *
+ * The binding's own components are skipped: they are *meant* to run under a
+ * renderer, and they call hooks to register with it. Everything else is a
+ * composite, and is called directly with its props -- which throws on the
+ * first hook, since outside a render there is no dispatcher to run it against.
+ *
+ * Returns how many times each composite ran, so a caller can tell a walk that
+ * reached the bottom from one that stopped early.
+ */
+function evaluateComposites(node: ReactNode): Map<string, number> {
+  const core = new Set<unknown>(Object.values(binding));
+  const calls = new Map<string, number>();
+  const visit = (child: ReactNode): void => {
+    if (Array.isArray(child)) {
+      child.forEach(visit);
+      return;
+    }
+
+    if (!isValidElement<{ children?: ReactNode }>(child)) {
+      return;
+    }
+
+    if (typeof child.type === 'function' && !core.has(child.type)) {
+      calls.set(child.type.name, (calls.get(child.type.name) ?? 0) + 1);
+      visit((child.type as (props: unknown) => ReactNode)(child.props));
+      return;
+    }
+
+    visit(child.props.children);
+  };
+
+  visit(node);
+
+  return calls;
+}
+
+test('every composite in the rig evaluates without a renderer', () => {
+  // The property a renderer-free builder, and an editor after it, depends on:
+  // a composite is a plain function of its props, so calling it yields the
+  // tree it produces. A hook anywhere in the file breaks that -- the rig used
+  // to hold its rope tips in `useRef`, and `useRef` outside a render throws.
+  const calls = evaluateComposites(<CartAndRope />);
+
+  // Every segment of both chains, reached through the recursion -- so the walk
+  // went all the way down rather than stopping at the first composite.
+  expect(calls.get('RopeSegment')).toBe(2 * RIG.segmentCount);
+  expect(calls.get('Pendulum')).toBe(1);
 });
 
 describe('CartAndRope under drive', () => {
