@@ -6,15 +6,18 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Play.** Run the focused component forward in the editor, and keep it running
-through edits.
+**Gizmos.** In editor mode every frame draws an origin gizmo -- a small cross
+or dot at its own origin, and a faint line to its parent's -- so a frame that
+draws nothing still has something to see, and later something to click. They
+are not part of the scene and are never emitted
+([0014 page 7](docs/issues/0014/07-editing.md)). They are the part of the MVP
+[page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) defines that remains.
 
-- Play, Pause and Reset over the scene pane, on `JsSolver`, one animation frame
-  at a time
-- a prop edit carries each frame's state over, and a structural edit restarts
-  it -- the decision recorded in
-  [0014 page 8](docs/issues/0014/08-play.md#editing-while-it-runs)
-- a stalled or hidden tab does not come back to a burst of catch-up steps
+- gizmos first: they make the frame tree legible in the scene pane
+- then picking: decals hit-test their own geometry, frames their gizmo, and a
+  click selects the nearest authored ancestor
+- then dragging: a gizmo's drag writes `position` in the parent's frame
+- in that order, as page 10 has it
 
 ## Next — the MVP
 
@@ -29,8 +32,8 @@ Roughly one PR each.
 7. ~~**Selection and prop editing**~~ — done
 8. ~~**Insert, delete, reorder**~~ — done
 9. ~~**Extract to component, and tabs**~~ — done
-10. **Play** — *in view*
-11. **Gizmos**
+10. ~~**Play**~~ — done
+11. **Gizmos** — *in view*
 
 Steps 1-9 are done: load a scene, see its tree, edit props, add, delete and
 reorder nodes, extract a component and reuse it -- one that names no id, for
@@ -127,3 +130,6 @@ the shell made it cheap.
 - **Children only under frames** -- a building block that is not a frame
   refuses children in both routes, through one helper, rather than dropping
   them.
+- **Play** — Play, Pause and Reset run the focused component on `JsSolver`. A
+  prop edit carries each frame's state over and a structural edit restarts it,
+  and a stalled or hidden tab does not come back to a burst of catch-up steps.
