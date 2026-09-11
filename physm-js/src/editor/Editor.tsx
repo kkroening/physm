@@ -9,8 +9,9 @@ import coreComponents from './../react/coreComponents';
 import emitScene from './emitScene';
 import getViewXformMatrix from './../getViewXformMatrix';
 import hitsAt from './hitsAt';
-import movedPosition from './movedPosition';
+import movedPosition, { placedPosition } from './movedPosition';
 import placeGizmos from './placeGizmos';
+import snapPoints, { nearestSnap } from './snapPoints';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
 import useSimulation from './useSimulation';
@@ -574,6 +575,14 @@ function ownPathOf(
   return origin?.definition === focus ? origin.path : null;
 }
 
+/**
+ * Whether a drawn pose is the one the code builds: every frame at its initial
+ * coordinate, as before a run and again after Reset.
+ */
+function atAuthoredPose(stateMap: StateMap, initial: StateMap): boolean {
+  return [...initial].every(([id, [q]]) => stateMap.get(id)?.[0] === q);
+}
+
 /** A drag under way in the scene pane. */
 interface Drag {
   readonly path: NodePath;
@@ -588,6 +597,10 @@ interface Drag {
 
   /** Where the drag began, in the pane's own coordinates. */
   readonly from: ScreenPoint;
+
+  /** Where the frame's origin was then, and the points it can snap to. */
+  readonly origin: ScreenPoint;
+  readonly targets: readonly ScreenPoint[];
 
   /** Names the drag to the history, so all of it is one step. */
   readonly field: string;
@@ -661,7 +674,9 @@ function useBuiltScene(
  *
  * A frame's gizmo drags, writing the `position` of the node that built it --
  * when the focused body wrote that node, since otherwise there is nowhere to
- * write to. The pointer says which, before the press.
+ * write to. The pointer says which, before the press. Held within a few
+ * pixels of another frame's origin, a line's end or a circle's centre, the
+ * origin snaps to it exactly; Alt places it freely instead.
  *
  * A scene that fails to build shows why instead of taking the editor down with
  * it: a half-made rig is the normal state of a document being edited, and the
@@ -717,6 +732,9 @@ function ScenePane({
   const drags = useRef(0);
   const dragged = useRef(false);
   const [cursor, setCursor] = useState('');
+
+  // What a drag under way has snapped to, marked on screen until it ends.
+  const [snapMark, setSnapMark] = useState<ScreenPoint | null>(null);
 
   /** Where a mouse event lands, in the pane's own coordinates. */
   const pointOf = (event: {
@@ -805,6 +823,15 @@ function ScenePane({
       ),
       parentXform: placement.parentXform,
       from,
+      origin: placement.origin,
+      // Only in the pose the code builds: a snap is a claim about where frames
+      // are, and in a run's pose it would be exact about one never built.
+      targets:
+        'scene' in built &&
+        drawn &&
+        atAuthoredPose(drawn.stateMap, built.initial)
+          ? snapPoints(drawn.scene, drawn.stateMap, xformMatrix, target.frame)
+          : [],
       field: `drag ${drags.current}`,
       moved: false,
     };
@@ -818,6 +845,7 @@ function ScenePane({
       dragged.current = drag.current?.moved ?? false;
       drag.current = null;
       setCursor('');
+      setSnapMark(null);
     };
 
     const move = (moveEvent: globalThis.MouseEvent): void => {
@@ -849,12 +877,29 @@ function ScenePane({
         onPick(current.path);
       }
 
-      const position = movedPosition(
-        current.position,
-        current.parentXform,
-        current.from,
-        to,
-      );
+      // Where the origin goes with the pointer, and the point it snaps to
+      // there: the nearest in reach, unless Alt says to place it freely.
+      const origin: ScreenPoint = [
+        current.origin[0] + to[0] - current.from[0],
+        current.origin[1] + to[1] - current.from[1],
+      ];
+      const snap = moveEvent.altKey
+        ? null
+        : nearestSnap(current.targets, origin);
+      setSnapMark(snap);
+      const position = snap
+        ? placedPosition(
+            current.position,
+            current.parentXform,
+            current.origin,
+            snap,
+          )
+        : movedPosition(
+            current.position,
+            current.parentXform,
+            current.from,
+            to,
+          );
       onEdit(
         setProp(
           current.doc,
@@ -913,6 +958,14 @@ function ScenePane({
           <>
             <SceneView {...drawn} xformMatrix={xformMatrix} />
             <Gizmos {...drawn} xformMatrix={xformMatrix} />
+            {snapMark ? (
+              <circle
+                className="editor__snap"
+                cx={snapMark[0]}
+                cy={snapMark[1]}
+                r={6}
+              />
+            ) : null}
           </>
         ) : null}
       </svg>

@@ -6,20 +6,24 @@ import type { Vec3 } from './../Vec3';
 
 /** A value to the nearest hundredth. */
 function rounded(value: number): number {
-  return Math.round(value * 100) / 100;
+  return Math.round(value * 100) / 100 || 0;
 }
 
 /**
- * Where a drag from `from` to `to` on screen takes a `position` that is read in
- * a parent drawn under `parentXform`.
- *
- * The drag's motion, taken back through the parent's transform -- its linear
- * part only, since a motion has no origin -- and added to where the position
- * started, so a frame moves with the pointer however far from its origin it
- * was grabbed. Rounded to a hundredth of a unit, finer than a pointer can place
- * it, so the code written from it stays readable.
+ * A value to the nearest billionth: exact, less the noise an inverse leaves in
+ * its last digits, which would otherwise be written into the code. The `|| 0`
+ * in each of these turns a negative zero positive.
  */
-export default function movedPosition(
+function settled(value: number): number {
+  return Math.round(value * 1e9) / 1e9 || 0;
+}
+
+/**
+ * A `position` moved by the screen motion from `from` to `to`, taken back
+ * through the parent's transform -- its linear part only, since a motion has
+ * no origin.
+ */
+function moved(
   position: Vec3,
   parentXform: Mat3,
   from: ScreenPoint,
@@ -31,5 +35,41 @@ export default function movedPosition(
   );
   const [x, y] = vec3.toPlanar(position);
 
-  return [rounded(x + dx), rounded(y + dy)];
+  return [x + dx, y + dy];
+}
+
+/**
+ * The `position` that takes a frame's origin from `origin` on screen to
+ * `target`: exact, so that two frames snapped together coincide rather than
+ * nearly do.
+ */
+export function placedPosition(
+  position: Vec3,
+  parentXform: Mat3,
+  origin: ScreenPoint,
+  target: ScreenPoint,
+): [number, number] {
+  const [x, y] = moved(position, parentXform, origin, target);
+
+  return [settled(x), settled(y)];
+}
+
+/**
+ * Where a drag from `from` to `to` on screen takes a `position` that is read in
+ * a parent drawn under `parentXform`.
+ *
+ * The drag's motion, taken back through the parent's transform and added to
+ * where the position started, so a frame moves with the pointer however far
+ * from its origin it was grabbed. Rounded to a hundredth of a unit, finer than
+ * a pointer can place it, so the code written from it stays readable.
+ */
+export default function movedPosition(
+  position: Vec3,
+  parentXform: Mat3,
+  from: ScreenPoint,
+  to: ScreenPoint,
+): [number, number] {
+  const [x, y] = moved(position, parentXform, from, to);
+
+  return [rounded(x), rounded(y)];
 }

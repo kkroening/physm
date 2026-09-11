@@ -185,6 +185,15 @@
   stroke-linecap: round;
 }
 
+/* What a drag has snapped to: a ring, drawn over everything, that no click can
+   land on. */
+.editor__snap {
+  fill: none;
+  stroke: #d9480f;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
 .editor__gizmo-arm,
 .editor__gizmo-pointer {
   stroke-width: 1.5;
