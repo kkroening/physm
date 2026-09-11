@@ -51,8 +51,6 @@ the same scene. Play is cheap once the shell exists and may come forward.
   [0014 page 5](docs/issues/0014/05-metadata.md) argues schema-first. Declared
   components take no props until promote-to-prop, so it stays open -- Karl's
   call.
-- Refuse a repeated frame id in the core `Scene`. daglet's toposort skips an id
-  it has already sorted, so the second frame silently loses its coordinate.
 - Scene picking and dragging
 - Promote to prop
 - Code pane highlighting, and scroll-once on focus change
@@ -85,3 +83,5 @@ the same scene. Play is cheap once the shell exists and may come forward.
   missing one is a compile error, `coreComponents` lists the nine, and
   `canContain` says where each may go. Every default is checked by building
   with the prop omitted and with it stated.
+- **Unique frame ids** — the core `Scene` refuses two frames sharing an id,
+  rather than letting its toposort keep one and drop the other's coordinate.

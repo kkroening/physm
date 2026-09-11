@@ -147,6 +147,31 @@ describe('Scene queries', () => {
 });
 
 describe('Scene class', () => {
+  test('two frames sharing an id are refused, rather than one of them dropped', () => {
+    expect(
+      () =>
+        new Scene({
+          frames: [
+            new RotationalFrame({ id: 'a' }),
+            new RotationalFrame({ id: 'a' }),
+          ],
+        }),
+    ).toThrow(/Two frames share the id 'a'/);
+
+    // Nested, too: the toposort meets them at different depths.
+    expect(
+      () =>
+        new Scene({
+          frames: [
+            new TrackFrame({
+              id: 'a',
+              frames: [new RotationalFrame({ id: 'a' })],
+            }),
+          ],
+        }),
+    ).toThrow(/Two frames share the id 'a'/);
+  });
+
   test('constructor with default arguments', () => {
     const scene = new Scene();
     expect(scene.decals).toEqual([]);

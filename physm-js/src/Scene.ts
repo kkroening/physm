@@ -138,6 +138,28 @@ export default class Scene {
     this.constraints = [];
     this.gravity = gravity;
 
+    // Two frames with one id would be one frame to everything that finds a
+    // frame by id -- a state map, a constraint, the controls -- and the
+    // toposort keeps whichever it meets first, so the other would lose its
+    // coordinate without a word. The same frame reached twice is a different
+    // mistake, refused below with its own message.
+    const byId = new Map<FrameId, Frame>();
+    const visit = (frame: Frame): void => {
+      const seen = byId.get(frame.id);
+      if (seen && seen !== frame) {
+        throw new Error(
+          `Two frames share the id '${frame.id}'. A frame is found by its id, ` +
+            'so each one needs its own.',
+        );
+      }
+
+      if (!seen) {
+        byId.set(frame.id, frame);
+        frame.frames.forEach(visit);
+      }
+    };
+    this.frames.forEach(visit);
+
     const getFrameChildren = (frame: Frame): Frame[] => frame.frames;
     const getFrameId = (frame: Frame): FrameId => frame.id;
     this.sortedFrames = daglet
