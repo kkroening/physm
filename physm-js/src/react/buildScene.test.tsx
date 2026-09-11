@@ -18,6 +18,7 @@ import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import buildScene from './buildScene';
 import { CoincidenceConstraint, DistanceConstraint } from './../Constraint';
+import { createElement } from 'react';
 import { render } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 
@@ -447,6 +448,16 @@ describe('buildScene', () => {
         </>,
       ),
     ).toThrow(/Two frames share the id 'x'/);
+  });
+
+  test('refuses a building block missing a required prop, naming it', () => {
+    // Written source cannot get here -- TypeScript refuses it -- but a
+    // document can: a constraint just added has no ends picked yet.
+    const unfinished = createElement(Coincidence as unknown as () => null);
+
+    expect(() => buildScene(unfinished)).toThrow(
+      /<Coincidence> needs First end and Second end set/,
+    );
   });
 
   test('refuses a DOM element, naming it', () => {

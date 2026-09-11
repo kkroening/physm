@@ -434,3 +434,175 @@ describe('Editor, editing props', () => {
     expect(props).toHaveTextContent('It takes no props.');
   });
 });
+
+/** The library pane. */
+function library(): HTMLElement {
+  return screen.getByRole('region', { name: 'Library' });
+}
+
+describe('Editor, changing structure', () => {
+  test('adding with nothing selected appends to the body, and selects it', () => {
+    render(<Editor />);
+    fireEvent.click(within(library()).getByRole('button', { name: 'Line' }));
+
+    expect(code()).toMatch(/<\/TrackFrame>\s*<Line endPos=\{\[1, 0\]\} \/>/);
+
+    const props = screen.getByRole('region', { name: 'Properties' });
+    expect(within(props).getByRole('heading', { name: 'Line' })).toBeVisible();
+    expect(within(props).getByLabelText('End x')).toHaveValue('1');
+  });
+
+  test('adding with a frame selected puts it inside, last', () => {
+    render(<Editor />);
+    select('TrackFrame');
+
+    expect(library()).toHaveTextContent('Adds inside the selected TrackFrame.');
+
+    fireEvent.click(within(library()).getByRole('button', { name: 'Circle' }));
+
+    expect(code()).toMatch(/<Pendulum \/>\s*<Circle \/>\s*<\/TrackFrame>/);
+  });
+
+  test('adding with anything else selected puts it just after', () => {
+    render(<Editor />);
+    select('Box');
+
+    expect(library()).toHaveTextContent('Adds after the selected Box.');
+
+    fireEvent.click(within(library()).getByRole('button', { name: 'Circle' }));
+
+    expect(code()).toMatch(/<Box width=\{2\} \/>\s*<Circle \/>\s*<Weight/);
+  });
+
+  test('what cannot go where it would land is disabled, saying why', () => {
+    render(<Editor />);
+    const weight = within(library()).getByRole('button', { name: 'Weight' });
+
+    expect(weight).toBeDisabled();
+    expect(weight).toHaveAttribute(
+      'title',
+      expect.stringMatching(/has to go inside a frame/),
+    );
+
+    select('TrackFrame');
+
+    expect(weight).toBeEnabled();
+  });
+
+  test('delete removes a node and everything under it', () => {
+    render(<Editor />);
+    select('TrackFrame');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(code()).not.toContain('<TrackFrame');
+    expect(code()).not.toContain('<Pendulum />');
+    expect(
+      screen.getByRole('region', { name: 'Properties' }),
+    ).toHaveTextContent('Select a node');
+
+    // And from the keyboard.
+    const tree = screen.getByRole('tree', { name: 'Scene' });
+    fireEvent.keyDown(within(tree).getByText('Line'), { key: 'Delete' });
+
+    expect(within(tree).queryByText('Line')).toBeNull();
+  });
+
+  test('move up and down reorder siblings, and the selection follows', () => {
+    render(<Editor />);
+    select('Weight');
+    fireEvent.click(screen.getByRole('button', { name: 'Move up' }));
+
+    expect(code()).toMatch(/<Weight mass=\{50\} \/>\s*<Box width=\{2\} \/>/);
+    expect(
+      within(screen.getByRole('region', { name: 'Properties' })).getByRole(
+        'heading',
+        { name: 'Weight' },
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Move up' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move down' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move down' }));
+
+    expect(code()).toMatch(/<Pendulum \/>\s*<Weight mass=\{50\} \/>/);
+    expect(screen.getByRole('button', { name: 'Move down' })).toBeDisabled();
+
+    // And from the keyboard.
+    const tree = screen.getByRole('tree', { name: 'Scene' });
+    fireEvent.keyDown(within(tree).getByText('Weight'), {
+      key: 'ArrowUp',
+      altKey: true,
+    });
+
+    expect(code()).toMatch(/<Weight mass=\{50\} \/>\s*<Pendulum \/>/);
+  });
+
+  test('from the keyboard, each press acts on the node it acted on before', () => {
+    render(<Editor />);
+    const tree = screen.getByRole('tree', { name: 'Scene' });
+    const focusRow = (tag: string): void => {
+      (
+        within(tree).getByText(tag).closest('.editor__row') as HTMLElement
+      ).focus();
+    };
+    const press = (key: string, altKey = false): void => {
+      fireEvent.keyDown(document.activeElement!, { key, altKey });
+    };
+
+    // Focus a row once, then keep pressing wherever focus is, as a keyboard
+    // does -- rows are keyed by position, so the row can change under it.
+    focusRow('Pendulum');
+    press('Enter');
+    press('ArrowUp', true);
+    press('ArrowUp', true);
+
+    expect(code()).toMatch(/<Pendulum \/>\s*<Box width=\{2\} \/>\s*<Weight/);
+
+    press('ArrowDown', true);
+
+    expect(code()).toMatch(/<Box width=\{2\} \/>\s*<Pendulum \/>\s*<Weight/);
+
+    // A second Delete removes nothing the first did not.
+    press('Delete');
+    press('Delete');
+
+    expect(code()).not.toContain('<Pendulum />');
+    expect(code()).toContain('<Box width={2} />');
+    expect(code()).toContain('<Weight mass={50} />');
+
+    focusRow('Box');
+    press('Enter');
+    press('Backspace');
+
+    expect(code()).not.toContain('<Box');
+  });
+
+  test('Escape, or a click on empty tree, lets the end of the body be chosen again', () => {
+    render(<Editor />);
+    const tree = screen.getByRole('tree', { name: 'Scene' });
+    const line = within(tree).getByText('Line');
+    fireEvent.click(line);
+
+    expect(library()).toHaveTextContent('Adds after the selected Line.');
+
+    fireEvent.keyDown(line, { key: 'Escape' });
+
+    expect(library()).toHaveTextContent('Adds to the end of Scene.');
+
+    fireEvent.click(line);
+    fireEvent.click(tree);
+
+    expect(library()).toHaveTextContent('Adds to the end of Scene.');
+  });
+
+  test('a new constraint says what it needs before the scene builds', () => {
+    render(<Editor />);
+    fireEvent.click(
+      within(library()).getByRole('button', { name: 'Coincidence' }),
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'A <Coincidence> needs First end and Second end set',
+    );
+  });
+});
