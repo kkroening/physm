@@ -6,10 +6,11 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Type-ahead in the tree.** A typed letter moves the focus to the next row
-whose name starts with it, as the ARIA tree pattern recommends for a tree of
-more than a handful of rows. The starter's five rows need none, but a rig of a
-few dozen nodes is a long walk with the arrows.
+**The selection in the code.** Codegen records where each node's source sits
+in the module, so the code pane can highlight the selected node's lines, and
+scroll them into view once -- on a new selection or a change of tab -- rather
+than on every keystroke of an edit, which would pull the view away from what
+is being read.
 
 ## Next — the MVP
 
@@ -82,7 +83,6 @@ was built while gizmos were in review.
 - A modifier on a click in the scene, to select the expanded node itself
   rather than its nearest authored ancestor -- page 7's way to inspect one. It
   waits on the properties pane showing an expanded node, read-only.
-- Code pane highlighting, and scroll-once on focus change
 - Codegen polish: round numbers (`-Math.PI / 2`), constants for repeated values
 - The constraint-first direction ([0014 page 9](docs/issues/0014/09-horizon.md))
 
@@ -198,3 +198,7 @@ was built while gizmos were in review.
   that built drawn, dimmed, under the error, so it does not go blank on what
   the edit is doing to the rig. It stays until a scene builds, in its tab or
   another, or its component goes.
+- **Type-ahead in the tree** — a typed letter moves the focus to the next row
+  whose name starts with it, whatever the case; letters in quick succession
+  spell a longer name, and the same letter again steps through the rows that
+  start with it.

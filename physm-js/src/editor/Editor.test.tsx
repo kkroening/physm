@@ -1914,6 +1914,15 @@ function pressKey(key: string): void {
 }
 
 describe('Editor, the tree from the keyboard', () => {
+  // Type-ahead reads the clock, so each test runs on a fake one.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   test('each row is a tree item, named for what it shows, and Tab reaches one', () => {
     render(<Editor />);
 
@@ -2062,6 +2071,128 @@ describe('Editor, the tree from the keyboard', () => {
     act(() => rows()[4]!.focus());
     pressKey('Delete');
     pressKey('ArrowDown');
+
+    expect(document.activeElement).toBe(rows()[0]);
+  });
+
+  test('a typed letter moves to the next row whose name starts with it', () => {
+    render(<Editor />);
+    act(() => rows()[0]!.focus());
+    pressKey('w');
+
+    expect(document.activeElement).toBe(rows()[3]);
+
+    // Whatever the case, and round to the top.
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    pressKey('L');
+
+    expect(document.activeElement).toBe(rows()[0]);
+  });
+
+  test('letters in quick succession spell a name; a pause starts again', () => {
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <TrackFrame id="a" />
+            <TrackFrame id="b" />
+          </>,
+        )}
+      />,
+    );
+    act(() => rows()[0]!.focus());
+
+    // `t` steps on to the next row starting with it; `tr` still fits it, so
+    // the focus stays.
+    pressKey('t');
+    pressKey('r');
+
+    expect(document.activeElement).toBe(rows()[1]);
+
+    // After a pause, `t` is a search of its own, and steps on again.
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    pressKey('t');
+
+    expect(document.activeElement).toBe(rows()[0]);
+  });
+
+  test('the same letter again steps through the rows that start with it', () => {
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <Box width={1} height={1} />
+            <Circle radius={1} />
+            <Box width={2} height={1} />
+          </>,
+        )}
+      />,
+    );
+    act(() => rows()[0]!.focus());
+    pressKey('b');
+
+    expect(document.activeElement).toBe(rows()[2]);
+
+    pressKey('b');
+
+    expect(document.activeElement).toBe(rows()[0]);
+  });
+
+  test('with Alt, Ctrl or Meta held, a letter is left alone', () => {
+    render(<Editor />);
+    act(() => rows()[0]!.focus());
+
+    expect(fireEvent.keyDown(rows()[0]!, { key: 'b', ctrlKey: true })).toBe(
+      true,
+    );
+    expect(document.activeElement).toBe(rows()[0]);
+  });
+
+  test('after a delete, a letter finds its row from the top of the tree', () => {
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <Box width={1} height={1} />
+            <Circle radius={1} />
+            <Box width={2} height={1} />
+          </>,
+        )}
+      />,
+    );
+    select('Circle');
+    act(() => rows()[1]!.focus());
+    pressKey('Delete');
+
+    // The focus is on the tree itself, so the first box is the next one.
+    pressKey('b');
+
+    expect(document.activeElement).toBe(rows()[0]);
+  });
+
+  test('Space selects, and is no part of a search', () => {
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <TrackFrame id="a" />
+            <TrackFrame id="b" />
+          </>,
+        )}
+      />,
+    );
+    act(() => rows()[0]!.focus());
+    pressKey('t');
+    pressKey(' ');
+
+    expect(shown()).toBe('TrackFrame');
+
+    // So the search is still `t`, and a second `t` steps on.
+    pressKey('t');
 
     expect(document.activeElement).toBe(rows()[0]);
   });

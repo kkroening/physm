@@ -165,6 +165,32 @@ function rowAfter(item: HTMLElement, key: string): HTMLElement | null {
   }
 }
 
+/** How long a pause between keys starts a new type-ahead search, in ms. */
+const TYPE_AHEAD_PAUSE = 500;
+
+/**
+ * The row type-ahead moves the focus to: the next whose name starts with
+ * `text`, round to the top. A longer search may stay on `item` while it still
+ * fits; one letter, or the same letter again and again, steps on from it.
+ */
+function rowStarting(
+  tree: HTMLElement,
+  item: HTMLElement | null,
+  text: string,
+): HTMLElement | null {
+  const rows = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"]')];
+  const at = item ? rows.indexOf(item) : -1;
+  const repeated = [...text].every((letter) => letter === text.charAt(0));
+  const search = (repeated ? text.charAt(0) : text).toLowerCase();
+  const from = repeated ? at + 1 : Math.max(at, 0);
+
+  return (
+    [...rows.slice(from), ...rows.slice(0, from)].find((row) =>
+      (row.getAttribute('aria-label') ?? '').toLowerCase().startsWith(search),
+    ) ?? null
+  );
+}
+
 /** Every row's key -- its path, joined -- in the order the tree draws them. */
 function rowKeys(nodes: readonly DocNode[], parent: NodePath = []): string[] {
   return nodes.flatMap((node, index) => {
@@ -405,6 +431,28 @@ function TreePane({
   // or the first row -- as the ARIA tree pattern has it; in this editor the
   // selection is also what the properties pane edits.
   const [focused, setFocused] = useState<string | null>(null);
+
+  // What has been typed for type-ahead, and when the last key of it came.
+  const typed = useRef({ text: '', at: 0 });
+
+  /** Move the focus to the row whose name starts with what has been typed. */
+  const typeAhead = (
+    tree: HTMLElement,
+    target: HTMLElement,
+    key: string,
+  ): void => {
+    const now = Date.now();
+    const text =
+      now - typed.current.at > TYPE_AHEAD_PAUSE
+        ? key
+        : typed.current.text + key;
+    typed.current = { text, at: now };
+    rowStarting(
+      tree,
+      target.closest<HTMLElement>('[role="treeitem"]'),
+      text,
+    )?.focus();
+  };
   const keys = rowKeys(body);
   const tabbable =
     (focused !== null && keys.includes(focused) ? focused : null) ??
@@ -499,6 +547,18 @@ function TreePane({
           }
         }}
         onKeyDown={(event) => {
+          // A letter, wherever the focus is in the tree, moves it to a row
+          // named for what has been typed. Space is not one: it selects.
+          if (event.key.length === 1 && event.key !== ' ' && plainKey(event)) {
+            event.preventDefault();
+            typeAhead(
+              event.currentTarget,
+              event.target as HTMLElement,
+              event.key,
+            );
+            return;
+          }
+
           if (event.target !== event.currentTarget) {
             return;
           }
