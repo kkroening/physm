@@ -37,14 +37,13 @@ overrides, or props that depend on other props, the schema grows toward being a
 language, and schemas that grow toward being languages are a well-known way to
 lose a year.
 
-**Positional identity leaks into the simulation.** Identity is the key path
-([page 4](./04-tree.md#identity-and-what-a-row-is-called)), and an implicit key
-is an index — so deleting a node shifts every sibling after it, and
-[page 8](./08-play.md#editing-while-it-runs)'s state-carrying hands each one its
-neighbour's velocity. The symptom is a rig that twitches rather than one that
-breaks, which is the worse kind. *Mitigation:* assign explicit keys on reorder
-and delete. That is a heuristic about when identity *ought* to be pinned, and
-heuristics about intent are where this will be wrong occasionally.
+**Positional identity leaks into the simulation — resolved by not carrying
+state across structural edits.** An implicit key is an index, so deleting a node
+shifts every sibling after it, and carrying state by path would hand each its
+neighbour's velocity. Rather than a heuristic that assigns keys on reorder and
+delete — a guess about intent — a structural edit resets simulation state
+([page 8](./08-play.md#editing-while-it-runs)). Identity then only has to be
+right across a prop edit, where the paths do not move and it trivially is.
 
 ## The ones that would cost time
 

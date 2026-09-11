@@ -164,7 +164,8 @@ generated index matches its issue files.
 
 [`frontier.md`](frontier.md) is the working plan for work that spans many PRs —
 currently the scene editor, [0014](docs/issues/0014.md). It holds what is in view,
-what comes next, and what is further out.
+what comes next, what is further out, the decisions made along the way, and what
+is done.
 
 - **Read it before choosing work**, every time — including after a context
   boundary, where it is the fastest way back to where things stand.
@@ -172,7 +173,10 @@ what comes next, and what is further out.
   into view, and revise the rest if the work taught something. Merging then
   leaves `master` saying where things are.
 - **Revise it freely.** It is a plan, not a contract; reordering, splitting or
-  dropping a step is an ordinary edit.
+  dropping a step is an ordinary edit. **Decisions are the exception**: one
+  changes only on Karl's say-so, and a PR that changes one says so in its
+  description. A decision that shapes a design belongs in that design's issue;
+  the frontier links to it.
 - **Review it lightly.** A reviewer should raise plan concerns as discussion
   (`COMMENT`) rather than change requests, and should not audit it the way it
   audits code or design docs.

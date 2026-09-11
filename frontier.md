@@ -47,10 +47,9 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Decisions
 
-- **Structural edits may reset simulation state.** Removing a segment or changing
-  a count shifts positional keys, so state carried across the edit would land on
-  the wrong frames. Accept the disruption rather than engineering around it; the
-  `key` pattern is worth that price. *(Karl, 2026-09-11)*
+- **A structural edit resets simulation state; a prop edit carries it over.**
+  Recorded in [0014 page 8](docs/issues/0014/08-play.md#editing-while-it-runs).
+  *(Karl, 2026-09-11)*
 
 ## Done
 

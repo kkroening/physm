@@ -62,12 +62,21 @@ genuinely hard to reason about, which is what a change *does* to a rig in motion
 arriving from a second direction. An identity that shifts on edit makes every
 edit a reset, and the failure is not loud — the rig just quietly restarts.
 
-⚠️ **Positional identity is where this leaks.** Delete the second of five rope
-segments and every segment below shifts up one index, so each inherits its
-neighbour's velocity. The result is not a crash; it is a rope that twitches for
-no visible reason. That is the strongest argument for the editor assigning an
-explicit `key` as soon as a node is reordered or deleted around, rather than
-waiting to be asked.
+⚠️ **Positional identity is where this leaks, and the editor resets rather than
+guessing.** Delete the second of five rope segments and every segment below
+shifts up one index — so carrying state by path would not reset the shifted
+frames, it would hand each its neighbour's velocity. The only honest options are
+getting identity right or resetting, and the editor resets:
+
+- **A structural edit** — insert, delete, reorder, or a change to a count —
+  **resets simulation state** to the authored initial state.
+- **A prop edit** leaves the structure alone, so every path is unchanged and
+  state carries over by path, as above.
+
+An explicit `key` the author wrote is honoured either way; the editor does not
+invent one. *(Karl, 2026-09-11: the `key` pattern is worth that price, and an
+edit that changes a rig's structure is not one a person expects to leave the
+motion undisturbed.)*
 
 ## When carrying state over is wrong
 
