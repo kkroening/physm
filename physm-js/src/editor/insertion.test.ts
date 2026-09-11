@@ -5,7 +5,7 @@ import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import starterDocument from './starterDocument';
-import { extractComponent, removeNode } from './sceneDocument';
+import { extractComponent, insertNode, removeNode } from './sceneDocument';
 import { insertionPoint, newNode, refusalOf } from './insertion';
 import type {
   ComponentRef,
@@ -257,5 +257,152 @@ describe('newNode', () => {
       props: {},
       children: [],
     });
+  });
+});
+
+describe('insertion, a component that keeps a place for children', () => {
+  const PLACE: DocNode = {
+    type: { kind: 'children' },
+    props: {},
+    children: [],
+  };
+
+  /**
+   * The starter scene, with the pendulum's place for children in its frame --
+   * or, with `atTop`, at the top of its body.
+   */
+  function withPlace(atTop = false): SceneDocument {
+    const doc = starterDocument();
+
+    return {
+      ...doc,
+      definitions: doc.definitions.map((definition) => {
+        const [frame] = definition.body;
+        if (definition.name !== 'Pendulum' || !frame) {
+          return definition;
+        }
+
+        return atTop
+          ? { ...definition, body: [...definition.body, PLACE] }
+          : {
+              ...definition,
+              body: [{ ...frame, children: [...frame.children, PLACE] }],
+            };
+      }),
+    };
+  }
+
+  // Scene: [Line, TrackFrame [Box, Weight, Pendulum]].
+  test("an instance takes children, held to the rules of its place's frame", () => {
+    expect(insertionPoint(withPlace(), 'Scene', [1, 2])).toEqual({
+      parent: [1, 2],
+      index: 0,
+      holder: 'frame',
+    });
+  });
+
+  test("with the place at the top of its body, to the root's", () => {
+    const doc = withPlace(true);
+    const point = insertionPoint(doc, 'Scene', [1, 2]);
+
+    expect(point).toEqual({ parent: [1, 2], index: 0, holder: 'root' });
+    expect(refusalOf(doc, 'Scene', point, core(Weight))).toMatch(
+      /has to go inside a frame/,
+    );
+  });
+
+  test('an instance of a component with no place takes none', () => {
+    // So an addition goes after it, among the cart's children.
+    expect(insertionPoint(starterDocument(), 'Scene', [1, 2])).toEqual({
+      parent: [1],
+      index: 3,
+      holder: 'frame',
+    });
+  });
+
+  test("an instance's own children are held to its place's rules", () => {
+    // Selected, a child of the instance puts an addition after it, still
+    // under the place's rules.
+    const doc = insertNode(
+      withPlace(true),
+      'Scene',
+      [1, 2],
+      0,
+      newNode(core(RotationalFrame)),
+    );
+
+    expect(insertionPoint(doc, 'Scene', [1, 2, 0])).toEqual({
+      parent: [1, 2, 0],
+      index: 0,
+      holder: 'frame',
+    });
+
+    const withLine = insertNode(doc, 'Scene', [1, 2], 1, newNode(core(Line)));
+
+    expect(insertionPoint(withLine, 'Scene', [1, 2, 1])).toEqual({
+      parent: [1, 2],
+      index: 2,
+      holder: 'root',
+    });
+  });
+
+  test('a place passed on through a nested instance is followed to where it ends up', () => {
+    /** The scene as one rig, whose place for children is among its pendulum's. */
+    const rigOver = (placed: SceneDocument): SceneDocument => ({
+      ...placed,
+      definitions: [
+        ...placed.definitions.filter(({ name }) => name !== placed.root),
+        {
+          name: 'Rig',
+          body: [{ type: defined('Pendulum'), props: {}, children: [PLACE] }],
+        },
+        {
+          name: placed.root,
+          body: [{ type: defined('Rig'), props: {}, children: [] }],
+        },
+      ],
+    });
+
+    // What a rig is given goes where the pendulum keeps its place: in its
+    // frame, under a frame's rules, or at the top of its body, under the
+    // root's.
+    expect(insertionPoint(rigOver(withPlace()), 'Scene', [0])).toEqual({
+      parent: [0],
+      index: 0,
+      holder: 'frame',
+    });
+    expect(insertionPoint(rigOver(withPlace(true)), 'Scene', [0])).toEqual({
+      parent: [0],
+      index: 0,
+      holder: 'root',
+    });
+  });
+
+  test("a place for children goes in a component's body, and only once", () => {
+    const children: ComponentRef = { kind: 'children' };
+    const doc = starterDocument();
+
+    expect(
+      refusalOf(doc, 'Scene', insertionPoint(doc, 'Scene', null), children),
+    ).toMatch(/goes in a component's body/);
+    expect(
+      refusalOf(
+        doc,
+        'Pendulum',
+        insertionPoint(doc, 'Pendulum', [0]),
+        children,
+      ),
+    ).toBeNull();
+
+    const placed = withPlace();
+
+    expect(
+      refusalOf(
+        placed,
+        'Pendulum',
+        insertionPoint(placed, 'Pendulum', [0]),
+        children,
+      ),
+    ).toBe('Pendulum already has a place for its children.');
   });
 });

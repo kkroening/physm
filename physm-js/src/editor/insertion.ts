@@ -1,5 +1,10 @@
 import { canContain } from './../react/componentMeta';
-import { definitionOf, insertNode, nodeAt } from './sceneDocument';
+import {
+  definitionOf,
+  insertNode,
+  nodeAt,
+  placeholderPath,
+} from './sceneDocument';
 import type {
   ComponentRef,
   DocNode,
@@ -17,23 +22,46 @@ export interface InsertionPoint {
   readonly index: number;
 
   /**
-   * The slot of the node the list belongs to -- `root` for a definition's body,
-   * and `null` for a composite, whose children go wherever its body puts them.
+   * The rules the list is held to: a frame's; the root's, for a definition's
+   * body or for an instance of a component whose place for children is at the
+   * top of its body; or `null` for a composite whose own body decides where
+   * its children go.
    */
   readonly holder: Slot | 'root' | null;
 }
 
-/** A node's slot, when it is a building block that states one. */
-function slotOf(node: DocNode): Slot | null {
-  return node.type.kind === 'core' ? node.type.component.meta.slot : null;
+/**
+ * The rules a node holds its children to, as `InsertionPoint.holder` has them:
+ * a frame's, or those of the place a defined component keeps for its
+ * instances' children. `null` for any other node, which, asked of the selected
+ * node, means it takes none, and asked of a list's owner, that its own body
+ * decides.
+ */
+function holderOf(doc: SceneDocument, node: DocNode): Slot | 'root' | null {
+  if (node.type.kind === 'core') {
+    return node.type.component.meta.slot === 'frame' ? 'frame' : null;
+  }
+
+  const place =
+    node.type.kind === 'defined' ? placeholderPath(doc, node.type.name) : null;
+  if (!place || node.type.kind !== 'defined') {
+    return null;
+  }
+
+  // At the top of the body, the children stand where the instance does; the
+  // root's rules are the ones every body is held to.
+  return place.length === 1
+    ? 'root'
+    : holderOf(doc, nodeAt(doc, node.type.name, place.slice(0, -1)));
 }
 
 /**
  * Where an addition lands, given what is selected.
  *
- * Inside the selected node when it is a frame, after its last child -- a frame
- * is the one thing that holds others. Just after the selected node, among its
- * siblings, when it is anything else. At the end of the body when nothing is.
+ * Inside the selected node when it holds others, after its last child: a
+ * frame, or an instance of a component that keeps a place for children. Just
+ * after the selected node, among its siblings, when it is anything else. At
+ * the end of the body when nothing is.
  */
 export function insertionPoint(
   doc: SceneDocument,
@@ -52,8 +80,9 @@ export function insertionPoint(
   }
 
   const node = nodeAt(doc, definition, selected);
-  if (slotOf(node) === 'frame') {
-    return { parent: selected, index: node.children.length, holder: 'frame' };
+  const holder = holderOf(doc, node);
+  if (holder) {
+    return { parent: selected, index: node.children.length, holder };
   }
 
   const parent = selected.slice(0, -1);
@@ -61,7 +90,9 @@ export function insertionPoint(
   return {
     parent,
     index: selected[selected.length - 1]! + 1,
-    holder: parent.length ? slotOf(nodeAt(doc, definition, parent)) : 'root',
+    holder: parent.length
+      ? holderOf(doc, nodeAt(doc, definition, parent))
+      : 'root',
   };
 }
 
@@ -179,6 +210,17 @@ export function refusalOf(
   point: InsertionPoint,
   ref: ComponentRef,
 ): string | null {
+  if (ref.kind === 'children' && definition === doc.root) {
+    return (
+      "Children goes in a component's body: the scene has no instances to " +
+      'give children to.'
+    );
+  }
+
+  if (ref.kind === 'children' && placeholderPath(doc, definition)) {
+    return `${definition} already has a place for its children.`;
+  }
+
   if (ref.kind === 'defined' && ref.name === definition) {
     return `${ref.name} cannot go inside itself.`;
   }
@@ -226,7 +268,12 @@ export function refusalOf(
   }
 
   const slot = ref.kind === 'core' ? ref.component.meta.slot : 'frame';
-  const name = ref.kind === 'core' ? ref.component.meta.name : ref.name;
+  const name =
+    ref.kind === 'core'
+      ? ref.component.meta.name
+      : ref.kind === 'children'
+        ? 'Children'
+        : ref.name;
 
   return point.holder === null || canContain(point.holder, slot)
     ? null

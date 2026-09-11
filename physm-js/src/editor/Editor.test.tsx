@@ -2846,3 +2846,125 @@ describe('Editor, finding a node', () => {
     }
   });
 });
+
+/** Add `name` from the library, where the selection says. */
+function add(name: string): void {
+  fireEvent.click(within(library()).getByRole('button', { name }));
+}
+
+/** Open the pendulum's own tab, from its instance's row in the scene's tree. */
+function openPendulum(): void {
+  fireEvent.doubleClick(
+    within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
+  );
+}
+
+/** Click the row showing `text` in the tree of `name`. */
+function selectIn(name: string, text: string): void {
+  fireEvent.click(
+    within(screen.getByRole('tree', { name })).getAllByText(text)[0]!,
+  );
+}
+
+describe('Editor, components that take children', () => {
+  test('a place for children, and a pendulum hung in a pendulum', () => {
+    const { container } = render(<Editor />);
+
+    // In the pendulum's own tab, a place for its children, in its frame.
+    openPendulum();
+    selectIn('Pendulum', 'RotationalFrame');
+    add('Children');
+
+    expect(code()).toContain(
+      'function Pendulum({ children }: { children?: ReactNode }): ReactElement {',
+    );
+    expect(code()).toContain('{children}');
+
+    // Back in the scene's tab, the pendulum's instance takes a pendulum.
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+    selectIn('Scene', 'Pendulum');
+
+    expect(library()).toHaveTextContent('Adds inside the selected Pendulum.');
+
+    add('Pendulum');
+
+    expect(code()).toMatch(/<Pendulum>\s*<Pendulum \/>\s*<\/Pendulum>/);
+
+    // The cart, the pendulum, and the pendulum hung in it.
+    expect(container.querySelectorAll('.editor__gizmo')).toHaveLength(3);
+  });
+
+  test("the library's place for children goes in a component's tab, once", () => {
+    render(<Editor />);
+    const place = (): HTMLElement =>
+      within(library()).getByRole('button', { name: 'Children' });
+
+    expect(place()).toBeDisabled();
+    expect(place()).toHaveAttribute(
+      'title',
+      expect.stringMatching(/goes in a component's body/),
+    );
+
+    openPendulum();
+
+    expect(place()).toBeEnabled();
+
+    add('Children');
+
+    expect(place()).toBeDisabled();
+    expect(place()).toHaveAttribute(
+      'title',
+      'Pendulum already has a place for its children.',
+    );
+  });
+
+  test('the place says what it is, and cannot leave while children use it', () => {
+    render(<Editor />);
+    openPendulum();
+    selectIn('Pendulum', 'RotationalFrame');
+    add('Children');
+
+    expect(shown()).toBe('Children');
+    expect(
+      screen.getByRole('region', { name: 'Properties' }),
+    ).toHaveTextContent(
+      'The children an instance of Pendulum is given go here',
+    );
+
+    // Nor can the frame holding it become a component of its own.
+    selectIn('Pendulum', 'RotationalFrame');
+
+    expect(
+      screen.getByRole('button', { name: 'Extract to component' }),
+    ).toBeDisabled();
+
+    // Given a circle, the scene's instance holds children.
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+    selectIn('Scene', 'Pendulum');
+    add('Circle');
+    fireEvent.click(screen.getByRole('tab', { name: 'Pendulum' }));
+    selectIn('Pendulum', 'Children');
+    const remove = within(
+      screen.getByRole('region', { name: 'Tree' }),
+    ).getByRole('button', { name: 'Delete' });
+
+    expect(remove).toBeDisabled();
+    expect(remove).toHaveAttribute(
+      'title',
+      expect.stringMatching(
+        /holds children, which would then have nowhere to go/,
+      ),
+    );
+
+    // From the keyboard, neither.
+    fireEvent.keyDown(
+      within(screen.getByRole('tree', { name: 'Pendulum' })).getByRole(
+        'treeitem',
+        { name: 'Children' },
+      ),
+      { key: 'Delete' },
+    );
+
+    expect(code()).toContain('{children}');
+  });
+});

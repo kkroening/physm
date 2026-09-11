@@ -1,6 +1,7 @@
 import Box from './../react/Box';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './../react/Circle';
+import Frame from './../Frame';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
@@ -8,6 +9,7 @@ import buildScene from './../react/buildScene';
 import starterDocument from './starterDocument';
 import {
   definitionOf,
+  deletionRefusal,
   documentFrom,
   elementOf,
   extractComponent,
@@ -17,6 +19,7 @@ import {
   nameRefusal,
   nodeAt,
   nodesFrom,
+  placeholderPath,
   removeNode,
   setProp,
 } from './sceneDocument';
@@ -476,5 +479,165 @@ describe('elementOf, with origins', () => {
       { definition: 'Pendulum', path: [0] },
       { definition: 'Pendulum', path: [0, 0] },
     ]);
+  });
+});
+
+/** A component's place for its instances' children. */
+const PLACE: DocNode = { type: { kind: 'children' }, props: {}, children: [] };
+
+/**
+ * An arm that keeps a place for children in its frame, and a scene with one
+ * instance of it, given `given`.
+ */
+function armGiven(given: DocNode[]): SceneDocument {
+  const [arm] = nodesFrom(<RotationalFrame id="arm" />);
+
+  return {
+    root: 'Scene',
+    definitions: [
+      { name: 'Arm', body: [{ ...arm!, children: [PLACE] }] },
+      {
+        name: 'Scene',
+        body: [
+          {
+            type: { kind: 'defined', name: 'Arm' },
+            props: {},
+            children: given,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe("a component's place for children", () => {
+  test("an instance's children are built where its component keeps a place", () => {
+    const scene = buildScene(
+      elementOf(armGiven(nodesFrom(<TrackFrame id="slider" />))),
+    );
+
+    expect(scene.frames.map(({ id }) => id)).toEqual(['arm']);
+    expect(scene.frames[0]!.frames.map(({ id }) => id)).toEqual(['slider']);
+  });
+
+  test('an instance given none builds the component alone', () => {
+    const scene = buildScene(elementOf(armGiven([])));
+
+    expect(scene.frames.map(({ id }) => id)).toEqual(['arm']);
+    expect(scene.frames[0]!.frames).toEqual([]);
+  });
+
+  test('the children lead back to the body that gave them', () => {
+    const origins = new WeakMap<object, ElementOrigin>();
+    const trails = new Map<string, readonly ReactElement[]>();
+    buildScene(
+      elementOf(
+        armGiven(nodesFrom(<TrackFrame id="slider" />)),
+        'Scene',
+        origins,
+      ),
+      {
+        trace: (built, trail) => {
+          if (built instanceof Frame) {
+            trails.set(built.id, trail);
+          }
+        },
+      },
+    );
+    const slider = trails.get('slider')!;
+
+    // The scene wrote the slider, as a child of its instance of the arm: that
+    // is the node a click on it selects, and a drag of it moves.
+    expect(origins.get(slider[slider.length - 1]!)).toEqual({
+      definition: 'Scene',
+      path: [0, 0],
+    });
+  });
+
+  test('placeholderPath finds the place, or says there is none', () => {
+    const doc = armGiven([]);
+
+    expect(placeholderPath(doc, 'Arm')).toEqual([0, 0]);
+    expect(placeholderPath(doc, 'Scene')).toBeNull();
+  });
+
+  test('the place can be deleted unless an instance holds children', () => {
+    const given = armGiven(nodesFrom(<TrackFrame id="slider" />));
+
+    expect(deletionRefusal(given, 'Arm', [0, 0])).toBe(
+      'An instance of Arm in Scene holds children, which would then have ' +
+        'nowhere to go: delete them first.',
+    );
+    // So can the frame it is in, which takes it along.
+    expect(deletionRefusal(given, 'Arm', [0])).not.toBeNull();
+    expect(deletionRefusal(armGiven([]), 'Arm', [0, 0])).toBeNull();
+    expect(deletionRefusal(given, 'Scene', [0, 0])).toBeNull();
+
+    // Another component's instance holding children is no reason.
+    const [arm] = armGiven([]).definitions;
+    const other: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        arm!,
+        { name: 'Other', body: [PLACE] },
+        {
+          name: 'Scene',
+          body: [
+            { type: { kind: 'defined', name: 'Arm' }, props: {}, children: [] },
+            {
+              type: { kind: 'defined', name: 'Other' },
+              props: {},
+              children: nodesFrom(<TrackFrame id="t" />),
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(deletionRefusal(other, 'Arm', [0, 0])).toBeNull();
+
+    // An instance given children by passing on a place of its own is found in
+    // the body that holds it -- and so is one in the scene.
+    const passed: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        arm!,
+        {
+          name: 'Rig',
+          body: [
+            {
+              type: { kind: 'defined', name: 'Arm' },
+              props: {},
+              children: [PLACE],
+            },
+          ],
+        },
+        {
+          name: 'Scene',
+          body: [
+            { type: { kind: 'defined', name: 'Rig' }, props: {}, children: [] },
+            {
+              type: { kind: 'defined', name: 'Arm' },
+              props: {},
+              children: nodesFrom(<TrackFrame id="t" />),
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(deletionRefusal(passed, 'Arm', [0, 0])).toMatch(
+      /^An instance of Arm in Rig and Scene holds children/,
+    );
+  });
+
+  test('the place stays in its component, and its name is taken', () => {
+    const doc = armGiven([]);
+
+    expect(extractionRefusal(doc, 'Arm', [0])).toMatch(
+      /place for its children, which has to stay in Arm/,
+    );
+    expect(nameRefusal(doc, 'Children')).not.toBeNull();
+    expect(nameRefusal(doc, 'ReactNode')).not.toBeNull();
   });
 });

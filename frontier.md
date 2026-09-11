@@ -6,18 +6,15 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Components that take children.** Nesting one pendulum in another should
-make a double pendulum, but a component this document defines takes no
-children, so a rig of any size has to be built from the core frames. A
-`Children` placeholder in a component's body -- at most one, in whichever
-frame and at whatever position its author chooses -- says where an
-instance's children go. An instance of such a component then accepts
-children in the tree and the library, and the code writes
-`function Pendulum({ children })` and `<Pendulum><Pendulum /></Pendulum>`.
-First the placeholder at its frame's origin, then its position, which puts a
-nested pendulum at the bob: a frame without a coordinate in the core, or an
-offset the builder applies to what sits in the placeholder -- Karl's call.
-Karl named this the most pressing pain point (2026-09-11).
+**Where a component's children hang.** A nested pendulum should hang from the
+bob, but the `Children` placeholder puts an instance's children at the origin
+of the frame it sits in -- for the pendulum, its pivot. The placeholder needs a
+position, and the starter pendulum keeps its own pivot offset in its body, so
+the place goes at `[4, 0.5]` for the next one's pivot to land on the bob.
+Either way the code writes a positioned element with no coordinate of its own
+around `{children}`, `<Mount position={[4, 0.5]}>`; what differs is who
+resolves it -- the core, as a frame without a coordinate, or the builder,
+folding the translation into what sits in it. Karl's call.
 
 ## Next — the MVP
 
@@ -242,3 +239,10 @@ was built while gizmos were in review.
   how many; Enter and Shift+Enter step through the rest. What it turns up is
   marked while it holds anything, Escape clears it and returns to the tree,
   and the tree scrolls to the selection when it changes.
+- **Components that take children** — a component's body may hold one
+  `Children` placeholder, added from the library in a component's tab and
+  never the scene's. An instance of such a component then takes children in
+  the tree and the library, held to the rules of the frame the placeholder is
+  in, and they are built there: the code writes `function Pendulum({ children })`
+  and `{children}` where it goes. The placeholder cannot be deleted while an
+  instance holds children, nor extracted from its component.

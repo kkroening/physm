@@ -537,3 +537,93 @@ describe('emitScene, numbers', () => {
     expect(source).toContain('initialState={[Math.PI / 2, 0]}');
   });
 });
+
+describe('emitScene, children', () => {
+  const PLACE: DocNode = {
+    type: { kind: 'children' },
+    props: {},
+    children: [],
+  };
+
+  /**
+   * A pendulum that keeps a place for children in its frame, and a scene
+   * hanging one pendulum in another.
+   */
+  function nested(): SceneDocument {
+    const [pendulum] = nodesFrom(
+      <RotationalFrame position={[0, -0.5]}>
+        <Line endPos={[4, 0]} />
+        <Weight mass={10} position={[4, 0]} />
+      </RotationalFrame>,
+    );
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Pendulum',
+          body: [{ ...pendulum!, children: [...pendulum!.children, PLACE] }],
+        },
+        {
+          name: 'Scene',
+          body: [{ ...instance('Pendulum'), children: [instance('Pendulum')] }],
+        },
+      ],
+    };
+  }
+
+  test('a component that keeps a place takes `children`, and puts them there', () => {
+    const source = expectRoundTrip(nested());
+
+    expect(source).toContain(
+      "import type { ReactElement, ReactNode } from 'react';",
+    );
+    expect(source).toContain(
+      'function Pendulum({ children }: { children?: ReactNode }): ReactElement {',
+    );
+    expect(source).toContain('      {children}\n');
+    expect(source).toContain(
+      '    <Pendulum>\n      <Pendulum />\n    </Pendulum>\n',
+    );
+  });
+
+  test('it type-checks as the repo would', () => {
+    expect(typeCheck({ 'Scene.tsx': emitScene(nested()).source })).toEqual([]);
+  });
+
+  test('a body of nothing but the place writes it in a fragment', () => {
+    const source = expectRoundTrip({
+      root: 'Scene',
+      definitions: [
+        { name: 'Pass', body: [PLACE] },
+        {
+          name: 'Scene',
+          body: [
+            {
+              ...instance('Pass'),
+              children: nodesFrom(<RotationalFrame id="r" />),
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(source).toContain(
+      'function Pass({ children }: { children?: ReactNode }): ReactElement {\n' +
+        '  return (\n    <>\n      {children}\n    </>\n  );\n}',
+    );
+  });
+
+  test('a module with no place for children imports no `ReactNode`', () => {
+    expect(emitScene(everything()).source).toContain(
+      "import type { ReactElement } from 'react';",
+    );
+  });
+
+  test("the place's range is its `{children}`", () => {
+    const { source, ranges } = emitScene(nested());
+    const [start, end] = ranges.get(rangeKey('Pendulum', [0, 2]))!;
+
+    expect(source.slice(start, end)).toBe('{children}');
+  });
+});

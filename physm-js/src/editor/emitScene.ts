@@ -1,4 +1,4 @@
-import { definitionOf } from './sceneDocument';
+import { definitionOf, placeholderPath } from './sceneDocument';
 import type {
   ComponentRef,
   Definition,
@@ -147,7 +147,7 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 /** The tag a node's element is written with. */
-function tagOf(type: ComponentRef): string {
+function tagOf(type: Exclude<ComponentRef, { kind: 'children' }>): string {
   const name = type.kind === 'core' ? type.component.meta.name : type.name;
   if (!COMPONENT_NAME.test(name)) {
     throw new Error(
@@ -319,7 +319,9 @@ function importsOf(doc: SceneDocument): string[] {
     ...(core.size
       ? [`import { ${[...core].sort().join(', ')} } from './react';`]
       : []),
-    "import type { ReactElement } from 'react';",
+    doc.definitions.some(({ name }) => placeholderPath(doc, name))
+      ? "import type { ReactElement, ReactNode } from 'react';"
+      : "import type { ReactElement } from 'react';",
   ];
 }
 
@@ -347,6 +349,17 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
     indent: string,
   ): void => {
     const start = source.length;
+
+    // Where the component's instances put their children.
+    if (node.type.kind === 'children') {
+      write(`${indent}{children}\n`);
+      ranges.set(rangeKey(definition, path), [
+        start + indent.length,
+        source.length - 1,
+      ]);
+      return;
+    }
+
     const tag = tagOf(node.type);
     // A value that cannot be written says which one, and where it is.
     const written = (name: string, value: unknown): string => {
@@ -388,12 +401,17 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
       throw new Error(`'${definition.name}' cannot be a component name.`);
     }
 
+    const props = placeholderPath(doc, definition.name)
+      ? '{ children }: { children?: ReactNode }'
+      : '';
     write(
-      `${isRoot ? 'export default ' : ''}function ${definition.name}(): ReactElement {\n`,
+      `${isRoot ? 'export default ' : ''}function ${definition.name}(${props}): ReactElement {\n`,
     );
 
+    // A lone `{children}` goes in a fragment too: in parentheses by itself it
+    // would be an object, not an element.
     const { body } = definition;
-    if (body.length === 1) {
+    if (body.length === 1 && body[0]!.type.kind !== 'children') {
       write('  return (\n');
       writeNode(body[0]!, definition.name, [0], '    ');
       write('  );\n');

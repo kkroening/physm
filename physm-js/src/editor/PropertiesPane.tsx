@@ -376,6 +376,20 @@ function NodeProps({
     );
   }
 
+  if (node.type.kind === 'children') {
+    return (
+      <>
+        <h2 className="editor__selected">Children</h2>
+        <p className="editor__hint">
+          The children an instance of {selection.definition} is given go here:
+          at the origin of the frame this sits in, at the top of the body with
+          the instance, or -- among an instance's children -- wherever that
+          instance puts its own.
+        </p>
+      </>
+    );
+  }
+
   if (node.type.kind === 'imported') {
     return (
       <>

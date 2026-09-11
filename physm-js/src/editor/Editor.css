@@ -651,3 +651,10 @@
     max-height: 20rem;
   }
 }
+
+/* A component's place for its instances' children: no component of its own,
+   so set apart from the ones that are. */
+.editor__row[data-kind='children'] .editor__tag,
+.editor__library button[data-kind='children'] {
+  font-style: italic;
+}
