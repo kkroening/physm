@@ -8,6 +8,8 @@ import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import coreComponents from './../react/coreComponents';
+import emitScene, { rangeKey } from './emitScene';
+import starterDocument from './starterDocument';
 import { InvalidStateMapError } from './../Solver';
 import { documentFrom, nodesFrom } from './sceneDocument';
 import { vi } from 'vitest';
@@ -2237,41 +2239,95 @@ function marked(): string | null {
   );
 }
 
+/** How much of the code pane's text comes before its mark. */
+function markOffset(): number {
+  const pane = screen.getByRole('region', { name: 'Code' });
+  const before = document.createRange();
+  before.setStart(pane, 0);
+  before.setEndBefore(pane.querySelector('mark')!);
+
+  return before.toString().length;
+}
+
 describe('Editor, the selection in the code', () => {
-  // jsdom scrolls nothing and has no `scrollIntoView`: this one counts calls.
-  const scrolled = vi.fn();
+  // jsdom lays nothing out. These give the code pane a height of 300 pixels,
+  // its top 100 down the screen, and put the mark `content` pixels down what
+  // the pane scrolls -- moving up the screen as the pane scrolls down.
+  let content = { top: 600, bottom: 620 };
+  let spies: { mockRestore: () => void }[] = [];
 
   beforeEach(() => {
-    scrolled.mockClear();
-    Element.prototype.scrollIntoView = scrolled;
+    content = { top: 600, bottom: 620 };
+    spies = [
+      vi
+        .spyOn(Element.prototype, 'clientHeight', 'get')
+        .mockImplementation(function (this: Element) {
+          return this.matches('.editor__code') ? 300 : 0;
+        }),
+      vi
+        .spyOn(Element.prototype, 'getBoundingClientRect')
+        .mockImplementation(function (this: Element) {
+          const pane = this.closest('.editor__code');
+          const [top, bottom] = this.matches('.editor__code')
+            ? [100, 400]
+            : this.tagName === 'MARK' && pane
+              ? [
+                  100 + content.top - pane.scrollTop,
+                  100 + content.bottom - pane.scrollTop,
+                ]
+              : [0, 0];
+
+          return new DOMRect(0, top, 0, bottom - top);
+        }),
+    ];
   });
 
   afterEach(() => {
-    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    spies.forEach((spy) => spy.mockRestore());
   });
 
-  test("the selected node's source is marked, and scrolled to once", () => {
+  test("the selected node's source is marked, and the pane scrolled to it once", () => {
     render(<Editor />);
+    const pane = screen.getByRole('region', { name: 'Code' });
 
     expect(marked()).toBeNull();
 
     select('Box');
 
+    // By the smallest move that shows it: its bottom to the pane's.
     expect(marked()).toBe('<Box width={2} />');
-    expect(scrolled).toHaveBeenCalledTimes(1);
+    expect(pane.scrollTop).toBe(320);
 
-    // An edit moves the mark with the node, and leaves the view alone.
+    // An edit moves the mark with the node, and leaves the view where the
+    // person put it.
+    pane.scrollTop = 0;
     fireEvent.change(within(select('Box')).getByLabelText('Width'), {
       target: { value: '3' },
     });
 
     expect(marked()).toBe('<Box width={3} />');
-    expect(scrolled).toHaveBeenCalledTimes(1);
+    expect(pane.scrollTop).toBe(0);
 
     select('Weight');
 
     expect(marked()).toBe('<Weight mass={50} />');
-    expect(scrolled).toHaveBeenCalledTimes(2);
+    expect(pane.scrollTop).toBe(320);
+  });
+
+  test('a mark taller than the pane comes in by its first line', () => {
+    content = { top: 400, bottom: 1100 };
+    render(<Editor />);
+    const pane = screen.getByRole('region', { name: 'Code' });
+    select('TrackFrame');
+
+    // Its opening tag at the pane's top, not its closing tag at the bottom.
+    expect(pane.scrollTop).toBe(400);
+
+    // Scrolled so that line shows, a mark there stays put.
+    pane.scrollTop = 250;
+    select('Box');
+
+    expect(pane.scrollTop).toBe(250);
   });
 
   test('a frame is marked with all it holds', () => {
@@ -2296,11 +2352,11 @@ describe('Editor, the selection in the code', () => {
 
     expect(marked()).toBe('<Circle position={[4, 0]} radius={0.5} />');
 
-    // In the module, the mark falls inside `Pendulum`, before the scene.
-    const code = screen.getByRole('region', { name: 'Code' }).textContent!;
-    const at = code.indexOf(marked()!);
+    // The pane holds the module unchanged, and the mark starts where codegen
+    // wrote the node -- not merely somewhere its text occurs.
+    const { source, ranges } = emitScene(starterDocument());
 
-    expect(at).toBeGreaterThan(code.indexOf('function Pendulum()'));
-    expect(at).toBeLessThan(code.indexOf('export default function Scene()'));
+    expect(code()).toBe(source);
+    expect(markOffset()).toBe(ranges.get(rangeKey('Pendulum', [0, 1]))![0]);
   });
 });

@@ -84,6 +84,11 @@ was built while gizmos were in review.
 - A modifier on a click in the scene, to select the expanded node itself
   rather than its nearest authored ancestor -- page 7's way to inspect one. It
   waits on the properties pane showing an expanded node, read-only.
+- The focused component's definition marked in the code on a change of tab,
+  as [0014 page 3](docs/issues/0014/03-focus.md#what-is-global-and-what-belongs-to-a-tab)
+  has it. A tab change clears the selection, so after one nothing is marked
+  and the pane stays where it was. It needs codegen to record a range per
+  definition; whether the selection's mark stands in for it is Karl's call.
 - The constraint-first direction ([0014 page 9](docs/issues/0014/09-horizon.md))
 
 ## Decisions
@@ -204,5 +209,6 @@ was built while gizmos were in review.
   start with it. From the tree itself, as after a delete, a search starts at
   the row Tab would reach.
 - **The selection in the code** — the code pane marks the selected node's
-  source, a frame with all it holds, and scrolls it into view once when the
-  selection changes -- not on every edit.
+  source, a frame with all it holds, and scrolls to it once when the
+  selection changes -- not on every edit, and nothing but the pane. A mark
+  taller than the pane comes in by its first line.

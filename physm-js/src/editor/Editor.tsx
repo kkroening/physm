@@ -11,6 +11,7 @@ import getViewXformMatrix from './../getViewXformMatrix';
 import hitsAt from './hitsAt';
 import movedPosition, { placedPosition } from './movedPosition';
 import placeGizmos from './placeGizmos';
+import scrollTopFor from './scrollTopFor';
 import snapPoints, { nearestSnap } from './snapPoints';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
@@ -1130,15 +1131,32 @@ function CodePane({
     ? rangeKey(selection.definition, selection.path)
     : null;
   const range = selected ? emitted.ranges.get(selected) : undefined;
+  const paneRef = useRef<HTMLElement>(null);
   const markRef = useRef<HTMLElement>(null);
 
-  // Optional: a DOM that draws nothing, as in a test, may have no scrolling.
+  // Once a selection, not on every edit, which would pull the view away from
+  // what is being read. The pane's own scroll, measured, rather than
+  // `scrollIntoView`, which would scroll the editor around the pane as well.
   useEffect(() => {
-    markRef.current?.scrollIntoView?.({ block: 'nearest' });
+    const pane = paneRef.current;
+    const mark = markRef.current;
+    if (!pane || !mark) {
+      return;
+    }
+
+    // Where the top of what the pane scrolls is on screen.
+    const offset = pane.getBoundingClientRect().top - pane.scrollTop;
+    const { top, bottom } = mark.getBoundingClientRect();
+    pane.scrollTop = scrollTopFor(
+      pane.scrollTop,
+      pane.clientHeight,
+      top - offset,
+      bottom - offset,
+    );
   }, [selected]);
 
   return (
-    <section className="editor__code" aria-label="Code">
+    <section ref={paneRef} className="editor__code" aria-label="Code">
       <pre>
         <code>
           {range ? (
