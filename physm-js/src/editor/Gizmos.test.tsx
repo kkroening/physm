@@ -1,5 +1,6 @@
 import Circle from './../react/Circle';
-import Gizmos, { ParentAxes } from './Gizmos';
+import Gizmos from './Gizmos';
+import ParentAxes from './ParentAxes';
 import RotationalFrame from './../react/RotationalFrame';
 import SceneView from './../react/SceneView';
 import TrackFrame from './../react/TrackFrame';

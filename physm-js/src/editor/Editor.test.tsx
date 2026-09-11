@@ -1668,7 +1668,12 @@ describe('Editor, dragging', () => {
       clientY: -36,
     });
 
-    // Pressed, not yet moved: still a click, with no drag to show.
+    // Pressed, not yet moved: still a click, with no drag to show. Nor after
+    // a wobble within a click's reach.
+    expect(parentAxes(container)).toEqual([]);
+
+    fireEvent.mouseMove(window, { clientX: 0, clientY: -38, buttons: 1 });
+
     expect(parentAxes(container)).toEqual([]);
 
     fireEvent.mouseMove(window, { clientX: 0, clientY: -54, buttons: 1 });
@@ -1681,9 +1686,49 @@ describe('Editor, dragging', () => {
       { middle: [0, -54], direction: [-1, 0], name: 'y', named: [-1, 0] },
     ]);
 
-    fireEvent.mouseUp(window, { clientX: 0, clientY: -54 });
+    // Moved on, they go with it.
+    fireEvent.mouseMove(window, { clientX: 0, clientY: -72, buttons: 1 });
+
+    expect(parentAxes(container).map(({ middle }) => middle)).toEqual([
+      [0, -72],
+      [0, -72],
+    ]);
+
+    fireEvent.mouseUp(window, { clientX: 0, clientY: -72 });
 
     expect(parentAxes(container)).toEqual([]);
+  });
+
+  test("the parent's axes are drawn only in the tab the drag began in", () => {
+    // Each body has a frame at its first place: `a` in the scene's, and `b`
+    // in its component's.
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <TrackFrame id="a" />
+            <TrackFrame id="b" />
+          </>,
+        )}
+      />,
+    );
+    fireEvent.click(rows()[1]!.firstElementChild!);
+    extract('Slider');
+    fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
+      clientX: 0,
+      clientY: -3,
+    });
+    fireEvent.mouseMove(window, { clientX: 18, clientY: -3, buttons: 1 });
+
+    expect(parentAxes(container)).toHaveLength(2);
+
+    // However the focus comes to leave mid-drag -- an undo that returns to
+    // the scene's tab, say -- `a` in that tab is not the frame being dragged.
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+
+    expect(parentAxes(container)).toEqual([]);
+
+    fireEvent.mouseUp(window, { clientX: 18, clientY: -3 });
   });
 
   test('a drag goes where the pointer goes, to the nearest hundredth', () => {

@@ -1,7 +1,8 @@
 import './Editor.css';
 import * as vec3 from './../Vec3';
 import Frame from './../Frame';
-import Gizmos, { ParentAxes } from './Gizmos';
+import Gizmos from './Gizmos';
+import ParentAxes from './ParentAxes';
 import PropertiesPane from './PropertiesPane';
 import SceneView from './../react/SceneView';
 import buildScene from './../react/buildScene';
@@ -835,8 +836,8 @@ function ScenePane({
   // What a drag under way has snapped to, marked on screen until it ends.
   const [snapMark, setSnapMark] = useState<ScreenPoint | null>(null);
 
-  // The node a drag under way moves, once it has moved.
-  const [dragging, setDragging] = useState<NodePath | null>(null);
+  // The node a drag under way moves, and the body it is in, once it has moved.
+  const [dragging, setDragging] = useState<Selection | null>(null);
 
   /** Where a mouse event lands, in the pane's own coordinates. */
   const pointOf = (event: {
@@ -978,7 +979,7 @@ function ScenePane({
       if (!current.moved) {
         current.moved = true;
         onPick(current.path);
-        setDragging(current.path);
+        setDragging({ definition: current.definition, path: current.path });
       }
 
       // Where the origin goes with the pointer, and the point it snaps to
@@ -1050,12 +1051,13 @@ function ScenePane({
   };
 
   // The dragged frame's gizmo as the scene is drawn now -- where the drag has
-  // taken it, and in a run, where the run has.
+  // taken it, and in a run, where the run has. Only in the tab the drag began
+  // in: a path means nothing in another body.
   const draggedPlacement =
-    dragging && 'scene' in built && drawn
+    dragging?.definition === focus && 'scene' in built && drawn
       ? placeGizmos(drawn.scene, drawn.stateMap, xformMatrix).find(
           ({ frame }) =>
-            built.ownPathOf(frame)?.join('.') === dragging.join('.'),
+            built.ownPathOf(frame)?.join('.') === dragging.path.join('.'),
         )
       : undefined;
 
