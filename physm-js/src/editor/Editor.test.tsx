@@ -545,9 +545,12 @@ describe('Editor, changing structure', () => {
     render(<Editor />);
     const tree = screen.getByRole('tree', { name: 'Scene' });
     const focusRow = (tag: string): void => {
-      (
-        within(tree).getByText(tag).closest('.editor__row') as HTMLElement
-      ).focus();
+      act(() => {
+        within(tree)
+          .getByText(tag)
+          .closest<HTMLElement>('[role="treeitem"]')!
+          .focus();
+      });
     };
     const press = (key: string, altKey = false): void => {
       fireEvent.keyDown(document.activeElement!, { key, altKey });
@@ -1647,5 +1650,171 @@ describe('Editor, dragging', () => {
 
     // The world's x: along the arm's own axes this would be [0, -1].
     expect(code()).toContain('position={[1, 0]}');
+  });
+});
+
+/** The scene tree's rows, as a screen reader finds them. */
+function rows(): HTMLElement[] {
+  return within(screen.getByRole('tree', { name: 'Scene' })).getAllByRole(
+    'treeitem',
+  );
+}
+
+/** Press `key` wherever the focus is, as a keyboard does. */
+function pressKey(key: string): void {
+  fireEvent.keyDown(document.activeElement!, { key });
+}
+
+describe('Editor, the tree from the keyboard', () => {
+  test('each row is a tree item, named for what it shows, and Tab reaches one', () => {
+    render(<Editor />);
+
+    expect(rows().map((row) => row.getAttribute('aria-label'))).toEqual([
+      'Line',
+      'TrackFrame id="cart"',
+      'Box',
+      'Weight mass=50',
+      'Pendulum',
+    ]);
+    expect(screen.getByRole('treeitem', { name: 'TrackFrame id="cart"' })).toBe(
+      rows()[1],
+    );
+
+    // With nothing selected, Tab reaches the first row.
+    expect(rows().map((row) => row.tabIndex)).toEqual([0, -1, -1, -1, -1]);
+
+    // Nothing else in the tree is a Tab stop: not the rows inside the items.
+    const tree = screen.getByRole('tree', { name: 'Scene' });
+
+    expect(
+      [...tree.querySelectorAll<HTMLElement>('*')].filter(
+        (element) => element.tabIndex >= 0,
+      ),
+    ).toEqual([rows()[0]]);
+  });
+
+  test('Up, Down, Home and End move the focus, and Enter selects', () => {
+    render(<Editor />);
+    act(() => rows()[0]!.focus());
+    pressKey('ArrowDown');
+
+    expect(document.activeElement).toBe(rows()[1]);
+
+    pressKey('ArrowDown');
+
+    expect(document.activeElement).toBe(rows()[2]);
+
+    // From inside the cart, too: only the row the key was pressed in moves.
+    pressKey('ArrowDown');
+
+    expect(document.activeElement).toBe(rows()[3]);
+
+    pressKey('End');
+
+    expect(document.activeElement).toBe(rows()[4]);
+
+    pressKey('Home');
+
+    expect(document.activeElement).toBe(rows()[0]);
+
+    // There is nothing above the first row.
+    pressKey('ArrowUp');
+
+    expect(document.activeElement).toBe(rows()[0]);
+
+    pressKey('ArrowDown');
+    pressKey('Enter');
+
+    expect(shown()).toBe('TrackFrame');
+  });
+
+  test("Right goes into a node's children, and Left back out", () => {
+    render(<Editor />);
+    act(() => rows()[1]!.focus());
+    pressKey('ArrowRight');
+
+    expect(document.activeElement).toBe(rows()[2]);
+
+    // The box has no children, and the cart no parent: each stays put.
+    pressKey('ArrowRight');
+
+    expect(document.activeElement).toBe(rows()[2]);
+
+    pressKey('ArrowLeft');
+
+    expect(document.activeElement).toBe(rows()[1]);
+
+    pressKey('ArrowLeft');
+
+    expect(document.activeElement).toBe(rows()[1]);
+  });
+
+  test('in the tree the Tab stop is the focused row; back in, the selection', () => {
+    const { container } = render(<Editor />);
+    select('Box');
+    act(() => rows()[2]!.focus());
+    pressKey('ArrowDown');
+    pressKey('ArrowDown');
+
+    // On the pendulum, with the box still selected: the pendulum is the stop.
+    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, -1, -1, 0]);
+
+    // Out of the tree: Tab back in lands on the selection...
+    act(() => (document.activeElement as HTMLElement).blur());
+
+    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, 0, -1, -1]);
+
+    // ...and on a new one, however it was made.
+    clickScene(container, circleCentre(container));
+
+    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, -1, -1, 0]);
+  });
+
+  test('the focused row stays the Tab stop when the selection is cleared', () => {
+    render(<Editor />);
+    select('Box');
+    act(() => rows()[2]!.focus());
+    pressKey('Escape');
+
+    expect(document.activeElement).toBe(rows()[2]);
+    expect(rows().map((row) => row.tabIndex)).toEqual([-1, -1, 0, -1, -1]);
+  });
+
+  test('with Alt, Ctrl or Meta held, the arrows are left to the browser', () => {
+    render(<Editor />);
+    act(() => rows()[2]!.focus());
+
+    expect(
+      fireEvent.keyDown(rows()[2]!, { key: 'ArrowLeft', altKey: true }),
+    ).toBe(true);
+    expect(
+      fireEvent.keyDown(rows()[2]!, { key: 'ArrowRight', metaKey: true }),
+    ).toBe(true);
+    expect(document.activeElement).toBe(rows()[2]);
+  });
+
+  test('after a delete, an arrow takes the focus up again from the tree', () => {
+    render(<Editor />);
+    select('Box');
+    act(() => rows()[2]!.focus());
+    pressKey('Delete');
+
+    expect(document.activeElement).toBe(
+      screen.getByRole('tree', { name: 'Scene' }),
+    );
+
+    // The row that took the deleted one's place.
+    pressKey('ArrowDown');
+
+    expect(document.activeElement).toBe(rows()[2]);
+  });
+
+  test('deleting the last row, focused and not selected, leaves the tree reachable', () => {
+    render(<Editor />);
+    act(() => rows()[4]!.focus());
+    pressKey('Delete');
+    pressKey('ArrowDown');
+
+    expect(document.activeElement).toBe(rows()[0]);
   });
 });

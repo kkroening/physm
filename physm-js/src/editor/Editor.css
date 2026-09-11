@@ -313,7 +313,13 @@
   background-color: #dce7f2;
 }
 
-.editor__row:focus-visible {
+/* The focus is on the tree item, which holds its children too: ring its own
+   row, not the whole of it. */
+.editor__tree [role='treeitem']:focus {
+  outline: none;
+}
+
+.editor__tree [role='treeitem']:focus-visible > .editor__row {
   outline: 2px solid #3d6fa8;
   outline-offset: 1px;
 }
