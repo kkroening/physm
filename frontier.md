@@ -6,16 +6,16 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Insert, delete, reorder.** The library adds where the selection says, and
-the tree's toolbar and keys delete and reorder.
+**Extract to component, and tabs.** Extraction turns a rig laid out from
+building blocks into one described by components.
 
-- an addition lands inside a selected frame, after any other selected node, or
-  at the end of the body when nothing is selected
-- what cannot go there is shown disabled, saying why: the builders' own rules,
-  and a component inside itself
-- a new node starts with its required props at their initial values; a
-  constraint's ends wait for a person to pick them
-- a building block missing a required prop fails to build by name
+- the selected subtree moves into a new definition, an instance takes its
+  place, and the new component opens in its own tab
+- a name the generated module could not use is refused as it is typed
+- an instance of a defined component opens by double-click, or from the
+  properties pane
+- ids, a frame's or an anchor's, are scene-wide, so a component whose subtree
+  names one cannot be added a second time
 
 ## Next — the MVP
 
@@ -28,10 +28,8 @@ Roughly one PR each.
 5. ~~**Codegen**~~ — done
 6. ~~**Editor shell**~~ — done
 7. ~~**Selection and prop editing**~~ — done
-8. **Insert, delete, reorder** — *in view*
-9. **Extract to component, and tabs** — ids, a frame's or an anchor's, are
-   scene-wide and a repeat is refused, so extraction has to deal with an id it captures:
-   refuse the subtree, promote the id to a prop, or scope ids per instance
+8. ~~**Insert, delete, reorder**~~ — done
+9. **Extract to component, and tabs** — *in view*
 10. **Play**
 11. **Gizmos**
 
@@ -116,3 +114,8 @@ the same scene. Play is cheap once the shell exists and may come forward.
   metadata: a length refuses a negative, an angle and a rotational frame's
   state are shown in degrees, and emptying a field returns a prop to its
   default unless it is required. Every accepted keystroke is a new document.
+- **Insert, delete, reorder** — the library adds where the selection says, and
+  shows what cannot go there disabled with the reason; the tree's toolbar and
+  keys delete and reorder; a new node starts with its required props at their
+  initial values; and a building block missing a required prop fails to build
+  by name.
