@@ -41,9 +41,9 @@ was built while gizmos were in review.
 
 ## Further out
 
-- Keyboard in the tree, as a tree: a roving tabindex on the tree items, Up and
-  Down to move focus, Enter and Space to select. Focus lands on a row with no
-  role today, so a screen reader hears nothing when a node is selected.
+- Type-ahead in the tree: a typed letter moves to the next row whose name
+  starts with it, as the ARIA tree pattern recommends for a long tree. The
+  starter's five rows need none; a rig of a few dozen would.
 - Keep the last scene that built drawn, dimmed, under a build error, reset on
   a change of focus. With every keystroke a new document, an edit can pass
   through states that do not build -- retyping a position under a stated
@@ -182,3 +182,8 @@ was built while gizmos were in review.
   selected node if its gizmo is under the pointer, and otherwise the topmost
   gizmo -- which blocks the press, with a not-allowed pointer, when a
   component's instance built its frame.
+- **The tree as a tree** — the focus is on each row's tree item, named for
+  what the row shows, so a screen reader says which node it is on. Tab reaches
+  one row: the focused one while the focus is in the tree, and the selection
+  or the first row coming back in. The arrows move through the rest: Up and
+  Down, Home and End, Right into a node's children and Left back out.

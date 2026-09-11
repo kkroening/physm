@@ -108,49 +108,160 @@ function rowKey(node: DocNode, index: number): string {
   return node.key === undefined ? String(index) : `$${node.key}`;
 }
 
+/** The keys that move the focus between rows, rather than act on one. */
+const NAVIGATION = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+  'ArrowLeft',
+  'ArrowRight',
+]);
+
+/**
+ * Whether a key came without Alt, Ctrl or Meta. Held with one of those, an
+ * arrow is the browser's -- Back and Forward, say -- not the tree's.
+ */
+function plainKey(event: {
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+}): boolean {
+  return !(event.altKey || event.ctrlKey || event.metaKey);
+}
+
+/**
+ * The row a navigation key moves the focus to from `item`, or `null` where
+ * there is none: Up and Down to the row above and below, Home and End to the
+ * first and last, Right into a node's first child and Left out to its parent.
+ * The tree never collapses, so Right and Left only ever move.
+ */
+function rowAfter(item: HTMLElement, key: string): HTMLElement | null {
+  const rows = [
+    ...(item
+      .closest('[role="tree"]')
+      ?.querySelectorAll<HTMLElement>('[role="treeitem"]') ?? []),
+  ];
+  const at = rows.indexOf(item);
+
+  switch (key) {
+    case 'ArrowUp':
+      return rows[at - 1] ?? null;
+    case 'ArrowDown':
+      return rows[at + 1] ?? null;
+    case 'Home':
+      return rows[0] ?? null;
+    case 'End':
+      return rows[rows.length - 1] ?? null;
+    case 'ArrowRight':
+      return item.querySelector<HTMLElement>('[role="treeitem"]');
+    case 'ArrowLeft':
+      return (
+        item.parentElement?.closest<HTMLElement>('[role="treeitem"]') ?? null
+      );
+    default:
+      return null;
+  }
+}
+
+/** Every row's key -- its path, joined -- in the order the tree draws them. */
+function rowKeys(nodes: readonly DocNode[], parent: NodePath = []): string[] {
+  return nodes.flatMap((node, index) => {
+    const path = [...parent, index];
+
+    return [path.join('.'), ...rowKeys(node.children, path)];
+  });
+}
+
 /** One node of the tree, and everything under it. */
 function TreeRow({
   node,
   path,
   selected,
+  tabbable,
+  onFocusRow,
   ...actions
 }: TreeActions & {
   node: DocNode;
   path: NodePath;
   /** The selected node's path, joined -- `null` when none is. */
   selected: string | null;
+
+  /** The one row Tab reaches, by its path joined: see `TreePane`. */
+  tabbable: string;
+  onFocusRow: (key: string) => void;
 }): ReactElement {
   const summary = summaryOf(node);
-  const rowRef = useRef<HTMLDivElement>(null);
-  const isSelected = selected === path.join('.');
+  const itemRef = useRef<HTMLLIElement>(null);
+  const key = path.join('.');
+  const isSelected = selected === key;
 
   // Keyboard focus follows the selection while it is in the tree. Rows are
   // keyed by position, so after a move the focused row shows a different node,
   // and the next keystroke would act on that one instead.
   useEffect(() => {
-    const row = rowRef.current;
+    const item = itemRef.current;
     if (
       isSelected &&
-      row &&
-      row !== document.activeElement &&
-      row.closest('[role="tree"]')?.contains(document.activeElement)
+      item &&
+      item !== document.activeElement &&
+      item.closest('[role="tree"]')?.contains(document.activeElement)
     ) {
-      row.focus();
+      item.focus();
     }
   }, [isSelected]);
   const { type } = node;
 
   return (
     <li
+      ref={itemRef}
       role="treeitem"
       aria-selected={isSelected}
       aria-expanded={node.children.length ? true : undefined}
+      aria-label={summary ? `${tagOf(type)} ${summary}` : tagOf(type)}
+      tabIndex={tabbable === key ? 0 : -1}
+      onFocus={(event) => {
+        if (event.target === event.currentTarget) {
+          onFocusRow(key);
+        }
+      }}
+      onKeyDown={(event) => {
+        // A key reaches every row around the one it was pressed in, too, and
+        // only that row acts on it.
+        if (
+          (event.target as HTMLElement).closest('[role="treeitem"]') !==
+          event.currentTarget
+        ) {
+          return;
+        }
+
+        if (
+          event.altKey &&
+          (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+        ) {
+          event.preventDefault();
+          actions.onMove(path, event.key === 'ArrowUp' ? -1 : 1);
+        } else if (plainKey(event) && NAVIGATION.has(event.key)) {
+          event.preventDefault();
+          rowAfter(event.currentTarget, event.key)?.focus();
+        } else if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          actions.onSelect(path);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          actions.onDeselect();
+        } else if (event.key === 'Delete' || event.key === 'Backspace') {
+          event.preventDefault();
+          actions.onDelete(path);
+          // Off the row: it now shows the next node, which a second press
+          // would delete as well. The tree takes focus and ignores Delete.
+          event.currentTarget.closest<HTMLElement>('[role="tree"]')?.focus();
+        }
+      }}
     >
       <div
-        ref={rowRef}
         className="editor__row"
         data-kind={type.kind}
-        tabIndex={0}
         title={
           type.kind === 'defined'
             ? `Double-click to open ${type.name}`
@@ -163,29 +274,8 @@ function TreeRow({
             actions.onOpen(type.name);
           }
         }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            actions.onSelect(path);
-          } else if (event.key === 'Escape') {
-            event.preventDefault();
-            actions.onDeselect();
-          } else if (event.key === 'Delete' || event.key === 'Backspace') {
-            event.preventDefault();
-            actions.onDelete(path);
-            // Off the row: it now shows the next node, which a second press
-            // would delete as well. The tree takes focus and ignores Delete.
-            event.currentTarget.closest<HTMLElement>('[role="tree"]')?.focus();
-          } else if (
-            event.altKey &&
-            (event.key === 'ArrowUp' || event.key === 'ArrowDown')
-          ) {
-            event.preventDefault();
-            actions.onMove(path, event.key === 'ArrowUp' ? -1 : 1);
-          }
-        }}
       >
-        <span className="editor__disclosure">
+        <span className="editor__disclosure" aria-hidden="true">
           {node.children.length ? '▾' : ''}
         </span>
         <span className="editor__tag">{tagOf(type)}</span>
@@ -198,6 +288,8 @@ function TreeRow({
               node={child}
               path={[...path, index]}
               selected={selected}
+              tabbable={tabbable}
+              onFocusRow={onFocusRow}
               {...actions}
               key={rowKey(child, index)}
             />
@@ -305,6 +397,19 @@ function TreePane({
     },
   };
   const { body } = definitionOf(doc, focus);
+
+  // The row the focus is in, while it is in the tree. It is the Tab stop, so
+  // Shift+Tab leaves the tree from wherever the arrows took the focus. It is
+  // forgotten when the focus leaves, so Tab back in lands on the selection --
+  // or the first row -- as the ARIA tree pattern has it; in this editor the
+  // selection is also what the properties pane edits.
+  const [focused, setFocused] = useState<string | null>(null);
+  const keys = rowKeys(body);
+  const tabbable =
+    (focused !== null && keys.includes(focused) ? focused : null) ??
+    selectedKey ??
+    keys[0] ??
+    '';
   const index = selectedPath ? selectedPath[selectedPath.length - 1]! : null;
   const count = selectedPath
     ? siblingCount(doc, focus, selectedPath.slice(0, -1))
@@ -384,9 +489,28 @@ function TreePane({
         role="tree"
         aria-label={focus}
         tabIndex={-1}
+        onBlur={(event) => {
+          // Out of the tree altogether, not from one row to another.
+          if (
+            !event.currentTarget.contains(event.relatedTarget as Node | null)
+          ) {
+            setFocused(null);
+          }
+        }}
         onKeyDown={(event) => {
-          if (event.key === 'Escape' && event.target === event.currentTarget) {
+          if (event.target !== event.currentTarget) {
+            return;
+          }
+
+          if (event.key === 'Escape') {
             rowActions.onDeselect();
+          } else if (plainKey(event) && NAVIGATION.has(event.key)) {
+            // The focus is on the tree itself, as after a delete: take up the
+            // row Tab would reach.
+            event.preventDefault();
+            event.currentTarget
+              .querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]')
+              ?.focus();
           }
         }}
       >
@@ -395,6 +519,8 @@ function TreePane({
             node={node}
             path={[at]}
             selected={selectedPath ? selectedPath.join('.') : null}
+            tabbable={tabbable}
+            onFocusRow={setFocused}
             {...rowActions}
             key={rowKey(node, at)}
           />
