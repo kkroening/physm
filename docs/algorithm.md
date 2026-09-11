@@ -86,6 +86,14 @@ That the prismatic generator is nilpotent, $`\hat\zeta^2 = 0`$, is exactly why `
 never overrides `get_local_accel_matrix` and inherits the `Mat3::zeros()` default — a fact
 that reads as an omission in the source and is actually a theorem.
 
+A `FixedFrame` is the degenerate case: no joint at all, $`L_i(q) = C_i`$ with
+$`C_i = T(p_i)\,R(\alpha_i)`$, so $`\partial_q L_i = 0`$ and $`V_i = 0`$. Its coordinate still
+exists — every frame is one in a state map — but its row and column of the mass matrix are
+zero, so both solvers give it an inertia of its own: the largest joint's, which keeps the
+relative singularity tests free of the scene's units. Nothing acts on it, since its force
+entry is built from $`V_i`$ as well, and nothing couples to it. So $`\ddot q = 0`$, the frame
+stays where it was put, and no other coordinate's motion changes.
+
 ---
 
 ## 3. The identity everything rests on

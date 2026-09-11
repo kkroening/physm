@@ -1,3 +1,4 @@
+import FixedFrame from './FixedFrame';
 import JsSolver from './JsSolver';
 import RotationalFrame from './RotationalFrame';
 import RsSolver from './RsSolver';
@@ -230,6 +231,51 @@ describeCrossValidation('tree scene', getTreeScene, {
 });
 
 describeCrossValidation('rope scene', getRopeScene);
+
+/**
+ * A cart carrying a pendulum on a fixed frame raised and turned off it, and a
+ * slider on a fixed frame of its own: coordinates that move nothing, which
+ * both solvers have to give the same inertia.
+ */
+function getFixedFrameScene() {
+  return new Scene({
+    frames: [
+      new TrackFrame({
+        id: 'cart',
+        initialState: [1, 0.5],
+        weights: [new Weight(20)],
+        frames: [
+          new FixedFrame({
+            id: 'mount',
+            position: [0, 2],
+            angle: 0.5,
+            frames: [
+              new RotationalFrame({
+                id: 'pendulum',
+                initialState: [0.3, -1.2],
+                weights: [new Weight(5, { position: [10, 0] })],
+              }),
+            ],
+          }),
+        ],
+      }),
+      new FixedFrame({
+        id: 'ramp',
+        position: [30, 0],
+        angle: -Math.PI / 6,
+        frames: [
+          new TrackFrame({
+            id: 'slider',
+            initialState: [0, 0.5],
+            weights: [new Weight(3)],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+describeCrossValidation('fixed-frame scene', getFixedFrameScene);
 
 describe('stabilization', () => {
   async function loadRsWasmModule() {

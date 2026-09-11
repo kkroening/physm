@@ -594,7 +594,35 @@ export default class Scene {
         this.getMassMatrixEntry(rowIndex, colIndex, velMatMap, weightPosMap),
       ),
     );
+
+    // A coordinate that moves nothing -- a fixed frame's -- has a row and a
+    // column of zeros, which would leave `g` singular. It is given an inertia
+    // of its own instead. That changes nothing else: it stays decoupled, and
+    // with nothing acting on it, it stays at rest. It is the largest joint's,
+    // so the relative singularity tests find nothing small in it whatever
+    // units the scene is authored in.
+    const inertia =
+      Math.max(
+        0,
+        ...this.sortedFrames.flatMap((frame, index) =>
+          frame.isJoint() ? [at(at(array, index, 'row'), index, 'entry')] : [],
+        ),
+      ) || 1;
+    this.sortedFrames.forEach((frame, index) => {
+      if (!frame.isJoint()) {
+        at(array, index, 'row')[index] = inertia;
+      }
+    });
+
     return array;
+  }
+
+  /**
+   * How many coordinates move something: the joints. What a constraint row
+   * can be held against, where a fixed frame's coordinate moves nothing.
+   */
+  jointCount(): number {
+    return this.sortedFrames.filter((frame) => frame.isJoint()).length;
   }
 
   /**
@@ -712,10 +740,10 @@ export default class Scene {
     // `J` has full row rank, which is the condition the augmented system needs
     // anyway.
     const rowCount = rows.length;
-    if (rowCount > this.sortedFrames.length) {
+    if (rowCount > this.jointCount()) {
       throw new Error(
         `Scene is over-determined: ${rowCount} constraint rows against ` +
-          `${this.sortedFrames.length} coordinates. Some of these constraints ` +
+          `${this.jointCount()} coordinates. Some of these constraints ` +
           'cannot hold at the same time.',
       );
     }
@@ -829,10 +857,10 @@ export default class Scene {
       (total, constraint) => total + constraint.rowCount,
       0,
     );
-    if (rowCount > this.sortedFrames.length) {
+    if (rowCount > this.jointCount()) {
       throw new Error(
         `Scene is over-determined: ${rowCount} constraint rows against ` +
-          `${this.sortedFrames.length} coordinates. Some of these constraints ` +
+          `${this.jointCount()} coordinates. Some of these constraints ` +
           'cannot hold at the same time.',
       );
     }

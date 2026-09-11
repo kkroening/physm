@@ -76,6 +76,10 @@ impl Frame for RotationalFrame {
         &self.weights
     }
 
+    fn is_joint(&self) -> bool {
+        true
+    }
+
     fn get_local_pos_matrix(&self, q: f64) -> Mat3 {
         // TODO: use nalgebra's isometry.
         Mat3::new(

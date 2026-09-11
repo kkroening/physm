@@ -1,4 +1,5 @@
 use crate::Error;
+use crate::FixedFrame;
 use crate::FrameBox;
 use crate::RotationalFrame;
 use crate::TrackFrame;
@@ -55,6 +56,7 @@ pub fn value_to_frame(value: &Value) -> Result<FrameBox, Error> {
     // of repeating it in each Frame implementation.
     let type_name = map_value_item(value, &"type", value_to_str)?;
     Ok(match type_name {
+        "FixedFrame" => Box::new(FixedFrame::from_json_value(value)?),
         "RotationalFrame" => Box::new(RotationalFrame::from_json_value(value)?),
         "TrackFrame" => Box::new(TrackFrame::from_json_value(value)?),
         _ => return Err(Error(format!("Invalid frame type: {}", type_name))),

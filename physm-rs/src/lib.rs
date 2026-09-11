@@ -12,6 +12,7 @@ pub use crate::constraint::CoincidenceConstraint;
 pub use crate::constraint::Constraint;
 pub use crate::constraint::ConstraintBox;
 pub use crate::constraint::DistanceConstraint;
+pub use crate::fixed_frame::FixedFrame;
 pub use crate::frame::Frame;
 pub use crate::frame::FrameBox;
 pub use crate::frame::FrameId;
@@ -22,6 +23,7 @@ pub use crate::track_frame::TrackFrame;
 pub use crate::weight::Weight;
 
 mod constraint;
+mod fixed_frame;
 mod frame;
 mod json;
 mod rotational_frame;

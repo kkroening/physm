@@ -84,6 +84,10 @@ impl Frame for TrackFrame {
         &self.weights
     }
 
+    fn is_joint(&self) -> bool {
+        true
+    }
+
     fn get_local_pos_matrix(&self, q: f64) -> Mat3 {
         Mat3::new(
             1.,
