@@ -86,6 +86,16 @@ export default class Frame {
     return mat3.ZERO;
   }
 
+  /**
+   * Whether the frame's coordinate moves it: true for a joint, false for a
+   * frame whose transform is the same whatever `q` is -- this class, and
+   * `FixedFrame`. Nothing gives such a coordinate any inertia, so the mass
+   * matrix gives it some of its own (`Scene.getMassMatrix`).
+   */
+  isJoint(): boolean {
+    return false;
+  }
+
   toJsonObj({ includeDecals = false }: FrameJsonOptions = {}): Record<
     string,
     unknown

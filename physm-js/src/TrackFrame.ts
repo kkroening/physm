@@ -36,6 +36,10 @@ export default class TrackFrame extends Frame {
     return [0, 0, Math.cos(this.angle), 0, 0, Math.sin(this.angle), 0, 0, 0];
   }
 
+  override isJoint(): boolean {
+    return true;
+  }
+
   override toJsonObj(
     options: { includeDecals?: boolean } = {},
   ): Record<string, unknown> {

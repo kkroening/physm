@@ -36,4 +36,8 @@ export default class RotationalFrame extends Frame {
 
     return [-cos, sin, 0, -sin, -cos, 0, 0, 0, 0];
   }
+
+  override isJoint(): boolean {
+    return true;
+  }
 }
