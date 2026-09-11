@@ -1,13 +1,17 @@
 import Box from './../react/Box';
+import Circle from './../react/Circle';
 import Coincidence from './../react/Coincidence';
 import Editor from './Editor';
+import JsSolver from './../JsSolver';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import coreComponents from './../react/coreComponents';
+import { InvalidStateMapError } from './../Solver';
 import { documentFrom, nodesFrom } from './sceneDocument';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { vi } from 'vitest';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 
 describe('Editor', () => {
@@ -746,5 +750,193 @@ describe('Editor, components and tabs', () => {
       'title',
       expect.stringMatching(/names 'cart'/),
     );
+  });
+});
+
+/** The pendulum bob's centre on screen -- the one circle the starter scene draws. */
+function bob(container: HTMLElement): string {
+  const circle = container.querySelector('.editor__scene circle')!;
+
+  return `${circle.getAttribute('cx')},${circle.getAttribute('cy')}`;
+}
+
+describe('Editor, playing', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /** Let `ms` of animation frames pass. */
+  const run = (ms: number): void => {
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+  };
+
+  test('play runs the scene forward, and pause holds it', () => {
+    const { container } = render(<Editor />);
+    const start = bob(container);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    const moved = bob(container);
+
+    expect(moved).not.toBe(start);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    run(300);
+
+    expect(bob(container)).toBe(moved);
+  });
+
+  test('reset returns to the start', () => {
+    const { container } = render(<Editor />);
+    const start = bob(container);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    expect(bob(container)).toBe(start);
+  });
+
+  test('a prop edit carries the motion over, and a structural edit starts it over', () => {
+    const { container } = render(<Editor />);
+    const start = bob(container);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    const moved = bob(container);
+
+    fireEvent.change(within(select('Box')).getByLabelText('Width'), {
+      target: { value: '3' },
+    });
+
+    expect(bob(container)).toBe(moved);
+
+    // An added line moves no frame, but it changes the structure -- and the
+    // decision is that a structural edit restarts, not that one moving a frame
+    // does.
+    fireEvent.click(within(library()).getByRole('button', { name: 'Line' }));
+
+    expect(bob(container)).toBe(start);
+  });
+
+  test("a component's tab draws it as authored, and the scene's run waits for it", () => {
+    // The scene is one pendulum at the origin, so the component's authored pose
+    // is the scene's starting one -- and `arm` is the same frame in both.
+    const pendulum = nodesFrom(
+      <RotationalFrame id="arm" initialState={[-0.6, 0]}>
+        <Circle position={[4, 0]} radius={0.5} />
+        <Weight mass={10} position={[4, 0]} />
+      </RotationalFrame>,
+    );
+    const { container } = render(
+      <Editor
+        initialDocument={{
+          root: 'Scene',
+          definitions: [
+            { name: 'Pendulum', body: pendulum },
+            {
+              name: 'Scene',
+              body: [
+                {
+                  type: { kind: 'defined', name: 'Pendulum' },
+                  props: {},
+                  children: [],
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+    const openPendulum = (): void => {
+      fireEvent.doubleClick(
+        within(screen.getByRole('tree', { name: 'Scene' })).getByText(
+          'Pendulum',
+        ),
+      );
+    };
+    const start = bob(container);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    const moved = bob(container);
+
+    expect(moved).not.toBe(start);
+
+    openPendulum();
+
+    expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+    expect(
+      screen.getByText('Play runs the whole scene: open Scene to play it.'),
+    ).toBeVisible();
+    expect(bob(container)).toBe(start);
+
+    // Back by the scene's tab, and by closing the component's: either way the
+    // run is where it was paused.
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+
+    expect(bob(container)).toBe(moved);
+
+    openPendulum();
+    fireEvent.click(screen.getByRole('button', { name: 'Close Pendulum' }));
+
+    expect(bob(container)).toBe(moved);
+  });
+
+  test('a prop edit through a scene that does not build carries the motion over', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <RotationalFrame id="pole" initialState={[-0.6, 0]}>
+              <Circle position={[4, 0]} radius={0.5} />
+              <Weight mass={10} position={[4, 0]} />
+            </RotationalFrame>
+            <TrackFrame id="cart">
+              <Weight mass={50} />
+            </TrackFrame>
+          </>,
+        )}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    const moved = bob(container);
+    const id = (): HTMLElement =>
+      within(select('TrackFrame')).getByLabelText('Id');
+
+    // Two frames named `pole` do not build: renaming one passes through that.
+    fireEvent.change(id(), { target: { value: 'pole' } });
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    fireEvent.change(id(), { target: { value: 'pole2' } });
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(bob(container)).toBe(moved);
+  });
+
+  test('a run that diverges stops, and says so', () => {
+    vi.spyOn(JsSolver.prototype, 'tick').mockImplementation(() => {
+      throw new InvalidStateMapError();
+    });
+    const { container } = render(<Editor />);
+    const start = bob(container);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('diverged');
+    expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
+    expect(bob(container)).toBe(start);
   });
 });

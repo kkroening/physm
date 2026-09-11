@@ -7,6 +7,7 @@ import emitScene from './emitScene';
 import getViewXformMatrix from './../getViewXformMatrix';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
+import useSimulation from './useSimulation';
 import {
   definitionOf,
   elementOf,
@@ -406,7 +407,13 @@ function useBuiltScene(
 }
 
 /**
- * The focused component, drawn at its authored pose.
+ * The focused component, drawn at its authored pose -- or, on the scene's own
+ * tab, running.
+ *
+ * Play runs the whole scene, never a component on its own. Page 8 of
+ * `docs/issues/0014` makes the simulation the module's, and what a component
+ * would do with no world around it is a question it leaves open. So a
+ * component's tab draws it as authored, and the scene's run waits for its tab.
  *
  * A scene that fails to build shows why instead of taking the editor down with
  * it: a half-made rig is the normal state of a document being edited, and the
@@ -415,14 +422,23 @@ function useBuiltScene(
 function ScenePane({
   doc,
   focus,
+  structure,
 }: {
   doc: SceneDocument;
   focus: string;
+  /** How many structural edits there have been -- see `useSimulation`. */
+  structure: number;
 }): ReactElement {
   const svgRef = useRef<SVGSVGElement>(null);
   const size = useElementSize(svgRef);
   const built = useBuiltScene(doc, focus);
+  const playable = focus === doc.root;
+  const simulation = useSimulation(
+    playable && 'scene' in built ? built : null,
+    structure,
+  );
   const xformMatrix = getViewXformMatrix([0, 0], VIEW_SCALE, size);
+  const failure = 'error' in built ? built.error : simulation.error;
 
   return (
     <section className="editor__scene" aria-label="Scene">
@@ -430,14 +446,35 @@ function ScenePane({
         {'scene' in built ? (
           <SceneView
             scene={built.scene}
-            stateMap={built.initial}
+            stateMap={simulation.stateMap ?? built.initial}
             xformMatrix={xformMatrix}
           />
         ) : null}
       </svg>
-      {'error' in built ? (
+      <div className="editor__playback">
+        {playable ? null : (
+          <p className="editor__hint">
+            Play runs the whole scene: open {doc.root} to play it.
+          </p>
+        )}
+        <button
+          type="button"
+          disabled={!playable || 'error' in built}
+          onClick={simulation.playing ? simulation.pause : simulation.play}
+        >
+          {simulation.playing ? 'Pause' : 'Play'}
+        </button>
+        <button
+          type="button"
+          disabled={!playable || !simulation.started}
+          onClick={simulation.reset}
+        >
+          Reset
+        </button>
+      </div>
+      {failure ? (
         <p className="editor__error" role="alert">
-          {built.error}
+          {failure}
         </p>
       ) : null}
     </section>
@@ -566,12 +603,20 @@ export default function Editor({
   const [tabs, setTabs] = useState<readonly string[]>(() => [doc.root]);
   const [focus, setFocus] = useState(doc.root);
   const [selection, setSelection] = useState<Selection | null>(null);
+
+  // Counts structural edits, which restart a run where a prop edit carries it
+  // over. Each call has to come with a new document: a count that moves with no
+  // new scene leaves the run's stamp behind, and the next prop edit would start
+  // the run over.
+  const [structure, setStructure] = useState(0);
+  const restructure = (): void => setStructure((count) => count + 1);
   const selectedPath = selection?.definition === focus ? selection.path : null;
   const point = insertionPoint(doc, focus, selectedPath);
 
   /** Replace the document, and select `path` in it -- or nothing. */
   const change = (next: SceneDocument, path: NodePath | null): void => {
     setDoc(next);
+    restructure();
     setSelection(path ? { definition: focus, path } : null);
   };
 
@@ -650,10 +695,11 @@ export default function Editor({
             onExtract={(path, name) => {
               setDoc(extractComponent(doc, focus, path, name));
               open(name);
+              restructure();
             }}
             {...actions}
           />
-          <ScenePane doc={doc} focus={focus} />
+          <ScenePane doc={doc} focus={focus} structure={structure} />
         </div>
         <LibraryPane
           doc={doc}
