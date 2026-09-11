@@ -16,12 +16,48 @@
   font-size: 0.875rem;
 }
 
-.editor__tabs {
+/* The tabs, and the history's buttons at the far end. */
+.editor__bar {
   grid-area: tabs;
   display: flex;
-  gap: 2px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.25rem 0.5rem 0;
   background-color: #738290;
+}
+
+.editor__tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+.editor__history {
+  display: flex;
+  gap: 0.3rem;
+  padding-bottom: 0.3rem;
+}
+
+.editor__history button {
+  padding: 0.15rem 0.7rem;
+  border: 1px solid #5d6b78;
+  border-radius: 4px;
+  background-color: #b0c4e0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor__history button:hover:enabled {
+  background-color: #c4d4ea;
+}
+
+.editor__history button:disabled {
+  border-color: #6b7a87;
+  background-color: #8797a8;
+  color: #56636e;
+  cursor: default;
 }
 
 .editor__tabs button {

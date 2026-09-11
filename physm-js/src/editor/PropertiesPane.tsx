@@ -344,7 +344,7 @@ function NodeProps({
   doc: SceneDocument;
   selection: Selection;
   node: DocNode;
-  onChange: (doc: SceneDocument) => void;
+  onChange: (doc: SceneDocument, field: string) => void;
   onOpen: (name: string) => void;
 }): ReactElement {
   if (node.type.kind === 'defined') {
@@ -408,6 +408,7 @@ function NodeProps({
             onChange={(value) =>
               onChange(
                 setProp(doc, selection.definition, selection.path, name, value),
+                `${selection.definition}/${selection.path.join('.')}/${name}`,
               )
             }
           />
@@ -445,7 +446,10 @@ export default function PropertiesPane({
 }: {
   doc: SceneDocument;
   selection: Selection | null;
-  onChange: (doc: SceneDocument) => void;
+
+  /** A new document, and the field that made it: see `recorded` in `history`. */
+  onChange: (doc: SceneDocument, field: string) => void;
+
   /** Open a component this document defines, in its own tab. */
   onOpen: (name: string) => void;
 }): ReactElement {

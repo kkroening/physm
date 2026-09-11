@@ -6,20 +6,19 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Undo.** [0014 page 10](docs/issues/0014/10-staging.md) puts undo in the MVP
-from the start: retrofitting it onto a mutable document is the classic rewrite,
-and a document that is replaced rather than mutated makes it nearly free. Every
-edit here already returns a new document, so undo is a stack of past ones. What
-needs deciding is what one step is -- page 7 coalesces a field's run of
-keystrokes into one -- and where the selection and focus go back to.
+**Dragging.** Dragging a node's gizmo writes its `position` prop, in the
+*parent's* frame, which is what the prop means
+([0014 page 7](docs/issues/0014/07-editing.md#dragging-in-the-scene)).
+Snapping -- to the grid, to another frame's origin, to a decal's end --
+matters more here than in a drawing tool: a rig whose frames are *nearly*
+coincident is [0002](docs/issues/0002.md)'s pinned scene waiting to happen.
+Only an authored node drags, since there is nowhere to write the result
+otherwise.
 
-After it, from [page 7](docs/issues/0014/07-editing.md):
-
-- dragging: a gizmo's drag writes `position` in the parent's frame, with
-  snapping to the grid and to other origins, and only an authored node drags.
-  It needs undo most -- a drag is a stream of edits, and a slip is easy -- and
-  gizmos that show which way +x points, since a drag writes along the parent's
-  axes and today's cross looks the same after a quarter turn
+- first, gizmos that show which way +x points, since a drag writes along the
+  parent's axes and today's cross looks the same after a quarter turn
+- then the drag, writing `position` as it goes, one undo step per drag
+- then snapping
 - the tree stays the failsafe, so dragging can ship imperfect without blocking
   anything
 
@@ -38,16 +37,15 @@ Roughly one PR each.
 9. ~~**Extract to component, and tabs**~~ — done
 10. ~~**Play**~~ — done
 11. ~~**Gizmos**~~ — done
-12. **Undo** — *in view*
+12. ~~**Undo**~~ — done
 
 [0014 page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) draws the MVP
-at its steps 1-6 plus gizmos, and two pieces of those steps are left: undo,
-which step 5 wants from the start, and promote to prop, from step 6, which
-waits on Karl's call below. Everything else is done: load a scene, see its
-tree, edit props, add, delete and reorder nodes, extract a component and reuse
-it -- one that names no id, for now -- export TSX that rebuilds to the same
-scene, and see every frame in the scene pane, one that draws nothing included.
-Play came forward because the shell made it cheap, and picking because it
+at its steps 1-6 plus gizmos, and one piece of those steps is left: promote to
+prop, from step 6, which waits on Karl's call below. Everything else is done:
+load a scene, see its tree, edit props, add, delete and reorder nodes, extract
+a component and reuse it -- one that names no id, for now -- export TSX that
+rebuilds to the same scene, see every frame in the scene pane, and undo any of
+it. Play came forward because the shell made it cheap, and picking because it
 was built while gizmos were in review.
 
 ## Further out
@@ -167,3 +165,8 @@ was built while gizmos were in review.
   instance selects the instance. The build reports the elements behind each
   frame and decal, and the document says which node made each element, which
   is how a click leads back.
+- **Undo** — every edit is recorded in a history of documents, which Undo and
+  Redo walk, from the tab bar or from the keyboard outside a text field. A
+  field's run of keystrokes is one step. Undoing returns to the tab the edit
+  was made in and closes a tab whose component is gone; only a structural step
+  restarts the run and clears the selection.

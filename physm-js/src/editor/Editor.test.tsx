@@ -753,6 +753,16 @@ describe('Editor, components and tabs', () => {
   });
 });
 
+/** The history's Undo button. */
+function undoButton(): HTMLElement {
+  return screen.getByRole('button', { name: 'Undo' });
+}
+
+/** The history's Redo button. */
+function redoButton(): HTMLElement {
+  return screen.getByRole('button', { name: 'Redo' });
+}
+
 /** The pendulum bob's centre on screen -- the one circle the starter scene draws. */
 function bob(container: HTMLElement): string {
   const circle = container.querySelector('.editor__scene circle')!;
@@ -957,6 +967,32 @@ describe('Editor, playing', () => {
     expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
     expect(bob(container)).toBe(start);
   });
+
+  test('undoing a prop edit carries the motion over, and undoing an insert starts it over', () => {
+    const { container } = render(<Editor />);
+    const start = bob(container);
+    fireEvent.change(within(select('Box')).getByLabelText('Width'), {
+      target: { value: '3' },
+    });
+    fireEvent.click(within(library()).getByRole('button', { name: 'Line' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+
+    expect(bob(container)).not.toBe(start);
+
+    fireEvent.click(undoButton());
+
+    expect(bob(container)).toBe(start);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    const moved = bob(container);
+    fireEvent.click(undoButton());
+
+    expect(bob(container)).toBe(moved);
+  });
 });
 
 /** Click the scene pane at a point in its own coordinates. */
@@ -1113,5 +1149,158 @@ describe('Editor, picking', () => {
 
     expect(shown()).toBe('Box');
     expect(screen.queryByLabelText('Component name')).toBeNull();
+  });
+});
+
+/** How many times `text` appears in the code pane. */
+function countInCode(text: string): number {
+  return code().split(text).length - 1;
+}
+
+describe('Editor, undo', () => {
+  test("undo and redo step through edits, a field's keystrokes as one", () => {
+    render(<Editor />);
+    const before = code();
+
+    expect(undoButton()).toBeDisabled();
+    expect(redoButton()).toBeDisabled();
+
+    const width = within(select('Box')).getByLabelText('Width');
+    fireEvent.change(width, { target: { value: '3' } });
+    fireEvent.change(width, { target: { value: '35' } });
+    fireEvent.change(within(select('Box')).getByLabelText('Height'), {
+      target: { value: '4' },
+    });
+
+    expect(code()).toContain('width={35}');
+    expect(code()).toContain('height={4}');
+
+    fireEvent.click(undoButton());
+
+    expect(code()).toContain('width={35}');
+    expect(code()).not.toContain('height={4}');
+
+    // Both of the width's keystrokes go in one step.
+    fireEvent.click(undoButton());
+
+    expect(code()).toBe(before);
+    expect(undoButton()).toBeDisabled();
+
+    fireEvent.click(redoButton());
+    fireEvent.click(redoButton());
+
+    expect(code()).toContain('width={35}');
+    expect(code()).toContain('height={4}');
+    expect(redoButton()).toBeDisabled();
+  });
+
+  test('the same prop on two nodes is two steps', () => {
+    render(<Editor />);
+    fireEvent.change(within(select('Line')).getByLabelText('Line width'), {
+      target: { value: '0.3' },
+    });
+    fireEvent.change(within(select('Box')).getByLabelText('Line width'), {
+      target: { value: '0.7' },
+    });
+    fireEvent.click(undoButton());
+
+    expect(code()).toContain('lineWidth={0.3}');
+    expect(code()).not.toContain('lineWidth={0.7}');
+  });
+
+  test('undo takes back an insert, and the selection with it', () => {
+    render(<Editor />);
+    const lines = countInCode('<Line');
+    fireEvent.click(within(library()).getByRole('button', { name: 'Line' }));
+
+    expect(countInCode('<Line')).toBe(lines + 1);
+
+    fireEvent.click(undoButton());
+
+    expect(countInCode('<Line')).toBe(lines);
+    expect(
+      within(screen.getByRole('region', { name: 'Properties' })).getByText(
+        'Select a node to see its props.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test('an undone prop edit keeps the selection, since it moves nothing', () => {
+    render(<Editor />);
+    fireEvent.change(within(select('Box')).getByLabelText('Width'), {
+      target: { value: '3' },
+    });
+    fireEvent.click(undoButton());
+
+    expect(
+      within(screen.getByRole('region', { name: 'Properties' })).getByRole(
+        'heading',
+      ),
+    ).toHaveTextContent('Box');
+  });
+
+  test('undoing an extraction closes its tab, back where it was made', () => {
+    render(<Editor />);
+    select('Box');
+    extract('Crate');
+
+    expect(screen.getByRole('tab', { name: 'Crate' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    fireEvent.click(undoButton());
+
+    expect(screen.queryByRole('tab', { name: 'Crate' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Scene' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(code()).not.toContain('function Crate');
+
+    fireEvent.click(redoButton());
+
+    expect(code()).toContain('function Crate');
+  });
+
+  test('an edit made in another tab is undone there', () => {
+    render(<Editor />);
+    fireEvent.doubleClick(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
+    );
+    fireEvent.click(within(library()).getByRole('button', { name: 'Circle' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+    fireEvent.click(undoButton());
+
+    expect(screen.getByRole('tab', { name: 'Pendulum' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  test('from the keyboard, anywhere but in a text field', () => {
+    render(<Editor />);
+    const before = code();
+    const width = within(select('Box')).getByLabelText('Width');
+    fireEvent.change(width, { target: { value: '3' } });
+
+    // In the field, the keys are the field's own.
+    fireEvent.keyDown(width, { key: 'z', ctrlKey: true });
+
+    expect(code()).toContain('width={3}');
+
+    const tree = screen.getByRole('tree', { name: 'Scene' });
+    fireEvent.keyDown(tree, { key: 'z', ctrlKey: true });
+
+    expect(code()).toBe(before);
+
+    fireEvent.keyDown(tree, { key: 'Z', metaKey: true, shiftKey: true });
+
+    expect(code()).toContain('width={3}');
+
+    fireEvent.keyDown(tree, { key: 'z', ctrlKey: true });
+    fireEvent.keyDown(tree, { key: 'y', ctrlKey: true });
+
+    expect(code()).toContain('width={3}');
   });
 });
