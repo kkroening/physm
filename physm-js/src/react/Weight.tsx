@@ -1,19 +1,24 @@
 import CoreWeight from './../Weight';
 import { useId } from 'react';
 import { useSceneNode } from './sceneNodes';
+import type { SceneNode } from './sceneNodes';
 import type { WeightOptions } from './../Weight';
 
 export interface WeightProps extends WeightOptions {
   mass: number;
 }
 
+function describeWeight({ mass, ...options }: WeightProps): SceneNode {
+  return { slot: 'weight', build: () => new CoreWeight(mass, options) };
+}
+
 /** A point mass in the enclosing frame's coordinates. */
-export default function Weight({ mass, ...options }: WeightProps): null {
-  useSceneNode(
-    useId(),
-    { slot: 'weight', build: () => new CoreWeight(mass, options) },
-    [mass, JSON.stringify(options)],
-  );
+export default function Weight(props: WeightProps): null {
+  const { mass, ...options } = props;
+
+  useSceneNode(useId(), describeWeight(props), [mass, JSON.stringify(options)]);
 
   return null;
 }
+
+Weight.sceneNode = describeWeight;

@@ -45,6 +45,15 @@ export type AnchorLookup = ReadonlyMap<string, AnchorPoint>;
 export type SceneNode =
   | {
       readonly slot: 'frame';
+
+      /**
+       * The frame's id: its `id` prop, or the context key when it has none.
+       *
+       * Carried on the node so that whoever walks the tree knows what id the
+       * frame's children sit in without recomputing the fallback -- which is a
+       * rule, and a rule stated twice is a rule that can drift.
+       */
+      readonly id: FrameId;
       readonly build: (children: FrameChildren) => Frame;
     }
   | {
@@ -84,6 +93,45 @@ export type SceneNode =
        */
       readonly describe?: () => string;
     };
+
+/** A frame's node, narrowed -- what a frame component's `sceneNode` returns. */
+export type FrameNode = Extract<SceneNode, { slot: 'frame' }>;
+
+/** A constraint's node, narrowed. */
+export type ConstraintNode = Extract<SceneNode, { slot: 'constraint' }>;
+
+/** An anchor's node, narrowed. */
+export type AnchorNode = Extract<SceneNode, { slot: 'anchor' }>;
+
+/** What a component's `sceneNode` is told about where it sits. */
+export interface SceneNodeContext {
+  /**
+   * Stable for this instance, and the id an unnamed frame falls back to.
+   *
+   * The mounted binding passes its `useId`; `buildScene` passes the element's
+   * path through the tree. Either way it is the same value every time the same
+   * instance is built, which is what keeps a state map keyed to it valid.
+   */
+  readonly key: string;
+
+  /** The enclosing frame's id, or `null` at the root. */
+  readonly frameId: FrameId | null;
+}
+
+/**
+ * How a binding component turns its props into a scene node, as a plain
+ * function.
+ *
+ * Each binding component carries one as its static `sceneNode`. The mounted
+ * component registers what it returns; `buildScene` calls it directly while
+ * walking an element tree. One description, two callers -- so the two routes
+ * build the same scene from the same props because there is only one place
+ * that says how.
+ */
+export type SceneNodeSource<P> = (
+  props: P,
+  context: SceneNodeContext,
+) => SceneNode;
 
 /** What a frame's builder receives, grouped by what each child registered as. */
 export interface FrameChildren {

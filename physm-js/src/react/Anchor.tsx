@@ -1,7 +1,7 @@
 import FrameIdContext from './FrameIdContext';
 import { useContext, useId, useImperativeHandle } from 'react';
 import { useSceneNode } from './sceneNodes';
-import type { AnchorPoint } from './sceneNodes';
+import type { AnchorNode, AnchorPoint, SceneNodeContext } from './sceneNodes';
 import type { PositionLike } from './../Scene';
 import type { Ref } from 'react';
 
@@ -9,6 +9,30 @@ export interface AnchorProps {
   id?: string;
   position?: PositionLike;
   ref?: Ref<AnchorPoint>;
+}
+
+function describeAnchor(
+  { id, position }: AnchorProps,
+  { frameId }: SceneNodeContext,
+): AnchorNode {
+  if (!frameId) {
+    throw new Error(
+      'An <Anchor> must be inside a frame: it marks a point on one, and there ' +
+        'is no frame at the root of a <Scene> for it to mark.',
+    );
+  }
+
+  // `exactOptionalPropertyTypes` distinguishes an absent key from a present
+  // `undefined`, and the absence is what means "solve for this point" -- so the
+  // point is built by omitting the key rather than by setting it to undefined.
+  const makePoint = (): AnchorPoint =>
+    position === undefined ? { frameId } : { frameId, position };
+
+  return {
+    slot: 'anchor',
+    ...(id === undefined ? {} : { id }),
+    build: makePoint,
+  };
 }
 
 /**
@@ -47,41 +71,25 @@ export interface AnchorProps {
  * re-render anybody, so without the bump a constraint assembled before the
  * anchor mounted would stay unresolved with nothing to retry it.
  */
-export default function Anchor({ id, position, ref }: AnchorProps): null {
+export default function Anchor(props: AnchorProps): null {
+  const { id, position, ref } = props;
   const frameId = useContext(FrameIdContext);
+  const key = useId();
+  const node = describeAnchor(props, { key, frameId });
 
-  if (!frameId) {
-    throw new Error(
-      'An <Anchor> must be inside a frame: it marks a point on one, and there ' +
-        'is no frame at the root of a <Scene> for it to mark.',
-    );
-  }
-
-  // `exactOptionalPropertyTypes` distinguishes an absent key from a present
-  // `undefined`, and the absence is what means "solve for this point" -- so the
-  // point is built by omitting the key rather than by setting it to undefined.
-  const makePoint = (): AnchorPoint =>
-    position === undefined ? { frameId } : { frameId, position };
-
-  // The handle must not update *less* often than the node. A constraint reads
+  // The handle must never be staler than the node. A constraint reads
   // `ref.current` during assembly, which runs inside `Scene`'s `useMemo` -- and
   // only the node's registration bumps the version that re-runs it. So a change
   // that moved the point without re-registering would leave the memo serving a
   // scene built from the old one.
   //
-  // Here the handle's deps compare `position` by identity and the node's by
-  // value, so the handle re-runs at least as often: safe in the direction that
-  // matters, wasteful in the other, and cheap either way.
-  useImperativeHandle(ref, makePoint, [frameId, position]);
-  useSceneNode(
-    useId(),
-    {
-      slot: 'anchor',
-      ...(id === undefined ? {} : { id }),
-      build: makePoint,
-    },
-    [id, frameId, JSON.stringify(position)],
-  );
+  // No dependency list, so the handle is refreshed on every render: more often
+  // than the node re-registers, which is safe in the direction that matters and
+  // cheap in the other.
+  useImperativeHandle(ref, () => node.build());
+  useSceneNode(key, node, [id, frameId, JSON.stringify(position)]);
 
   return null;
 }
+
+Anchor.sceneNode = describeAnchor;
