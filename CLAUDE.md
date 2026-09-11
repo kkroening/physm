@@ -160,6 +160,25 @@ to the mathematics. `physm-rs` is `cargo fmt --check` plus `cargo test`;
 `physm-js` is lint, typecheck, test and build; `issues` checks that the tracker's
 generated index matches its issue files.
 
+## The frontier
+
+[`frontier.md`](frontier.md) is the working plan for work that spans many PRs —
+currently the scene editor, [0014](docs/issues/0014.md). It holds what is in view,
+what comes next, and what is further out.
+
+- **Read it before choosing work**, every time — including after a context
+  boundary, where it is the fastest way back to where things stand.
+- **Update it in the PR that moves it**: mark the step done, bring the next one
+  into view, and revise the rest if the work taught something. Merging then
+  leaves `master` saying where things are.
+- **Revise it freely.** It is a plan, not a contract; reordering, splitting or
+  dropping a step is an ordinary edit.
+- **Review it lightly.** A reviewer should raise plan concerns as discussion
+  (`COMMENT`) rather than change requests, and should not audit it the way it
+  audits code or design docs.
+- **PR descriptions still stand alone.** Describe the change in terms that stay
+  true; "step 4 of the frontier" means nothing once the frontier moves.
+
 ## Issues
 
 The tracker is [`docs/issues/`](docs/issues/) — one Markdown file per issue,
