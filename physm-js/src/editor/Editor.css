@@ -191,6 +191,125 @@
   color: #8796a3;
 }
 
+/* Selecting: a row is a target, and the selected one is unmistakable. */
+.editor__row {
+  cursor: pointer;
+}
+
+.editor__row:hover {
+  background-color: #dce7f2;
+}
+
+.editor__row:focus-visible {
+  outline: 2px solid #3d6fa8;
+  outline-offset: 1px;
+}
+
+[aria-selected='true'] > .editor__row,
+[aria-selected='true'] > .editor__row .editor__tag {
+  background-color: #3d6fa8;
+  color: #fff;
+}
+
+[aria-selected='true'] > .editor__row .editor__summary,
+[aria-selected='true'] > .editor__row .editor__disclosure {
+  color: #d3e2f2;
+}
+
+.editor__selected {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+.editor__fields {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.editor__field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.2rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.editor__label {
+  padding: 0;
+  color: #4a5a68;
+  font-size: 0.75rem;
+}
+
+.editor__inputs {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+/* Sized by the row, not by the input's own idea of its width -- which would
+   push the second half of a pair out of a narrow pane. */
+.editor__inputs input[type='text'] {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid #b5c6d8;
+  border-radius: 3px;
+  background-color: #fff;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.editor__inputs input[type='text']::placeholder {
+  color: #a3b1bd;
+}
+
+.editor__inputs input[aria-invalid='true'] {
+  border-color: #c0392b;
+  background-color: #fdf1f0;
+}
+
+.editor__check {
+  display: flex;
+  flex: 1;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.editor__unit {
+  color: #738290;
+}
+
+.editor__reset {
+  padding: 0 0.25rem;
+  border: 0;
+  background: none;
+  color: #738290;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor__reset:hover {
+  color: #8a1c14;
+}
+
+.editor__readonly {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.6rem;
+  margin: 0.75rem 0 0;
+}
+
+.editor__readonly dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+}
+
 /* Too narrow for three columns: stack them, scene first, so the thing being
    edited is always the thing on screen. */
 @media (max-width: 48rem) {

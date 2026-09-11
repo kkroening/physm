@@ -62,8 +62,9 @@ Four behaviours that are easy to get wrong and cheap to get right:
 - **Defaults show as placeholders, not values.** A field showing a greyed `false`
   that becomes a real `false` on first focus is how `mirror={false}` ends up in
   the emitted source for no reason.
-- **Edits commit on blur or Enter, and coalesce for undo.** Typing `1`, `.`, `4`
-  in a field is one edit, not three.
+- **Every keystroke that parses commits**, so the scene and code follow as it
+  is typed. A field keeps its half-typed text until focus leaves, and undo
+  coalesces a field's run of edits into one.
 - **Invalid input is refused, not clamped.** A `segmentCount` of `0` should show
   as an error and leave the document alone. Silently clamping to `1` means the
   document says something the user did not.

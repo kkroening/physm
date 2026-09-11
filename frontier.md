@@ -6,17 +6,16 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Selection and prop editing.** A tree row selects its node, and the
-properties pane edits its props, with the widget each prop gets chosen by its
-metadata rather than by the value it holds.
+**Insert, delete, reorder.** The library adds where the selection says, and
+the tree's toolbar and keys delete and reorder.
 
-- every accepted keystroke is a new document, so the scene and code follow as
-  it is typed
-- a length refuses a negative; an angle, and a rotational frame's state, are
-  shown in degrees
-- emptying a field returns the prop to its default, and a required prop
-  refuses to be emptied
-- a half-typed number survives while its field has focus
+- an addition lands inside a selected frame, after any other selected node, or
+  at the end of the body when nothing is selected
+- what cannot go there is shown disabled, saying why: the builders' own rules,
+  and a component inside itself
+- a new node starts with its required props at their initial values; a
+  constraint's ends wait for a person to pick them
+- a building block missing a required prop fails to build by name
 
 ## Next — the MVP
 
@@ -28,8 +27,8 @@ Roughly one PR each.
 4. ~~**Document model**~~ — done
 5. ~~**Codegen**~~ — done
 6. ~~**Editor shell**~~ — done
-7. **Selection and prop editing** — *in view*
-8. **Insert, delete, reorder** from the library
+7. ~~**Selection and prop editing**~~ — done
+8. **Insert, delete, reorder** — *in view*
 9. **Extract to component, and tabs** — ids, a frame's or an anchor's, are
    scene-wide and a repeat is refused, so extraction has to deal with an id it captures:
    refuse the subtree, promote the id to a prop, or scope ids per instance
@@ -42,6 +41,9 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Further out
 
+- Keyboard in the tree, as a tree: a roving tabindex on the tree items, Up and
+  Down to move focus, Enter and Space to select. Focus lands on a row with no
+  role today, so a screen reader hears nothing when a node is selected.
 - Keep the last scene that built drawn, dimmed, under a build error, reset on
   a change of focus. With every keystroke a new document, an edit can pass
   through states that do not build -- retyping a position under a stated
@@ -109,3 +111,8 @@ the same scene. Play is cheap once the shell exists and may come forward.
   following the focused tab. A rig that fails to build, or has no consistent
   starting state, says why in the scene pane rather than taking the editor
   down.
+- **Selection and prop editing** — a tree row selects its node, and the
+  properties pane edits its props with a widget chosen by each prop's
+  metadata: a length refuses a negative, an angle and a rotational frame's
+  state are shown in degrees, and emptying a field returns a prop to its
+  default unless it is required. Every accepted keystroke is a new document.

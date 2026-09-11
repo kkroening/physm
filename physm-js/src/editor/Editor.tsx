@@ -1,4 +1,5 @@
 import './Editor.css';
+import PropertiesPane from './PropertiesPane';
 import SceneView from './../react/SceneView';
 import buildScene from './../react/buildScene';
 import coreComponents from './../react/coreComponents';
@@ -10,8 +11,14 @@ import { definitionOf, elementOf } from './sceneDocument';
 import { useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
 import type { StateMap } from './../Frame';
-import type { ComponentRef, DocNode, SceneDocument } from './sceneDocument';
+import type {
+  ComponentRef,
+  DocNode,
+  NodePath,
+  SceneDocument,
+} from './sceneDocument';
 import type { ReactElement } from 'react';
+import type { Selection } from './PropertiesPane';
 
 /** Pixels per scene unit. */
 const VIEW_SCALE = 18;
@@ -41,6 +48,13 @@ function summaryOf(node: DocNode): string {
     .join(' ');
 }
 
+/** How the tree marks the selected node, and which one that is. */
+interface TreeSelection {
+  /** The selected node's path, joined -- `null` when none is. */
+  readonly selected: string | null;
+  readonly onSelect: (path: NodePath) => void;
+}
+
 /**
  * A tree row's React key: its index, or `$` and its document key.
  *
@@ -53,12 +67,32 @@ function rowKey(node: DocNode, index: number): string {
 }
 
 /** One node of the tree, and everything under it. */
-function TreeRow({ node }: { node: DocNode }): ReactElement {
+function TreeRow({
+  node,
+  path,
+  selected,
+  onSelect,
+}: TreeSelection & { node: DocNode; path: NodePath }): ReactElement {
   const summary = summaryOf(node);
 
   return (
-    <li role="treeitem" aria-expanded={node.children.length ? true : undefined}>
-      <div className="editor__row" data-kind={node.type.kind}>
+    <li
+      role="treeitem"
+      aria-selected={selected === path.join('.')}
+      aria-expanded={node.children.length ? true : undefined}
+    >
+      <div
+        className="editor__row"
+        data-kind={node.type.kind}
+        tabIndex={0}
+        onClick={() => onSelect(path)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onSelect(path);
+          }
+        }}
+      >
         <span className="editor__disclosure">
           {node.children.length ? '▾' : ''}
         </span>
@@ -68,7 +102,13 @@ function TreeRow({ node }: { node: DocNode }): ReactElement {
       {node.children.length ? (
         <ul role="group">
           {node.children.map((child, index) => (
-            <TreeRow node={child} key={rowKey(child, index)} />
+            <TreeRow
+              node={child}
+              path={[...path, index]}
+              selected={selected}
+              onSelect={onSelect}
+              key={rowKey(child, index)}
+            />
           ))}
         </ul>
       ) : null}
@@ -80,7 +120,9 @@ function TreeRow({ node }: { node: DocNode }): ReactElement {
 function TreePane({
   doc,
   focus,
-}: {
+  selected,
+  onSelect,
+}: TreeSelection & {
   doc: SceneDocument;
   focus: string;
 }): ReactElement {
@@ -91,7 +133,13 @@ function TreePane({
       <div className="editor__heading">{focus}</div>
       <ul role="tree" aria-label={focus}>
         {body.map((node, index) => (
-          <TreeRow node={node} key={rowKey(node, index)} />
+          <TreeRow
+            node={node}
+            path={[index]}
+            selected={selected}
+            onSelect={onSelect}
+            key={rowKey(node, index)}
+          />
         ))}
       </ul>
     </section>
@@ -179,16 +227,6 @@ function CodePane({ doc }: { doc: SceneDocument }): ReactElement {
   );
 }
 
-/** What a selected node's props will be edited in. */
-function PropertiesPane(): ReactElement {
-  return (
-    <section className="editor__props" aria-label="Properties">
-      <div className="editor__heading">Properties</div>
-      <p className="editor__hint">Select a node to see its props.</p>
-    </section>
-  );
-}
-
 /** Everything that can be added: building blocks, and this document's own. */
 function LibraryPane({ doc }: { doc: SceneDocument }): ReactElement {
   const defined = doc.definitions.filter(({ name }) => name !== doc.root);
@@ -238,9 +276,10 @@ export default function Editor({
 }: {
   initialDocument?: SceneDocument;
 }): ReactElement {
-  const [doc] = useState<SceneDocument>(
+  const [doc, setDoc] = useState<SceneDocument>(
     () => initialDocument ?? starterDocument(),
   );
+  const [selection, setSelection] = useState<Selection | null>(null);
   const focus = doc.root;
 
   return (
@@ -253,12 +292,19 @@ export default function Editor({
       <CodePane doc={doc} />
       <div className="editor__center">
         <div className="editor__workspace">
-          <TreePane doc={doc} focus={focus} />
+          <TreePane
+            doc={doc}
+            focus={focus}
+            selected={
+              selection?.definition === focus ? selection.path.join('.') : null
+            }
+            onSelect={(path) => setSelection({ definition: focus, path })}
+          />
           <ScenePane doc={doc} focus={focus} />
         </div>
         <LibraryPane doc={doc} />
       </div>
-      <PropertiesPane />
+      <PropertiesPane doc={doc} selection={selection} onChange={setDoc} />
     </div>
   );
 }
