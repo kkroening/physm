@@ -6,18 +6,16 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Document model.** The editor's scene, held as data: a set of named
-definitions, one of them the scene, each a body of nodes -- a component
-reference, props, an optional key, children.
+**Codegen.** A document written out as the TSX module a person keeps: one way,
+never parsed back.
 
-- a component reference says who owns the body: core (the binding's), imported
-  (an opaque function), or defined (this document's, editable all the way down)
-- edits are pure functions returning a new document -- set a prop, insert,
-  remove, move -- so undo is a stack of past documents
-- nodes are addressed by index path, since a node reference goes stale with the
-  first edit
-- element to document and back: reading JSX calls nothing, and a document
-  renders to an element `buildScene` builds like hand-written JSX
+- one module: definitions in dependency order, the scene last as the default
+  export
+- a prop at its default is omitted, so the output reads like code a person
+  would write
+- checked by compiling the emitted source and rebuilding it: it has to build
+  the same scene as the document
+- where each node landed is recorded, for the code pane to use
 
 ## Next — the MVP
 
@@ -26,8 +24,8 @@ Roughly one PR each.
 1. ~~**De-ref the demo**~~ — done
 2. ~~**Tree-walk builder**~~ — done
 3. ~~**Core metadata**~~ — done
-4. **Document model** — *in view*
-5. **Codegen** — document → TSX, with a compile-and-rebuild round trip
+4. ~~**Document model**~~ — done
+5. **Codegen** — *in view*
 6. **Editor shell** — tab bar, code, tree, scene, properties, library; read-only
 7. **Selection and prop editing**
 8. **Insert, delete, reorder** from the library
@@ -43,6 +41,10 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Further out
 
+- Take an imported component's tag from the module lookup
+  [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
+  `Function.name`, which a production build minifies. Dev builds and the tests
+  keep real names, so nothing shows it yet.
 - Refuse children under a non-frame in `buildScene`. They are dropped silently
   today, which changes the answer rather than the picture -- for a document,
   only `canContain` stands in the way.
@@ -86,3 +88,9 @@ the same scene. Play is cheap once the shell exists and may come forward.
 - **Unique frame ids** — the core `Scene` refuses a frame the tree reaches
   twice, and two frames sharing an id, rather than posing one under the wrong
   parent or letting the toposort drop the other's coordinate.
+- **Document model** — a scene held as data: named definitions, one of them the
+  scene, each a body of nodes. A component reference says who owns a body
+  (core, imported, defined), edits are pure functions returning a new
+  document, and nodes are addressed by index path. A document reads from JSX
+  without calling anything, and renders back to an element `buildScene`
+  builds.
