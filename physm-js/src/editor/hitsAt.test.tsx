@@ -92,6 +92,22 @@ describe('hitsAt', () => {
     expectHits(hits(scene, at(-3.5, 0)), []);
     expectHits(hits(scene, at(6.5, 0)), [outlined]);
     expectHits(hits(scene, at(-4.5, 0.5)), [solid]);
+
+    // An outlined box is hollow: its middle, ten pixels from every edge, is
+    // past its stroke's reach.
+    expectHits(hits(scene, at(5, 0)), []);
+  });
+
+  test('a shape inside an outlined box is hit through its hollow', () => {
+    const scene = buildScene(
+      <>
+        <Circle radius={0.3} />
+        <Box width={4} height={4} solid={false} lineWidth={0.1} />
+      </>,
+    );
+    const [circle] = scene.decals;
+
+    expectHits(hits(scene, at(0, 0)), [circle]);
   });
 
   test('a frame is hit on its gizmo, one that draws nothing included', () => {
@@ -111,7 +127,9 @@ describe('hitsAt', () => {
         <Circle radius={3} />
         <TrackFrame id="outer">
           <Box width={1} height={1} />
-          <TrackFrame id="inner" />
+          <TrackFrame id="inner">
+            <Circle radius={0.2} />
+          </TrackFrame>
         </TrackFrame>
       </>,
     );
@@ -119,10 +137,11 @@ describe('hitsAt', () => {
     const outer = scene.frames[0]!;
     const [box] = outer.decals;
     const inner = outer.frames[0]!;
+    const [dot] = inner.decals;
 
-    // A child's gizmo is drawn after its parent's, a frame's shapes after the
-    // scene's own, and every gizmo after every shape.
-    expectHits(hits(scene, at(0, 0)), [inner, outer, box, circle]);
+    // A child is drawn after its parent, gizmo and shapes alike, a frame's
+    // shapes after the scene's own, and every gizmo after every shape.
+    expectHits(hits(scene, at(0, 0)), [inner, outer, dot, box, circle]);
   });
 
   test("a frame's pose comes from the state map", () => {

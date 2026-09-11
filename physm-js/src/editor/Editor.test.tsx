@@ -1054,6 +1054,29 @@ describe('Editor, picking', () => {
     expect(shown()).toBe('TrackFrame');
   });
 
+  test('a click somewhere new starts from the top, even over the selection', () => {
+    const { container } = render(<Editor />);
+    clickScene(container, onCart);
+
+    // Nearly four pixels away: still over the cart's gizmo and its box, but
+    // not the same place, so not a click to go deeper.
+    clickScene(container, [3, -5]);
+
+    expect(shown()).toBe('TrackFrame');
+  });
+
+  test('the first click on a newly opened tab starts from the top', () => {
+    const { container } = render(<Editor />);
+    clickScene(container, circleCentre(container));
+    fireEvent.doubleClick(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
+    );
+    clickScene(container, circleCentre(container));
+
+    // The bob is drawn where it was, over the end of the rod.
+    expect(shown()).toBe('Circle');
+  });
+
   test("on a component's tab, a click selects in that component's body", () => {
     const { container } = render(<Editor />);
     fireEvent.doubleClick(

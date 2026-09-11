@@ -79,12 +79,13 @@ function isHit({ decal, xformMatrix }: Drawn, point: ScreenPoint): boolean {
         toScreen(xformMatrix, corner),
       );
 
-      // A solid box is a filled polygon with no stroke; an outlined one is
-      // drawn `lineWidth` wide, half of it outside the corners.
+      // A solid box is a filled polygon with no stroke. An outlined one is four
+      // lines `lineWidth` wide, half of each outside the corners, and nothing
+      // between them.
       const reach = (shape.solid ? 0 : (shape.lineWidth * scale) / 2) + REACH;
 
       return (
-        insideConvex(point, corners) ||
+        (shape.solid && insideConvex(point, corners)) ||
         corners.some(
           (corner, index) =>
             distanceToSegment(

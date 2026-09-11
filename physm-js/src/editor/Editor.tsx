@@ -493,12 +493,16 @@ function ScenePane({
   doc,
   focus,
   structure,
+  selectedPath,
   onPick,
 }: {
   doc: SceneDocument;
   focus: string;
   /** How many structural edits there have been -- see `useSimulation`. */
   structure: number;
+
+  /** The selected node, if the focused body holds it. */
+  selectedPath: NodePath | null;
 
   /** A click in the scene, as the node it selects: `null` when it hit nothing. */
   onPick: (path: NodePath | null) => void;
@@ -521,8 +525,9 @@ function ScenePane({
       ? { scene: built.scene, stateMap: simulation.stateMap ?? built.initial }
       : null;
 
-  // Where the last click landed, and which of its hits it chose.
-  const lastPick = useRef<{ point: ScreenPoint; index: number } | null>(null);
+  // Where the last click landed: a click there again goes one past the
+  // selection, when the selection is among what it hits.
+  const lastPick = useRef<ScreenPoint | null>(null);
 
   const pick = (event: MouseEvent<SVGSVGElement>): void => {
     if (!('scene' in built) || !drawn) {
@@ -542,11 +547,13 @@ function ScenePane({
     const last = lastPick.current;
     const again =
       last !== null &&
-      Math.hypot(point[0] - last.point[0], point[1] - last.point[1]) <=
-        SAME_PLACE;
-    const index = again && paths.length ? (last.index + 1) % paths.length : 0;
-    lastPick.current = { point, index };
-    onPick(paths[index] ?? null);
+      Math.hypot(point[0] - last[0], point[1] - last[1]) <= SAME_PLACE;
+    const selected =
+      again && selectedPath
+        ? paths.findIndex((path) => path.join('.') === selectedPath.join('.'))
+        : -1;
+    lastPick.current = point;
+    onPick(paths[(selected + 1) % paths.length] ?? null);
   };
 
   return (
@@ -811,6 +818,7 @@ export default function Editor({
             doc={doc}
             focus={focus}
             structure={structure}
+            selectedPath={selectedPath}
             onPick={(path) =>
               path ? actions.onSelect(path) : actions.onDeselect()
             }

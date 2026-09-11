@@ -213,6 +213,11 @@ export interface ElementOrigin {
  * definition, and the path of the node it renders. It fills as the elements are
  * made -- for a definition's body, when its component is called -- so it is
  * complete once the element has been built or rendered.
+ *
+ * It is keyed by the element objects made here. A composite that clones its
+ * children -- `cloneElement`, `Children.map` -- hands the walk elements it has
+ * never seen, and the editor then selects that composite, the nearest node it
+ * knows.
  */
 export function elementOf(
   doc: SceneDocument,
