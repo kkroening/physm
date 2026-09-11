@@ -202,6 +202,28 @@
   pointer-events: none;
 }
 
+/* The parent's axes through a dragged frame, named at their positive ends: in
+   the snap ring's orange, as part of the drag rather than of the scene, with
+   the gizmos' halo. */
+.editor__parent-axes {
+  filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);
+  pointer-events: none;
+  user-select: none;
+}
+
+.editor__parent-axis line {
+  stroke: #d9480f;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.editor__parent-axis text {
+  fill: #d9480f;
+  font-size: 11px;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
 .editor__gizmo-arm,
 .editor__gizmo-pointer {
   stroke-width: 1.5;
