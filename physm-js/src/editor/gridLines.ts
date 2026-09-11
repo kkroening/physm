@@ -13,7 +13,8 @@ function wholeNumbersBetween(a: number, b: number): number[] {
   const from = Math.ceil(Math.min(a, b));
   const to = Math.floor(Math.max(a, b));
 
-  // Between two units there are none: a negative length is an empty array.
+  // Between two units there are none: `to` is then `from - 1`, a length of
+  // zero.
   return Array.from({ length: to - from + 1 }, (_, index) => from + index);
 }
 

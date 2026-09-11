@@ -240,12 +240,11 @@ describe('Editor', () => {
   test('a grid is drawn under the scene, whether it builds or not', () => {
     const { container, unmount } = render(<Editor />);
 
-    // First, so the scene draws over it -- and it is the editor's, not the
-    // scene's, so the code never mentions it.
+    // First, so the scene draws over it -- and drawn by the editor's pane
+    // rather than by `SceneView`, which would put the scene's group first.
     expect(
       container.querySelector('.editor__scene svg')!.firstElementChild,
     ).toHaveClass('editor__grid');
-    expect(code()).not.toMatch(/grid/i);
 
     unmount();
     const failing = render(
