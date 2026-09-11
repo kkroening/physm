@@ -5,12 +5,14 @@ import Circle from './Circle';
 import Coincidence from './Coincidence';
 import CoreBoxDecal from './../BoxDecal';
 import CoreCircleDecal from './../CircleDecal';
+import CoreFixedFrame from './../FixedFrame';
 import CoreLineDecal from './../LineDecal';
 import CoreRotationalFrame from './../RotationalFrame';
 import CoreScene from './../Scene';
 import CoreTrackFrame from './../TrackFrame';
 import CoreWeight from './../Weight';
 import Distance from './Distance';
+import FixedFrame from './FixedFrame';
 import Line from './Line';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
@@ -72,7 +74,7 @@ function normalized(scene: CoreScene): unknown {
 }
 
 /**
- * All nine building blocks with every prop set: none at its default when `k`
+ * All ten building blocks with every prop set: none at its default when `k`
  * is 1, and every one different between `k` = 1 and 2.
  *
  * The constraints join three pairs of weighted pivots set `gap` apart at
@@ -136,6 +138,11 @@ function fullRig(k: 1 | 2): ReactElement {
           <Weight mass={7 * k} position={[3 * k, 0]} drag={6 * k} />
         </RotationalFrame>
       </TrackFrame>
+      <FixedFrame id="mount" position={[-10 * k, 2]} angle={0.3 * k}>
+        <RotationalFrame id="hung" initialState={[0.2 * k, 0]}>
+          <Weight mass={2} position={[1, 0]} />
+        </RotationalFrame>
+      </FixedFrame>
       {pivot('c1', -20)}
       {pivot('c2', -20 + gap)}
       {pivot('d1', 0, <Anchor id="d1-top" position={[0, 1]} />)}
@@ -229,6 +236,18 @@ function handBuilt(k: 1 | 2): CoreScene {
           }),
         ],
       }),
+      new CoreFixedFrame({
+        id: 'mount',
+        position: [-10 * k, 2],
+        angle: 0.3 * k,
+        frames: [
+          new CoreRotationalFrame({
+            id: 'hung',
+            initialState: [0.2 * k, 0],
+            weights: [new CoreWeight(2, { position: [1, 0] })],
+          }),
+        ],
+      }),
       pivot('c1', -20),
       pivot('c2', -20 + gap),
       pivot('d1', 0),
@@ -300,6 +319,46 @@ describe('buildScene', () => {
     expect(walked.sortedFrames).toHaveLength(2 * RIG.segmentCount + 2);
     expect(walked.constraints).toHaveLength(1);
     expect(walked.frameMap.has('cart')).toBe(true);
+  });
+
+  test('a frame names the anchors inside it, in both routes', () => {
+    // The one piece of a frame component only the mounted route has: the
+    // frame id it hands its children. A frame that stopped providing it would
+    // give an anchor inside it its *grandparent's* frame -- a constraint on a
+    // frame that exists, holding somewhere else, with no complaint from
+    // either route.
+    const rig = (
+      <>
+        <RotationalFrame id="left" position={[0, 5]}>
+          <Weight mass={1} position={[1, 0]} />
+          <FixedFrame id="mount" position={[0, -1]}>
+            <Anchor id="hook" position={[0, 0]} />
+          </FixedFrame>
+        </RotationalFrame>
+        <TrackFrame id="cart" position={[3, 5]}>
+          <Weight mass={1} position={[1, 0]} />
+          <Anchor id="hitch" position={[0, 0]} />
+        </TrackFrame>
+        <RotationalFrame id="right" position={[6, 5]}>
+          <Weight mass={1} position={[1, 0]} />
+        </RotationalFrame>
+        <Distance frame1="hook" frame2="right" position2={[0, -1]} />
+        {/* `position2` solved for, so the coincidence holds as authored. */}
+        <Coincidence frame1="hitch" frame2="right" />
+      </>
+    );
+    const ends = (scene: CoreScene): [string, string][] =>
+      scene.constraints.map((constraint) => [
+        constraint.frameId1,
+        constraint.frameId2,
+      ]);
+
+    // The anchors' own frames, not the frames above them.
+    expect(ends(buildScene(rig))).toEqual([
+      ['mount', 'right'],
+      ['cart', 'right'],
+    ]);
+    expect(ends(assemble(rig))).toEqual(ends(buildScene(rig)));
   });
 
   test('builds every prop of every component as the constructors do', () => {

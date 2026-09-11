@@ -2968,3 +2968,49 @@ describe('Editor, components that take children', () => {
     expect(code()).toContain('{children}');
   });
 });
+
+describe('Editor, children on a fixed frame', () => {
+  test('a fixed frame at the bob hangs a nested pendulum from it', () => {
+    const { container } = render(<Editor />);
+
+    // In the pendulum's tab: a fixed frame in its frame, at the bob -- half a
+    // unit up, since the pendulum's own pivot sits half a unit below where it
+    // is placed -- and the place for children in it.
+    openPendulum();
+    selectIn('Pendulum', 'RotationalFrame');
+    add('FixedFrame');
+    const props = screen.getByRole('region', { name: 'Properties' });
+    fireEvent.change(within(props).getByLabelText('Position x'), {
+      target: { value: '4' },
+    });
+    fireEvent.change(within(props).getByLabelText('Position y'), {
+      target: { value: '0.5' },
+    });
+    selectIn('Pendulum', 'FixedFrame');
+    add('Children');
+
+    expect(code()).toMatch(
+      /<FixedFrame position=\{\[4, 0\.5\]\}>\s*\{children\}\s*<\/FixedFrame>/,
+    );
+
+    // In the scene's tab, a pendulum hung in the pendulum.
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+    selectIn('Scene', 'Pendulum');
+    add('Pendulum');
+
+    // The nested one's rod starts at the centre of the first one's bob.
+    const scene = container.querySelector('.editor__scene .scene')!;
+    const [bob] = [...scene.querySelectorAll('circle')];
+    const [cx, cy] = ['cx', 'cy'].map((name) =>
+      Number(bob!.getAttribute(name)),
+    );
+    const starts = [...scene.querySelectorAll('line')].map((line) =>
+      Math.hypot(
+        Number(line.getAttribute('x1')) - cx!,
+        Number(line.getAttribute('y1')) - cy!,
+      ),
+    );
+
+    expect(Math.min(...starts)).toBeLessThan(1e-6);
+  });
+});

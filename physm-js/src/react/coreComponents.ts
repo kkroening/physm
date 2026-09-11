@@ -3,6 +3,7 @@ import Box from './Box';
 import Circle from './Circle';
 import Coincidence from './Coincidence';
 import Distance from './Distance';
+import FixedFrame from './FixedFrame';
 import Line from './Line';
 import RotationalFrame from './RotationalFrame';
 import TrackFrame from './TrackFrame';
@@ -18,6 +19,7 @@ import Weight from './Weight';
 const coreComponents = [
   TrackFrame,
   RotationalFrame,
+  FixedFrame,
   Box,
   Circle,
   Line,

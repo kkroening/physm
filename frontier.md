@@ -6,15 +6,13 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Where a component's children hang.** A nested pendulum should hang from the
-bob, but the `Children` placeholder puts an instance's children at the origin
-of the frame it sits in -- for the pendulum, its pivot. The placeholder needs a
-position, and the starter pendulum keeps its own pivot offset in its body, so
-the place goes at `[4, 0.5]` for the next one's pivot to land on the bob.
-Either way the code writes a positioned element with no coordinate of its own
-around `{children}`, `<Mount position={[4, 0.5]}>`; what differs is who
-resolves it -- the core, as a frame without a coordinate, or the builder,
-folding the translation into what sits in it. Karl's call.
+**Components take children by default.** Karl expects most components to be
+nestable, so that selecting a pendulum and adding a pendulum makes a double
+pendulum. Today that takes three steps in the pendulum's tab first: a
+`FixedFrame` where the children should hang, and the `Children` placeholder
+in it. An extracted component should come with a place for children, in its
+outermost frame, and the starter pendulum with one at its bob -- `[4, 0.5]`,
+which cancels its own pivot offset.
 
 ## Next — the MVP
 
@@ -246,3 +244,8 @@ was built while gizmos were in review.
   in, and they are built there: the code writes `function Pendulum({ children })`
   and `{children}` where it goes. The placeholder cannot be deleted while an
   instance holds children, nor extracted from its component.
+- **Children where they hang** — `FixedFrame` joins the building blocks: a
+  frame set at a position and an angle, with no coordinate of its own that
+  moves it. With one at a component's bob and the `Children` placeholder in
+  it, a nested pendulum hangs from the bob. The core frame, and how its
+  coordinate is kept inert in both solvers, landed first.

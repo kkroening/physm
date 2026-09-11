@@ -6,6 +6,7 @@ import Box from './../react/Box';
 import CartAndRope from './../CartAndRope';
 import Circle from './../react/Circle';
 import Coincidence from './../react/Coincidence';
+import FixedFrame from './../react/FixedFrame';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
@@ -232,6 +233,11 @@ function everything(): SceneDocument {
         <Weight mass={1} position={[1, 0]} />
       </RotationalFrame>
       <RotationalFrame id="right" position={[3, 0]} />
+      <FixedFrame id="mount" position={[1, 2]} angle={0.5}>
+        <RotationalFrame id="hung">
+          <Weight mass={1} position={[1, 0]} />
+        </RotationalFrame>
+      </FixedFrame>
       <Coincidence
         frame1="left"
         frame2="right"
