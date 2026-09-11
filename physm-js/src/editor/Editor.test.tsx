@@ -2120,6 +2120,29 @@ describe('Editor, the tree from the keyboard', () => {
     expect(document.activeElement).toBe(rows()[0]);
   });
 
+  test('the letters of a search spell out more than the first', () => {
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <TrackFrame id="a" />
+            <Circle radius={1} />
+            <Coincidence frame1="a" frame2="a" />
+          </>,
+        )}
+      />,
+    );
+    act(() => rows()[0]!.focus());
+    pressKey('c');
+
+    expect(document.activeElement).toBe(rows()[1]);
+
+    // `co` does not fit the circle, so the search moves on to the coincidence.
+    pressKey('o');
+
+    expect(document.activeElement).toBe(rows()[2]);
+  });
+
   test('the same letter again steps through the rows that start with it', () => {
     render(
       <Editor
@@ -2149,10 +2172,16 @@ describe('Editor, the tree from the keyboard', () => {
     expect(fireEvent.keyDown(rows()[0]!, { key: 'b', ctrlKey: true })).toBe(
       true,
     );
+    expect(fireEvent.keyDown(rows()[0]!, { key: 'b', altKey: true })).toBe(
+      true,
+    );
+    expect(fireEvent.keyDown(rows()[0]!, { key: 'b', metaKey: true })).toBe(
+      true,
+    );
     expect(document.activeElement).toBe(rows()[0]);
   });
 
-  test('after a delete, a letter finds its row from the top of the tree', () => {
+  test('after a delete, a letter searches from where the arrows take up', () => {
     render(
       <Editor
         initialDocument={documentFrom(
@@ -2168,10 +2197,11 @@ describe('Editor, the tree from the keyboard', () => {
     act(() => rows()[1]!.focus());
     pressKey('Delete');
 
-    // The focus is on the tree itself, so the first box is the next one.
+    // The focus is on the tree itself: the search starts at the row Tab
+    // would reach -- the box that took the circle's place -- and includes it.
     pressKey('b');
 
-    expect(document.activeElement).toBe(rows()[0]);
+    expect(document.activeElement).toBe(rows()[1]);
   });
 
   test('Space selects, and is no part of a search', () => {
@@ -2180,20 +2210,21 @@ describe('Editor, the tree from the keyboard', () => {
         initialDocument={documentFrom(
           <>
             <TrackFrame id="a" />
-            <TrackFrame id="b" />
+            <Circle radius={1} />
+            <Coincidence frame1="a" frame2="a" />
           </>,
         )}
       />,
     );
     act(() => rows()[0]!.focus());
-    pressKey('t');
+    pressKey('c');
     pressKey(' ');
 
-    expect(shown()).toBe('TrackFrame');
+    expect(shown()).toBe('Circle');
 
-    // So the search is still `t`, and a second `t` steps on.
-    pressKey('t');
+    // So the search is still `c`, and `o` makes it `co`: the coincidence.
+    pressKey('o');
 
-    expect(document.activeElement).toBe(rows()[0]);
+    expect(document.activeElement).toBe(rows()[2]);
   });
 });

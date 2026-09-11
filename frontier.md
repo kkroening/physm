@@ -40,6 +40,9 @@ was built while gizmos were in review.
 
 ## Further out
 
+- Find a node by its id or its props. Type-ahead spells a row's tag, as the
+  ARIA tree pattern asks, so in a rig of many `TrackFrame`s the id one would
+  look for is out of its reach: a search of its own.
 - Draw a pose that does not build. Retyping a position under a stated length
   fails at nearly every keystroke, so the kept scene shows the pose from
   before the edit, not what the edit is doing. Drawing the failing pose, with
@@ -201,4 +204,5 @@ was built while gizmos were in review.
 - **Type-ahead in the tree** — a typed letter moves the focus to the next row
   whose name starts with it, whatever the case; letters in quick succession
   spell a longer name, and the same letter again steps through the rows that
-  start with it.
+  start with it. From the tree itself, as after a delete, a search starts at
+  the row Tab would reach.

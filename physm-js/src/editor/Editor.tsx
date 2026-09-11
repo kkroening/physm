@@ -168,21 +168,22 @@ function rowAfter(item: HTMLElement, key: string): HTMLElement | null {
 /** How long a pause between keys starts a new type-ahead search, in ms. */
 const TYPE_AHEAD_PAUSE = 500;
 
+/** Whether a search is one letter, typed once or again and again. */
+function oneLetter(text: string): boolean {
+  return [...text].every((letter) => letter === text.charAt(0));
+}
+
 /**
- * The row type-ahead moves the focus to: the next whose name starts with
- * `text`, round to the top. A longer search may stay on `item` while it still
- * fits; one letter, or the same letter again and again, steps on from it.
+ * The row type-ahead moves the focus to: the first from `from` on, round to the
+ * top, whose name starts with `text` -- or, for one letter typed again and
+ * again, with that letter.
  */
 function rowStarting(
-  tree: HTMLElement,
-  item: HTMLElement | null,
+  rows: readonly HTMLElement[],
+  from: number,
   text: string,
 ): HTMLElement | null {
-  const rows = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"]')];
-  const at = item ? rows.indexOf(item) : -1;
-  const repeated = [...text].every((letter) => letter === text.charAt(0));
-  const search = (repeated ? text.charAt(0) : text).toLowerCase();
-  const from = repeated ? at + 1 : Math.max(at, 0);
+  const search = (oneLetter(text) ? text.charAt(0) : text).toLowerCase();
 
   return (
     [...rows.slice(from), ...rows.slice(0, from)].find((row) =>
@@ -447,11 +448,20 @@ function TreePane({
         ? key
         : typed.current.text + key;
     typed.current = { text, at: now };
-    rowStarting(
-      tree,
-      target.closest<HTMLElement>('[role="treeitem"]'),
-      text,
-    )?.focus();
+    const rows = [...tree.querySelectorAll<HTMLElement>('[role="treeitem"]')];
+    const item = target.closest<HTMLElement>('[role="treeitem"]');
+
+    // From the row after the focused one for one letter, or the same again,
+    // and from the focused row itself while a longer search still fits it.
+    // With the focus on the tree itself, as after a delete, from the row Tab
+    // would reach, where the arrows take up too.
+    const from = item
+      ? rows.indexOf(item) + (oneLetter(text) ? 1 : 0)
+      : Math.max(
+          rows.findIndex((row) => row.tabIndex === 0),
+          0,
+        );
+    rowStarting(rows, from, text)?.focus();
   };
   const keys = rowKeys(body);
   const tabbable =
