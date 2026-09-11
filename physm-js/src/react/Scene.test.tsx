@@ -585,9 +585,7 @@ describe('Scene (authoring)', () => {
   });
 
   test('an anchor named by id wires a constraint, with no ref anywhere', () => {
-    // The declarative form, and the one a document can hold. `Rig` below makes
-    // no hook call, so it can be evaluated outside a render -- which a ref-based
-    // rig cannot, because `useRef` has no dispatcher to run against there.
+    // The declarative form, and the one a document can hold.
     //
     // The frames are deliberately unnamed, so the test is about the anchor ids
     // resolving to *generated* frame ids rather than about names that happen
@@ -608,8 +606,6 @@ describe('Scene (authoring)', () => {
         </>
       );
     }
-
-    expect(() => Rig()).not.toThrow();
 
     const scene = assemble(<Rig />);
 
@@ -641,17 +637,16 @@ describe('Scene (authoring)', () => {
     ).toBeGreaterThan(0.5);
   });
 
-  test('an anchor id wins over a frame with the same id', () => {
-    // A name is ambiguous when an anchor and a frame share it, and the anchor
-    // is the more specific thing -- it names a point, where a frame id names
-    // only an origin. So the constraint lands on the anchor's frame, at the
-    // anchor's point, rather than on the frame called `post`.
+  test('a name that means both an anchor and a frame is refused', () => {
+    // Resolved as the anchor, it would silently move a constraint end -- and
+    // the position it states -- onto a frame its author never named. The same
+    // reason two anchors sharing an id are refused.
     function Rig(): ReactElement {
       return (
         <>
           <RotationalFrame id="post" position={[0, 0]} />
           <RotationalFrame id="arm" position={[5, 0]}>
-            <Anchor id="post" position={[1, 0]} />
+            <Anchor id="post" />
           </RotationalFrame>
           <RotationalFrame id="other" position={[9, 0]} />
           <Coincidence frame1="post" frame2="other" />
@@ -659,11 +654,54 @@ describe('Scene (authoring)', () => {
       );
     }
 
-    const scene = assemble(<Rig />);
-    const solved = scene.constraints[0] as CoreCoincidenceConstraint;
+    expect(() => assemble(<Rig />)).toThrow(
+      /'post' names both an <Anchor> and a frame/,
+    );
+  });
 
-    expect(solved.frameId1).toBe('arm');
-    expect(solved.localPosition1).toEqual([1, 0]);
+  test('an id-named anchor that moves takes its constraint with it', () => {
+    // A move is an unmount plus a mount, and the old registration is only
+    // reaped after assembly -- so for one assembly both are in the map, and only
+    // the dead flag keeps that from reading as two anchors sharing the id.
+    let scene: CoreScene | null = null;
+
+    function Rig({ onB }: { onB: boolean }): ReactElement {
+      return (
+        <>
+          <RotationalFrame id="a" position={[1, 0]}>
+            {onB ? null : <Anchor id="tip" />}
+          </RotationalFrame>
+          <RotationalFrame id="b" position={[2, 0]}>
+            {onB ? <Anchor id="tip" /> : null}
+          </RotationalFrame>
+          <RotationalFrame id="other" position={[3, 0]} />
+          <Coincidence frame1="other" frame2="tip" />
+        </>
+      );
+    }
+
+    // `Rig` outside `tree`, for the same reason as in the anchor-mounting test
+    // above: declared inside, it is a new type on every call, and the full
+    // remount would hide the dead entry.
+    const tree = (onB: boolean): ReactElement => (
+      <svg>
+        <Scene onSceneChange={(built) => (scene = built)}>
+          <Rig onB={onB} />
+        </Scene>
+      </svg>
+    );
+
+    const { rerender } = render(tree(false));
+
+    expect((scene!.constraints[0] as CoreCoincidenceConstraint).frameId2).toBe(
+      'a',
+    );
+
+    rerender(tree(true));
+
+    expect((scene!.constraints[0] as CoreCoincidenceConstraint).frameId2).toBe(
+      'b',
+    );
   });
 
   test('two anchors sharing an id are refused', () => {

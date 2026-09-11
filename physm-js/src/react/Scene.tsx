@@ -1,6 +1,7 @@
 import * as mat3 from './../Mat3';
 import CoreScene from './../Scene';
 import SceneView from './SceneView';
+import { refuseAnchorFrameCollisions } from './resolveAnchor';
 import {
   ParentKeyContext,
   RegistryContext,
@@ -28,8 +29,9 @@ export interface SceneProps {
 /**
  * Every live anchor that declared an `id`, by that id.
  *
- * Collected before any constraint is built, so a constraint naming an anchor
- * by id never has to wait for it the way a ref-named one can.
+ * Collected before any constraint is built. A constraint naming an anchor that
+ * has not registered yet takes the name for a frame id, is set aside as
+ * unresolved, and is retried on the next assembly -- see `resolveAnchor`.
  *
  * Two anchors sharing an id are refused rather than resolved either way. Picking
  * one would weld a constraint to whichever happened to register first, which
@@ -128,6 +130,7 @@ export default function Scene({
     // After the tree, because `addConstraint` solves against the pose the
     // frames are actually in.
     const anchors = collectAnchors(registry.entries);
+    refuseAnchorFrameCollisions(anchors, built.frameMap);
     for (const { node, live } of registry.entries.values()) {
       if (!live || node.slot !== 'constraint') {
         continue;
@@ -198,7 +201,7 @@ export default function Scene({
     for (const constraint of unresolvedRef.current) {
       console.warn(
         `physm: constraint between '${constraint.frameId1}' and ` +
-          `'${constraint.frameId2}' was dropped: the scene has no such frame.`,
+          `'${constraint.frameId2}' was dropped: the scene has no such frame or <Anchor id>.`,
       );
     }
 

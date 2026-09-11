@@ -43,15 +43,16 @@ function fromAnchor(
 /**
  * One end of a constraint, as the core constructor wants it.
  *
- * **A name resolves to an anchor before a frame.** An anchor with that `id`
- * wins over a frame with that id, because the anchor is the more specific
- * thing: it names a point, where a frame id names only an origin. A name that
- * matches no anchor is a frame id, and passes through untouched.
+ * **A name resolves to an anchor of that `id` if there is one, and to a frame
+ * of that id otherwise.** The two never compete: `refuseAnchorFrameCollisions`
+ * refuses a scene where one name means both, so the order decides nothing.
  *
- * `null` when the end is a ref whose anchor has not reported yet -- see the
- * `constraint` slot in `sceneNodes`. A name never returns `null`: an anchor
- * named by id is collected before any constraint is built, and a frame name
- * needs nothing to have mounted.
+ * `null` only when the end is a ref whose anchor has not reported yet -- see
+ * the `constraint` slot in `sceneNodes`. A name never returns `null`, which is
+ * not the same as never waiting: a name that matches no live anchor is taken
+ * as a frame id, so an anchor that has not mounted yet -- or a mistyped one --
+ * surfaces as a constraint naming a frame that does not exist, which `<Scene>`
+ * sets aside and reports.
  */
 export default function resolveAnchor(
   end: ConstraintEnd,
@@ -67,4 +68,30 @@ export default function resolveAnchor(
   const point = end.current;
 
   return point ? fromAnchor(point, position) : null;
+}
+
+/**
+ * Refuse a name that means both an anchor and a frame.
+ *
+ * Resolved as the anchor, it would silently move every constraint end that
+ * spelled the frame's name onto the anchor's frame -- a stated position with it
+ * -- while every other use of the name, a state map or the controls' force map,
+ * still meant the frame. The same reason two anchors sharing an id are refused:
+ * resolving either way changes the answer rather than the picture.
+ *
+ * Exported so that every route that collects anchors applies one rule, rather
+ * than each restating it.
+ */
+export function refuseAnchorFrameCollisions(
+  anchors: AnchorLookup,
+  frames: ReadonlyMap<FrameId, unknown>,
+): void {
+  for (const id of anchors.keys()) {
+    if (frames.has(id)) {
+      throw new Error(
+        `'${id}' names both an <Anchor> and a frame. A constraint end naming ` +
+          'it would silently mean the anchor; rename one of the two.',
+      );
+    }
+  }
 }

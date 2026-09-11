@@ -15,6 +15,9 @@ out in — with no renderer, no effects and no second render.
 - composites are called; the binding's own components are not
 - sibling order is JSX order by construction, which is what
   [0005](docs/issues/0005.md) asks for
+- the assembly pass is shared too, not only the per-component builds:
+  anchors are collected, a name meaning both an anchor and a frame is refused,
+  and only then are constraints built -- one rule, whichever route runs it
 - checked against the mounted route: `buildScene(<CartAndRope />)` must equal
   what `<Scene>` assembles — same frames, decals, weights and constraints, in
   the same order
@@ -32,7 +35,9 @@ Roughly one PR each.
 6. **Editor shell** — tab bar, code, tree, scene, properties, library; read-only
 7. **Selection and prop editing**
 8. **Insert, delete, reorder** from the library
-9. **Extract to component, and tabs**
+9. **Extract to component, and tabs** — anchor ids are scene-wide and
+   duplicates are refused, so extraction has to deal with an id it captures:
+   refuse the subtree, promote the id to a prop, or scope ids per instance
 10. **Play**
 11. **Gizmos**
 

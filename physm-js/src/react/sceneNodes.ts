@@ -21,8 +21,8 @@ import type { PositionLike } from './../Scene';
  * always stated a point could never express it, and the constraint would check
  * the geometry and throw instead of solving it.
  *
- * So `<Anchor ref={tip} position={[1.4, 0]} />` names a point, and
- * `<Anchor ref={tip} />` names only the frame and leaves the point to be
+ * So `<Anchor id="tip" position={[1.4, 0]} />` names a point, and
+ * `<Anchor id="tip" />` names only the frame and leaves the point to be
  * solved.
  */
 export interface AnchorPoint {
@@ -266,9 +266,9 @@ export function buildChildren(
         children.frames.push(node.build(buildChildren(entries, key)));
         break;
       case 'anchor':
-        // Registered only so that mounting one bumps the version and forces a
-        // reassembly. The point itself travels by ref, because a constraint
-        // reads it during assembly rather than during render -- see `Anchor`.
+        // Part of no frame. An id-named anchor's point is collected by
+        // `<Scene>` before constraints are built; a ref-named one travels by
+        // ref. Either way it contributes nothing here -- see `Anchor`.
         break;
       case 'constraint':
         // Constraints belong to the scene, not to a frame: they name two

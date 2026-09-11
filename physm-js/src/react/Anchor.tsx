@@ -37,14 +37,15 @@ export interface AnchorProps {
  * **Omitting `position` is meaningful**, not merely a default. A
  * `CoincidenceConstraint` solves for the attachment it is not given, which is
  * what closes the demo's rope loop across a gap nobody measured -- so
- * `<Anchor ref={tip} />` names the frame and leaves the point to be solved,
- * while `<Anchor ref={tip} position={[1.4, 0]} />` states it and gets the
+ * `<Anchor id="tip" />` names the frame and leaves the point to be solved,
+ * while `<Anchor id="tip" position={[1.4, 0]} />` states it and gets the
  * check instead.
  *
- * It draws nothing and contributes nothing to the scene. It registers only so
- * that mounting one bumps the registry's version: the point travels by ref, and
- * a ref does not re-render anybody, so without the bump a constraint assembled
- * before the anchor mounted would stay unresolved with nothing to retry it.
+ * It draws nothing, and registers for two reasons. An id-named anchor's point
+ * is read out of its registration by the assembly pass. And mounting one bumps
+ * the registry's version, which is what retries a ref-named end: a ref does not
+ * re-render anybody, so without the bump a constraint assembled before the
+ * anchor mounted would stay unresolved with nothing to retry it.
  */
 export default function Anchor({ id, position, ref }: AnchorProps): null {
   const frameId = useContext(FrameIdContext);
