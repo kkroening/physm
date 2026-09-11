@@ -358,6 +358,8 @@ function TreeRow({
 
         if (
           event.altKey &&
+          !event.ctrlKey &&
+          !event.metaKey &&
           (event.key === 'ArrowUp' || event.key === 'ArrowDown')
         ) {
           event.preventDefault();
@@ -365,6 +367,8 @@ function TreeRow({
         } else if (
           event.altKey &&
           event.shiftKey &&
+          !event.ctrlKey &&
+          !event.metaKey &&
           (event.key === 'ArrowRight' || event.key === 'ArrowLeft')
         ) {
           event.preventDefault();
@@ -540,10 +544,13 @@ function TreePane({
   const outdentTitle = selectedPath
     ? outdentRefusal(doc, focus, selectedPath)
     : null;
+
   // A move to another list makes a new row, so the focus the keys had goes
   // with the old one: it follows the node to where it went. Only from the
-  // keys -- the toolbar's buttons keep the focus a run of clicks needs.
+  // keys -- the toolbar's buttons keep the focus a run of clicks needs -- and
+  // only when there is a move, so a refused keystroke leaves the focus alone.
   const [moved, setMoved] = useState(0);
+
   useEffect(() => {
     if (moved) {
       listRef.current
@@ -551,14 +558,21 @@ function TreePane({
         ?.focus();
     }
   }, [moved]);
+
   const rowActions: TreeActions = {
     ...actions,
     onIndent: (path) => {
-      setMoved((count) => count + 1);
+      if (!indentRefusal(doc, focus, path)) {
+        setMoved((count) => count + 1);
+      }
+
       actions.onIndent(path);
     },
     onOutdent: (path) => {
-      setMoved((count) => count + 1);
+      if (!outdentRefusal(doc, focus, path)) {
+        setMoved((count) => count + 1);
+      }
+
       actions.onOutdent(path);
     },
     onSelect: (path) => {
@@ -682,7 +696,7 @@ function TreePane({
             disabled={!selectedPath || indentTitle !== null}
             onClick={onSelected(actions.onIndent)}
           >
-            →
+            ⇥
           </button>
           <button
             type="button"
@@ -691,7 +705,7 @@ function TreePane({
             disabled={!selectedPath || outdentTitle !== null}
             onClick={onSelected(actions.onOutdent)}
           >
-            ←
+            ⇤
           </button>
           <button
             type="button"

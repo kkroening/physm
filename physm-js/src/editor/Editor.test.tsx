@@ -3177,4 +3177,59 @@ describe('Editor, moving a node into another', () => {
 
     expect(code()).toBe(before);
   });
+
+  test('a refused move leaves the focus where the keystroke found it', () => {
+    render(<Editor initialDocument={doc()} />);
+    const cart = (): HTMLElement =>
+      screen.getByRole('treeitem', { name: 'TrackFrame id="cart"' });
+    const arm = (): HTMLElement =>
+      screen.getByRole('treeitem', { name: 'RotationalFrame id="arm"' });
+    fireEvent.click(cart().firstElementChild!);
+    act(() => arm().focus());
+
+    // The arm is at the top of the body: there is nothing to move it out of,
+    // so the focus stays on it rather than following the selection.
+    fireEvent.keyDown(arm(), {
+      key: 'ArrowLeft',
+      altKey: true,
+      shiftKey: true,
+    });
+
+    expect(document.activeElement).toBe(arm());
+
+    // The cart, first in the body, has nothing above it to move into.
+    fireEvent.click(arm().firstElementChild!);
+    act(() => cart().focus());
+    fireEvent.keyDown(cart(), {
+      key: 'ArrowRight',
+      altKey: true,
+      shiftKey: true,
+    });
+
+    expect(document.activeElement).toBe(cart());
+  });
+
+  test('with Ctrl or Meta also held, the chords are left to the browser', () => {
+    render(<Editor initialDocument={doc()} />);
+    const arm = (): HTMLElement =>
+      screen.getByRole('treeitem', { name: 'RotationalFrame id="arm"' });
+    fireEvent.click(arm().firstElementChild!);
+    const before = code();
+
+    for (const held of [{ ctrlKey: true }, { metaKey: true }]) {
+      expect(
+        fireEvent.keyDown(arm(), {
+          key: 'ArrowRight',
+          altKey: true,
+          shiftKey: true,
+          ...held,
+        }),
+      ).toBe(true);
+      expect(
+        fireEvent.keyDown(arm(), { key: 'ArrowUp', altKey: true, ...held }),
+      ).toBe(true);
+    }
+
+    expect(code()).toBe(before);
+  });
 });
