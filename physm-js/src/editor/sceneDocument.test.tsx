@@ -1,14 +1,19 @@
+import Box from './../react/Box';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './../react/Circle';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
+import starterDocument from './starterDocument';
 import {
+  definitionOf,
   documentFrom,
   elementOf,
+  extractComponent,
   insertNode,
   moveNode,
+  nameRefusal,
   nodeAt,
   nodesFrom,
   removeNode,
@@ -320,5 +325,61 @@ describe('sceneDocument', () => {
   test('a path that names nothing is refused', () => {
     expect(() => nodeAt(twoPoles(), 'Scene', [0, 9])).toThrow(/No node at/);
     expect(() => nodeAt(twoPoles(), 'Nope', [0])).toThrow(/no component named/);
+  });
+});
+
+describe('extracting a component', () => {
+  // Scene: [Line, TrackFrame [Box, Weight, Pendulum]].
+  test('moves a subtree into a new component, and leaves an instance in its place', () => {
+    const doc = starterDocument();
+    const next = extractComponent(doc, 'Scene', [1, 0], 'Chassis');
+
+    expect(nodeAt(next, 'Scene', [1, 0]).type).toEqual({
+      kind: 'defined',
+      name: 'Chassis',
+    });
+    expect(definitionOf(next, 'Chassis').body).toEqual([
+      nodeAt(doc, 'Scene', [1, 0]),
+    ]);
+    expect(definitionOf(doc, 'Scene')).toBe(definitionOf(doc, 'Scene'));
+
+    // The same subtree, one component down, builds the same scene.
+    const before = buildScene(elementOf(doc));
+    const after = buildScene(elementOf(next));
+
+    expect(after.toJsonObj()).toEqual(before.toJsonObj());
+    expect(after.frameMap.get('cart')!.decals).toEqual(
+      before.frameMap.get('cart')!.decals,
+    );
+  });
+
+  test('moves the key to the instance, where identity among siblings lives', () => {
+    const doc = documentFrom(
+      <TrackFrame id="cart">
+        <Box key="body" width={2} />
+      </TrackFrame>,
+    );
+    const next = extractComponent(doc, 'Scene', [0, 0], 'Body');
+
+    expect(nodeAt(next, 'Scene', [0, 0]).key).toBe('body');
+    expect(definitionOf(next, 'Body').body[0]!.key).toBeUndefined();
+  });
+
+  test('refuses a name the generated module could not use, saying why', () => {
+    const doc = starterDocument();
+
+    expect(nameRefusal(doc, 'chassis')).toMatch(/capital letter/);
+    expect(nameRefusal(doc, 'Box')).toMatch(/already a building block/);
+    expect(nameRefusal(doc, 'Pendulum')).toMatch(/already a component/);
+    expect(nameRefusal(doc, 'ReactElement')).toMatch(/already imported/);
+    expect(nameRefusal(documentFrom(<CartAndRope />), 'CartAndRope')).toMatch(
+      /already imported/,
+    );
+    expect(nameRefusal(doc, 'Math')).toMatch(/JavaScript global/);
+    expect(nameRefusal(doc, 'Chassis')).toBeNull();
+
+    expect(() => extractComponent(doc, 'Scene', [0], 'Box')).toThrow(
+      /already a building block/,
+    );
   });
 });

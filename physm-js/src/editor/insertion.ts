@@ -86,14 +86,45 @@ function definitionsUsedBy(
   return used;
 }
 
+/** Every id these nodes and their children carry. */
+function idsIn(nodes: readonly DocNode[]): string[] {
+  return nodes.flatMap(({ props, children }) => [
+    ...(typeof props.id === 'string' ? [props.id] : []),
+    ...idsIn(children),
+  ]);
+}
+
+/** Every id an instance of `name` would put in the scene. */
+function idsNamedBy(doc: SceneDocument, name: string): string[] {
+  return [name, ...definitionsUsedBy(doc, name)].flatMap((each) =>
+    idsIn(definitionOf(doc, each).body),
+  );
+}
+
+/** How many instances of `name` the document holds, in any definition. */
+function instancesOf(doc: SceneDocument, name: string): number {
+  const count = (nodes: readonly DocNode[]): number =>
+    nodes.reduce(
+      (sum, node) =>
+        sum +
+        (node.type.kind === 'defined' && node.type.name === name ? 1 : 0) +
+        count(node.children),
+      0,
+    );
+
+  return doc.definitions.reduce((sum, { body }) => sum + count(body), 0);
+}
+
 /**
  * Why `ref` cannot go at `point` in `definition`, or `null` when it can.
  *
  * It checks containment by slot, through `canContain`, and recursion -- not
  * everything a build can refuse. A composite states no slot, and goes wherever
  * a frame could, which holds because every body is held to the root's rules:
- * see `insertionPoint`. And a component the document
- * defines cannot go anywhere inside itself, which would recurse without end.
+ * see `insertionPoint`. A component the document defines
+ * cannot go anywhere inside itself, which would recurse without end. And one
+ * whose subtree names ids cannot be added a second time: ids are scene-wide,
+ * so the second instance would repeat them.
  */
 export function refusalOf(
   doc: SceneDocument,
@@ -110,6 +141,16 @@ export function refusalOf(
     definitionsUsedBy(doc, ref.name).has(definition)
   ) {
     return `${ref.name} cannot go inside ${definition}, which it contains.`;
+  }
+
+  if (ref.kind === 'defined') {
+    const [id] = idsNamedBy(doc, ref.name);
+    if (id !== undefined && instancesOf(doc, ref.name) > 0) {
+      return (
+        `${ref.name} names '${id}', and ids are scene-wide: a second ` +
+        `${ref.name} would repeat it.`
+      );
+    }
   }
 
   const slot = ref.kind === 'core' ? ref.component.meta.slot : 'frame';

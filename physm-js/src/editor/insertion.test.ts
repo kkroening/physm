@@ -3,6 +3,7 @@ import Coincidence from './../react/Coincidence';
 import Line from './../react/Line';
 import Weight from './../react/Weight';
 import starterDocument from './starterDocument';
+import { extractComponent, removeNode } from './sceneDocument';
 import { insertionPoint, newNode, refusalOf } from './insertion';
 import type {
   ComponentRef,
@@ -101,6 +102,32 @@ describe('refusalOf', () => {
     ).toMatch(/A cannot go inside C, which it contains/);
     expect(
       refusalOf(chain, 'A', insertionPoint(chain, 'A', null), defined('C')),
+    ).toBeNull();
+  });
+});
+
+describe('refusalOf, for ids', () => {
+  test('refuses a second instance of a component that names ids', () => {
+    // Ids are scene-wide, so a second instance would repeat them.
+    const doc = extractComponent(starterDocument(), 'Scene', [1], 'Cart');
+    const atRoot = insertionPoint(doc, 'Scene', null);
+
+    expect(refusalOf(doc, 'Scene', atRoot, defined('Cart'))).toMatch(
+      /Cart names 'cart', and ids are scene-wide/,
+    );
+    // Pendulum, now inside Cart, names none.
+    expect(refusalOf(doc, 'Scene', atRoot, defined('Pendulum'))).toBeNull();
+
+    // The first instance is fine: nothing is repeated yet.
+    const unused = removeNode(doc, 'Scene', [1]);
+
+    expect(
+      refusalOf(
+        unused,
+        'Scene',
+        insertionPoint(unused, 'Scene', null),
+        defined('Cart'),
+      ),
     ).toBeNull();
   });
 });

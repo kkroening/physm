@@ -1,3 +1,4 @@
+import coreComponents from './../react/coreComponents';
 import { Fragment, createElement, isValidElement } from 'react';
 import type { ComponentMeta } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
@@ -459,4 +460,96 @@ export function moveNode(
     index,
     node,
   );
+}
+
+/** Every node in these nodes and their children, parents first. */
+function everyNode(nodes: readonly DocNode[]): DocNode[] {
+  return nodes.flatMap((node) => [node, ...everyNode(node.children)]);
+}
+
+/**
+ * Why `name` cannot name a new component in `doc`, or `null` when it can.
+ *
+ * It becomes a JSX tag and a function in generated source. So it has to be an
+ * identifier React reads as a component -- a capital first -- and must not
+ * collide with anything that source already means: a building block, another
+ * component, an import, or a JavaScript global it would shadow.
+ */
+export function nameRefusal(doc: SceneDocument, name: string): string | null {
+  const imported = new Set(
+    doc.definitions.flatMap(({ body }) =>
+      everyNode(body).flatMap(({ type }) =>
+        type.kind === 'imported' ? [type.name] : [],
+      ),
+    ),
+  );
+
+  if (!/^[A-Z][A-Za-z0-9_]*$/.test(name)) {
+    return (
+      'A component name starts with a capital letter, and has only letters, ' +
+      'digits and _ after it.'
+    );
+  }
+
+  if (coreComponents.some(({ meta }) => meta.name === name)) {
+    return `${name} is already a building block.`;
+  }
+
+  if (doc.definitions.some((definition) => definition.name === name)) {
+    return `${name} is already a component in this scene.`;
+  }
+
+  if (imported.has(name) || name === 'ReactElement') {
+    return `${name} is already imported by the generated module.`;
+  }
+
+  return name in globalThis
+    ? `${name} is a JavaScript global, which the generated module would shadow.`
+    : null;
+}
+
+/**
+ * Move the node at `path`, and everything under it, into a new component named
+ * `name`, leaving an instance of it in its place.
+ *
+ * A pure document edit, because a subtree is closed: it holds literals and
+ * instances, never a reference into an enclosing scope, so nothing has to be
+ * captured or threaded through as a prop. The instance takes the node's `key`,
+ * so its identity among its siblings is unchanged.
+ */
+export function extractComponent(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+  name: string,
+): SceneDocument {
+  const refusal = nameRefusal(doc, name);
+  if (refusal) {
+    throw new Error(refusal);
+  }
+
+  const node = nodeAt(doc, definition, path);
+  const [list, index] = splitPath(path);
+  const instance: DocNode = {
+    type: { kind: 'defined', name },
+    props: {},
+    ...(node.key === undefined ? {} : { key: node.key }),
+    children: [],
+  };
+  const replaced = withBody(doc, definition, (body) =>
+    withList(body, list, (siblings) =>
+      siblings.map((entry, at) => (at === index ? instance : entry)),
+    ),
+  );
+
+  return {
+    ...replaced,
+    definitions: [
+      ...replaced.definitions,
+      {
+        name,
+        body: [{ type: node.type, props: node.props, children: node.children }],
+      },
+    ],
+  };
 }
