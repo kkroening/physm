@@ -362,6 +362,74 @@
   font-family: ui-monospace, monospace;
 }
 
+/* A tab and its close button, read as one. */
+.editor__tab {
+  display: flex;
+}
+
+.editor__tabs .editor__close {
+  margin-left: -2px;
+  padding: 0.35rem 0.45rem;
+  color: #4a5a68;
+}
+
+.editor__tab:has(> [aria-selected='true']) .editor__close {
+  background-color: #cde1ef;
+}
+
+.editor__tabs .editor__close:hover {
+  color: #8a1c14;
+}
+
+.editor__extract {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  margin: 0.2rem 0 0.5rem;
+}
+
+.editor__extract input {
+  flex: 1;
+  width: 0;
+  min-width: 6rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid #b5c6d8;
+  border-radius: 3px;
+  background-color: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+.editor__extract input[aria-invalid='true'] {
+  border-color: #c0392b;
+  background-color: #fdf1f0;
+}
+
+.editor__extract button,
+.editor__open {
+  padding: 0.2rem 0.55rem;
+  border: 0;
+  border-radius: 3px;
+  background-color: #dce7f2;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor__extract button:disabled {
+  color: #a3b1bd;
+  cursor: not-allowed;
+}
+
+.editor__extract .editor__hint {
+  flex-basis: 100%;
+}
+
+.editor__open {
+  margin-top: 0.6rem;
+}
+
 /* Too narrow for three columns: stack them, scene first, so the thing being
    edited is always the thing on screen. */
 @media (max-width: 48rem) {

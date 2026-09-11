@@ -6,18 +6,15 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Extract to component, and tabs.** Extraction turns a rig laid out from
-building blocks into one described by components.
+**Play.** Run the focused component forward in the editor, and keep it running
+through edits.
 
-- the selected subtree moves into a new definition, an instance takes its
-  place, and the new component opens in its own tab
-- a name the generated module could not use is refused as it is typed
-- an instance of a defined component opens by double-click, or from the
-  properties pane
-- ids, a frame's or an anchor's, are scene-wide, so a component whose subtree
-  names one cannot be added where its ids are already used -- the MVP's floor.
-  Promote-to-prop, or scoping ids per instance, is how such a component becomes
-  reusable.
+- Play, Pause and Reset over the scene pane, on `JsSolver`, one animation frame
+  at a time
+- a prop edit carries each frame's state over, and a structural edit restarts
+  it -- the decision recorded in
+  [0014 page 8](docs/issues/0014/08-play.md#editing-while-it-runs)
+- a stalled or hidden tab does not come back to a burst of catch-up steps
 
 ## Next — the MVP
 
@@ -31,13 +28,16 @@ Roughly one PR each.
 6. ~~**Editor shell**~~ — done
 7. ~~**Selection and prop editing**~~ — done
 8. ~~**Insert, delete, reorder**~~ — done
-9. **Extract to component, and tabs** — *in view*
-10. **Play**
+9. ~~**Extract to component, and tabs**~~ — done
+10. **Play** — *in view*
 11. **Gizmos**
 
-The MVP is through 9: load a scene, see its tree, edit props, add, delete and
-reorder nodes, extract a component and reuse it, and export TSX that rebuilds to
-the same scene. Play is cheap once the shell exists and may come forward.
+Steps 1-9 are done: load a scene, see its tree, edit props, add, delete and
+reorder nodes, extract a component and reuse it -- one that names no id, for
+now -- and export TSX that rebuilds to the same scene.
+[0014 page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) also counts
+gizmos in the MVP, so step 11 is what remains of it. Play came forward because
+the shell made it cheap.
 
 ## Further out
 
@@ -61,7 +61,8 @@ the same scene. Play is cheap once the shell exists and may come forward.
   components take no props until promote-to-prop, so it stays open -- Karl's
   call.
 - Scene picking and dragging
-- Promote to prop
+- Promote to prop, or scope ids per instance: either makes a component that
+  names an id reusable. Which comes first is Karl's call.
 - Code pane highlighting, and scroll-once on focus change
 - Codegen polish: round numbers (`-Math.PI / 2`), constants for repeated values
 - The constraint-first direction ([0014 page 9](docs/issues/0014/09-horizon.md))
@@ -121,3 +122,8 @@ the same scene. Play is cheap once the shell exists and may come forward.
   keys delete and reorder; a new node starts with its required props at their
   initial values; and a building block missing a required prop fails to build
   by name.
+- **Extract to component, and tabs** — the MVP's last step: the selected
+  subtree moves into a new definition and opens in its own tab, a name is
+  checked as it is typed, a defined instance opens by double-click or from the
+  properties pane, and a component is refused where the scene already uses its
+  ids.

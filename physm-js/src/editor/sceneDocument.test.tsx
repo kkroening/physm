@@ -1,14 +1,20 @@
+import Box from './../react/Box';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './../react/Circle';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
+import starterDocument from './starterDocument';
 import {
+  definitionOf,
   documentFrom,
   elementOf,
+  extractComponent,
+  extractionRefusal,
   insertNode,
   moveNode,
+  nameRefusal,
   nodeAt,
   nodesFrom,
   removeNode,
@@ -320,5 +326,95 @@ describe('sceneDocument', () => {
   test('a path that names nothing is refused', () => {
     expect(() => nodeAt(twoPoles(), 'Scene', [0, 9])).toThrow(/No node at/);
     expect(() => nodeAt(twoPoles(), 'Nope', [0])).toThrow(/no component named/);
+  });
+});
+
+describe('extracting a component', () => {
+  // Scene: [Line, TrackFrame [Box, Weight, Pendulum]].
+  test('moves a subtree into a new component, and leaves an instance in its place', () => {
+    const doc = starterDocument();
+    const scene = definitionOf(doc, 'Scene');
+    const next = extractComponent(doc, 'Scene', [1, 0], 'Chassis');
+
+    expect(nodeAt(next, 'Scene', [1, 0]).type).toEqual({
+      kind: 'defined',
+      name: 'Chassis',
+    });
+    expect(definitionOf(next, 'Chassis').body).toEqual([
+      nodeAt(doc, 'Scene', [1, 0]),
+    ]);
+    // The document it was given is left as it was.
+    expect(definitionOf(doc, 'Scene')).toBe(scene);
+
+    // The same subtree, one component down, builds the same scene.
+    const before = buildScene(elementOf(doc));
+    const after = buildScene(elementOf(next));
+
+    expect(after.toJsonObj()).toEqual(before.toJsonObj());
+    expect(after.frameMap.get('cart')!.decals).toEqual(
+      before.frameMap.get('cart')!.decals,
+    );
+  });
+
+  test('the same scene, up to the ids of frames nobody named', () => {
+    // An unnamed frame's id is its path, and the instance adds to that path,
+    // so the pendulum's frame is renamed. A structural edit resets motion
+    // anyway, and every frame someone named keeps its id.
+    const doc = starterDocument();
+    const next = extractComponent(doc, 'Scene', [1], 'Cart');
+    const before = buildScene(elementOf(doc));
+    const after = buildScene(elementOf(next));
+    const named = (scene: CoreScene): string[] =>
+      frameIds(scene).filter((id) => !id.startsWith('@'));
+
+    expect(normalized(after)).toEqual(normalized(before));
+    expect(named(after)).toEqual(named(before));
+    expect(named(after)).toContain('cart');
+    expect(frameIds(after)).not.toEqual(frameIds(before));
+  });
+
+  test('refuses to extract a weight or an anchor alone', () => {
+    // An instance goes wherever a frame can -- which a weight cannot.
+    const doc = starterDocument();
+
+    expect(extractionRefusal(doc, 'Scene', [1, 1])).toMatch(
+      /A Weight cannot be a component of its own/,
+    );
+    expect(extractionRefusal(doc, 'Scene', [1, 0])).toBeNull();
+    expect(() => extractComponent(doc, 'Scene', [1, 1], 'Ballast')).toThrow(
+      /has to go inside a frame/,
+    );
+  });
+
+  test('moves the key to the instance, where identity among siblings lives', () => {
+    const doc = documentFrom(
+      <TrackFrame id="cart">
+        <Box key="body" width={2} />
+      </TrackFrame>,
+    );
+    const next = extractComponent(doc, 'Scene', [0, 0], 'Body');
+
+    expect(nodeAt(next, 'Scene', [0, 0]).key).toBe('body');
+    expect(definitionOf(next, 'Body').body[0]!.key).toBeUndefined();
+  });
+
+  test('refuses a name the generated module could not use, saying why', () => {
+    const doc = starterDocument();
+
+    expect(nameRefusal(doc, 'chassis')).toMatch(/capital letter/);
+    expect(nameRefusal(doc, 'Box')).toMatch(/already a building block/);
+    expect(nameRefusal(doc, 'Pendulum')).toMatch(/already a component/);
+    expect(nameRefusal(doc, 'ReactElement')).toMatch(/already imported/);
+    expect(nameRefusal(documentFrom(<CartAndRope />), 'CartAndRope')).toMatch(
+      /already imported/,
+    );
+    expect(nameRefusal(doc, 'Math')).toMatch(/JavaScript built-in/);
+    // A browser's own globals are names generated code never uses.
+    expect(nameRefusal(doc, 'Image')).toBeNull();
+    expect(nameRefusal(doc, 'Chassis')).toBeNull();
+
+    expect(() => extractComponent(doc, 'Scene', [0], 'Box')).toThrow(
+      /already a building block/,
+    );
   });
 });

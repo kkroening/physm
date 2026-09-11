@@ -339,19 +339,30 @@ function NodeProps({
   selection,
   node,
   onChange,
+  onOpen,
 }: {
   doc: SceneDocument;
   selection: Selection;
   node: DocNode;
   onChange: (doc: SceneDocument) => void;
+  onOpen: (name: string) => void;
 }): ReactElement {
   if (node.type.kind === 'defined') {
+    const { name } = node.type;
+
     return (
       <>
         <h2 className="editor__selected">{node.type.name}</h2>
         <p className="editor__hint">
           Defined in this scene. It takes no props.
         </p>
+        <button
+          type="button"
+          className="editor__open"
+          onClick={() => onOpen(name)}
+        >
+          Open {name}
+        </button>
       </>
     );
   }
@@ -430,10 +441,13 @@ export default function PropertiesPane({
   doc,
   selection,
   onChange,
+  onOpen,
 }: {
   doc: SceneDocument;
   selection: Selection | null;
   onChange: (doc: SceneDocument) => void;
+  /** Open a component this document defines, in its own tab. */
+  onOpen: (name: string) => void;
 }): ReactElement {
   const node = selection ? selectedNode(doc, selection) : null;
 
@@ -449,6 +463,7 @@ export default function PropertiesPane({
           selection={selection}
           node={node}
           onChange={onChange}
+          onOpen={onOpen}
         />
       ) : (
         <p className="editor__hint">Select a node to see its props.</p>

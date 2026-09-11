@@ -1,5 +1,5 @@
 import { canContain } from './../react/componentMeta';
-import { definitionOf, nodeAt } from './sceneDocument';
+import { definitionOf, insertNode, nodeAt } from './sceneDocument';
 import type {
   ComponentRef,
   DocNode,
@@ -86,14 +86,92 @@ function definitionsUsedBy(
   return used;
 }
 
+/** Every id these nodes and their children carry. */
+function idsIn(nodes: readonly DocNode[]): string[] {
+  return nodes.flatMap(({ props, children }) => [
+    ...(typeof props.id === 'string' ? [props.id] : []),
+    ...idsIn(children),
+  ]);
+}
+
+/** Every id an instance of `name` would put in the scene. */
+function idsNamedBy(doc: SceneDocument, name: string): string[] {
+  return [name, ...definitionsUsedBy(doc, name)].flatMap((each) =>
+    idsIn(definitionOf(doc, each).body),
+  );
+}
+
+/**
+ * What the expansion of `name` reaches, and how often: each id, and each
+ * component the document defines, once for every time the build would reach
+ * it -- the question the build asks, rather than where the document writes it.
+ */
+function expansionCounts(
+  doc: SceneDocument,
+  name: string,
+  counts: Map<string, number> = new Map(),
+  stack: readonly string[] = [],
+): Map<string, number> {
+  // A cycle is refused before this is asked; it is not followed here.
+  if (stack.includes(name)) {
+    return counts;
+  }
+
+  const bump = (key: string): void => {
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  };
+  const visit = (nodes: readonly DocNode[]): void => {
+    for (const node of nodes) {
+      if (typeof node.props.id === 'string') {
+        bump(`id:${node.props.id}`);
+      }
+
+      if (node.type.kind === 'defined') {
+        bump(`component:${node.type.name}`);
+        expansionCounts(doc, node.type.name, counts, [...stack, name]);
+      }
+
+      visit(node.children);
+    }
+  };
+
+  visit(definitionOf(doc, name).body);
+  return counts;
+}
+
+/** Every constraint end these nodes and their children name. */
+function endsIn(nodes: readonly DocNode[]): string[] {
+  return nodes.flatMap((node) => [
+    ...(node.type.kind === 'core'
+      ? Object.entries(node.type.component.meta.props)
+          .filter(([, spec]) => spec.kind === 'end')
+          .map(([prop]) => node.props[prop])
+          .filter((end): end is string => typeof end === 'string')
+      : []),
+    ...endsIn(node.children),
+  ]);
+}
+
+/** The ids a component's constraints name that it does not declare itself. */
+function endsOutside(doc: SceneDocument, name: string): string[] {
+  const own = new Set(idsNamedBy(doc, name));
+
+  return [name, ...definitionsUsedBy(doc, name)]
+    .flatMap((each) => endsIn(definitionOf(doc, each).body))
+    .filter((end) => !own.has(end));
+}
+
 /**
  * Why `ref` cannot go at `point` in `definition`, or `null` when it can.
  *
  * It checks containment by slot, through `canContain`, and recursion -- not
  * everything a build can refuse. A composite states no slot, and goes wherever
  * a frame could, which holds because every body is held to the root's rules:
- * see `insertionPoint`. And a component the document
- * defines cannot go anywhere inside itself, which would recurse without end.
+ * see `insertionPoint`. A component the document defines
+ * cannot go anywhere inside itself, which would recurse without end. And one is
+ * refused whose ids would then appear twice in the scene's expansion -- as is a
+ * second copy of one whose constraint names a frame outside itself, which
+ * would repeat the constraint.
  */
 export function refusalOf(
   doc: SceneDocument,
@@ -110,6 +188,41 @@ export function refusalOf(
     definitionsUsedBy(doc, ref.name).has(definition)
   ) {
     return `${ref.name} cannot go inside ${definition}, which it contains.`;
+  }
+
+  if (ref.kind === 'defined') {
+    const ids = idsNamedBy(doc, ref.name);
+    const outside = endsOutside(doc, ref.name);
+    if (ids.length || outside.length) {
+      // Asked of the document as it would be, through its expansion: how
+      // often the build reaches each id, not where the document writes it.
+      const after = insertNode(
+        doc,
+        definition,
+        point.parent,
+        point.index,
+        newNode(ref),
+      );
+      for (const root of new Set([doc.root, definition])) {
+        const counts = expansionCounts(after, root);
+        const where = root === doc.root ? 'the scene' : root;
+        const repeated = ids.find((id) => (counts.get(`id:${id}`) ?? 0) > 1);
+        if (repeated !== undefined) {
+          return (
+            `${ref.name} names '${repeated}', which would then appear twice ` +
+            `in ${where}: ids are scene-wide.`
+          );
+        }
+
+        if (outside.length && (counts.get(`component:${ref.name}`) ?? 0) > 1) {
+          return (
+            `${ref.name} holds a constraint on '${outside[0]}', outside ` +
+            `itself: a second ${ref.name} in ${where} would repeat the ` +
+            'constraint.'
+          );
+        }
+      }
+    }
   }
 
   const slot = ref.kind === 'core' ? ref.component.meta.slot : 'frame';

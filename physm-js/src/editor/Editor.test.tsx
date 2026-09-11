@@ -606,3 +606,145 @@ describe('Editor, changing structure', () => {
     );
   });
 });
+
+/** Open the extract form for the selected node, type `name`, and submit it. */
+function extract(name: string): void {
+  fireEvent.click(screen.getByRole('button', { name: 'Extract to component' }));
+  fireEvent.change(screen.getByLabelText('Component name'), {
+    target: { value: name },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Extract' }));
+}
+
+describe('Editor, components and tabs', () => {
+  test('double-clicking a defined instance opens it in a tab', () => {
+    render(<Editor />);
+    fireEvent.doubleClick(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
+    );
+
+    expect(screen.getByRole('tab', { name: 'Pendulum' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(
+      within(screen.getByRole('tree', { name: 'Pendulum' })).getByText(
+        'RotationalFrame',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('the properties pane opens one too, and tabs switch and close', () => {
+    render(<Editor />);
+    fireEvent.click(
+      within(select('Pendulum')).getByRole('button', { name: 'Open Pendulum' }),
+    );
+
+    expect(screen.getByRole('tab', { name: 'Pendulum' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+
+    expect(screen.getByRole('tree', { name: 'Scene' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close Pendulum' }));
+
+    expect(screen.queryByRole('tab', { name: 'Pendulum' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Close Scene' })).toBeNull();
+  });
+
+  test('extract moves a subtree into a new component, and opens it', () => {
+    render(<Editor />);
+    select('Box');
+    extract('Chassis');
+
+    expect(screen.getByRole('tab', { name: 'Chassis' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(
+      within(screen.getByRole('tree', { name: 'Chassis' })).getByText('Box'),
+    ).toBeVisible();
+
+    // Defined above its user, and used where the box was.
+    expect(code()).toMatch(
+      /function Chassis\(\): ReactElement[\s\S]*<Box width=\{2\} \/>[\s\S]*export default function Scene/,
+    );
+    expect(code()).toMatch(/resistance=\{5\}>\s*<Chassis \/>\s*<Weight/);
+
+    // In the library, but not for adding to itself.
+    expect(
+      within(library()).getByRole('button', { name: 'Chassis' }),
+    ).toBeDisabled();
+  });
+
+  test('a name the generated module could not use is refused, saying why', () => {
+    render(<Editor />);
+    select('Box');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Extract to component' }),
+    );
+    const name = screen.getByLabelText('Component name');
+
+    fireEvent.change(name, { target: { value: 'Box' } });
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'already a building block',
+    );
+    expect(screen.getByRole('button', { name: 'Extract' })).toBeDisabled();
+
+    fireEvent.change(name, { target: { value: 'Pendulum' } });
+
+    expect(screen.getByRole('status')).toHaveTextContent('already a component');
+  });
+
+  test('a weight alone cannot be extracted, and the button says why', () => {
+    render(<Editor />);
+    select('Weight');
+    const extract = screen.getByRole('button', {
+      name: 'Extract to component',
+    });
+
+    expect(extract).toBeDisabled();
+    expect(extract).toHaveAttribute(
+      'title',
+      expect.stringMatching(/has to go inside a frame/),
+    );
+  });
+
+  test('an abandoned name closes with the selection, and does not come back', () => {
+    render(<Editor />);
+    select('Box');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Extract to component' }),
+    );
+
+    expect(screen.getByLabelText('Component name')).toBeVisible();
+
+    select('Weight');
+
+    expect(screen.queryByLabelText('Component name')).toBeNull();
+
+    select('Box');
+
+    expect(screen.queryByLabelText('Component name')).toBeNull();
+  });
+
+  test('a component that names ids cannot be added a second time', () => {
+    render(<Editor />);
+    select('TrackFrame');
+    extract('Cart');
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+
+    const cart = within(library()).getByRole('button', { name: 'Cart' });
+
+    expect(cart).toBeDisabled();
+    expect(cart).toHaveAttribute(
+      'title',
+      expect.stringMatching(/names 'cart'/),
+    );
+  });
+});

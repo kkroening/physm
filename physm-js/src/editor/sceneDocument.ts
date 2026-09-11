@@ -1,4 +1,6 @@
+import coreComponents from './../react/coreComponents';
 import { Fragment, createElement, isValidElement } from 'react';
+import { canContain } from './../react/componentMeta';
 import type { ComponentMeta } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
 
@@ -459,4 +461,180 @@ export function moveNode(
     index,
     node,
   );
+}
+
+/**
+ * ECMAScript's own capitalised built-ins: names generated code may use -- page
+ * 6's `-Math.PI / 2`, say -- and the same set whichever host runs the editor.
+ */
+const BUILT_INS = new Set([
+  'AggregateError',
+  'Array',
+  'ArrayBuffer',
+  'Atomics',
+  'BigInt',
+  'BigInt64Array',
+  'BigUint64Array',
+  'Boolean',
+  'DataView',
+  'Date',
+  'Error',
+  'EvalError',
+  'FinalizationRegistry',
+  'Float32Array',
+  'Float64Array',
+  'Function',
+  'Infinity',
+  'Int16Array',
+  'Int32Array',
+  'Int8Array',
+  'Intl',
+  'Iterator',
+  'JSON',
+  'Map',
+  'Math',
+  'NaN',
+  'Number',
+  'Object',
+  'Promise',
+  'Proxy',
+  'RangeError',
+  'ReferenceError',
+  'Reflect',
+  'RegExp',
+  'Set',
+  'SharedArrayBuffer',
+  'String',
+  'Symbol',
+  'SyntaxError',
+  'TypeError',
+  'URIError',
+  'Uint16Array',
+  'Uint32Array',
+  'Uint8Array',
+  'Uint8ClampedArray',
+  'WeakMap',
+  'WeakRef',
+  'WeakSet',
+]);
+
+/** Every node in these nodes and their children, parents first. */
+function everyNode(nodes: readonly DocNode[]): DocNode[] {
+  return nodes.flatMap((node) => [node, ...everyNode(node.children)]);
+}
+
+/**
+ * Why `name` cannot name a new component in `doc`, or `null` when it can.
+ *
+ * It becomes a JSX tag and a function in generated source. So it has to be an
+ * identifier React reads as a component -- a capital first -- and must not
+ * collide with anything that source already means: a building block, another
+ * component, an import, or an ECMAScript built-in the module may use.
+ */
+export function nameRefusal(doc: SceneDocument, name: string): string | null {
+  const imported = new Set(
+    doc.definitions.flatMap(({ body }) =>
+      everyNode(body).flatMap(({ type }) =>
+        type.kind === 'imported' ? [type.name] : [],
+      ),
+    ),
+  );
+
+  if (!/^[A-Z][A-Za-z0-9_]*$/.test(name)) {
+    return (
+      'A component name starts with a capital letter, and has only letters, ' +
+      'digits and _ after it.'
+    );
+  }
+
+  if (coreComponents.some(({ meta }) => meta.name === name)) {
+    return `${name} is already a building block.`;
+  }
+
+  if (doc.definitions.some((definition) => definition.name === name)) {
+    return `${name} is already a component in this scene.`;
+  }
+
+  if (imported.has(name) || name === 'ReactElement') {
+    return `${name} is already imported by the generated module.`;
+  }
+
+  return BUILT_INS.has(name)
+    ? `${name} is a JavaScript built-in, which generated code may use.`
+    : null;
+}
+
+/**
+ * Why the node at `path` cannot become a component of its own, or `null`.
+ *
+ * An instance of a defined component goes wherever a frame can, which holds
+ * only while no body has a weight or an anchor at its top -- so a building
+ * block the root refuses cannot be extracted alone.
+ */
+export function extractionRefusal(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+): string | null {
+  const { type } = nodeAt(doc, definition, path);
+  if (type.kind !== 'core' || canContain('root', type.component.meta.slot)) {
+    return null;
+  }
+
+  const { name } = type.component.meta;
+
+  return (
+    `A ${name} cannot be a component of its own: it has to go inside a ` +
+    'frame, and a component goes wherever a frame can. Extract the frame ' +
+    'that holds it instead.'
+  );
+}
+
+/**
+ * Move the node at `path`, and everything under it, into a new component named
+ * `name`, leaving an instance of it in its place.
+ *
+ * A pure document edit. The scene it builds is unchanged, up to the ids of
+ * frames nobody named: ids are scene-wide, so whatever names one -- inside the
+ * subtree or out -- still finds it. That is also the limit on reuse. A
+ * component whose constraint names an id outside itself stays tied to the
+ * scene it came from, and its own tab reports the frame it cannot find. The instance takes the node's `key`,
+ * so its identity among its siblings is unchanged.
+ */
+export function extractComponent(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+  name: string,
+): SceneDocument {
+  const refusal =
+    nameRefusal(doc, name) ?? extractionRefusal(doc, definition, path);
+  if (refusal) {
+    throw new Error(refusal);
+  }
+
+  const node = nodeAt(doc, definition, path);
+  const [list, index] = splitPath(path);
+  const instance: DocNode = {
+    type: { kind: 'defined', name },
+    props: {},
+    ...(node.key === undefined ? {} : { key: node.key }),
+    children: [],
+  };
+  const replaced = withBody(doc, definition, (body) =>
+    withList(body, list, (siblings) =>
+      siblings.map((entry, at) => (at === index ? instance : entry)),
+    ),
+  );
+
+  return {
+    ...replaced,
+    definitions: [
+      ...replaced.definitions,
+      {
+        name,
+        body: [{ type: node.type, props: node.props, children: node.children }],
+      },
+    ],
+  };
 }

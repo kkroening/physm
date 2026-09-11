@@ -10,8 +10,11 @@ import useElementSize from './../useElementSize';
 import {
   definitionOf,
   elementOf,
+  extractComponent,
+  extractionRefusal,
   insertNode,
   moveNode,
+  nameRefusal,
   nodeAt,
   removeNode,
 } from './sceneDocument';
@@ -69,10 +72,11 @@ function siblingCount(
     : definitionOf(doc, definition).body.length;
 }
 
-/** What the tree can do to a node: select it, or change the structure there. */
+/** What the tree can do to a node: select it, open it, or reshape around it. */
 interface TreeActions {
   readonly onSelect: (path: NodePath) => void;
   readonly onDeselect: () => void;
+  readonly onOpen: (name: string) => void;
   readonly onDelete: (path: NodePath) => void;
   readonly onMove: (path: NodePath, by: -1 | 1) => void;
 }
@@ -118,6 +122,7 @@ function TreeRow({
       row.focus();
     }
   }, [isSelected]);
+  const { type } = node;
 
   return (
     <li
@@ -128,9 +133,20 @@ function TreeRow({
       <div
         ref={rowRef}
         className="editor__row"
-        data-kind={node.type.kind}
+        data-kind={type.kind}
         tabIndex={0}
+        title={
+          type.kind === 'defined'
+            ? `Double-click to open ${type.name}`
+            : undefined
+        }
         onClick={() => actions.onSelect(path)}
+        onDoubleClick={() => {
+          // Only a component this document defines has a body to open.
+          if (type.kind === 'defined') {
+            actions.onOpen(type.name);
+          }
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
@@ -156,7 +172,7 @@ function TreeRow({
         <span className="editor__disclosure">
           {node.children.length ? '▾' : ''}
         </span>
-        <span className="editor__tag">{tagOf(node.type)}</span>
+        <span className="editor__tag">{tagOf(type)}</span>
         {summary ? <span className="editor__summary">{summary}</span> : null}
       </div>
       {node.children.length ? (
@@ -176,17 +192,96 @@ function TreeRow({
   );
 }
 
+/**
+ * Name the selected node's new component, and extract it.
+ *
+ * The name is checked as it is typed, and the reason a name will not do is
+ * shown beside it -- a building block's name, another component's, a global the
+ * generated module would shadow.
+ */
+function ExtractForm({
+  doc,
+  onExtract,
+  onCancel,
+}: {
+  doc: SceneDocument;
+  onExtract: (name: string) => void;
+  onCancel: () => void;
+}): ReactElement {
+  const [name, setName] = useState('');
+  const refusal = nameRefusal(doc, name);
+
+  return (
+    <form
+      className="editor__extract"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!refusal) {
+          onExtract(name);
+        }
+      }}
+    >
+      <input
+        type="text"
+        aria-label="Component name"
+        placeholder="Component name"
+        value={name}
+        aria-invalid={name !== '' && refusal !== null}
+        // Opened by a click on Extract, so the name is the next thing typed.
+        autoFocus
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            onCancel();
+          }
+        }}
+      />
+      <button type="submit" disabled={refusal !== null}>
+        Extract
+      </button>
+      <button type="button" onClick={onCancel}>
+        Cancel
+      </button>
+      {name !== '' && refusal ? (
+        <p className="editor__hint" role="status">
+          {refusal}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 /** The focused component's authored tree, and the tools that reshape it. */
 function TreePane({
   doc,
   focus,
   selectedPath,
+  onExtract,
   ...actions
 }: TreeActions & {
   doc: SceneDocument;
   focus: string;
   selectedPath: NodePath | null;
+  onExtract: (path: NodePath, name: string) => void;
 }): ReactElement {
+  // The path the name is being typed for: the form shows only while that is
+  // still the selection, and a selection made in the tree clears it.
+  const [naming, setNaming] = useState<string | null>(null);
+  const selectedKey = selectedPath ? selectedPath.join('.') : null;
+  const extractRefusal = selectedPath
+    ? extractionRefusal(doc, focus, selectedPath)
+    : null;
+  const rowActions: TreeActions = {
+    ...actions,
+    onSelect: (path) => {
+      setNaming(null);
+      actions.onSelect(path);
+    },
+    onDeselect: () => {
+      setNaming(null);
+      actions.onDeselect();
+    },
+  };
   const { body } = definitionOf(doc, focus);
   const index = selectedPath ? selectedPath[selectedPath.length - 1]! : null;
   const count = selectedPath
@@ -209,7 +304,7 @@ function TreePane({
           target === event.currentTarget ||
           target.getAttribute('role') === 'tree'
         ) {
-          actions.onDeselect();
+          rowActions.onDeselect();
         }
       }}
     >
@@ -236,6 +331,15 @@ function TreePane({
           </button>
           <button
             type="button"
+            aria-label="Extract to component"
+            title={extractRefusal ?? 'Extract to component'}
+            disabled={!selectedPath || extractRefusal !== null}
+            onClick={() => setNaming(selectedKey)}
+          >
+            Extract
+          </button>
+          <button
+            type="button"
             title="Delete (Del)"
             disabled={!selectedPath}
             onClick={onSelected(actions.onDelete)}
@@ -244,13 +348,23 @@ function TreePane({
           </button>
         </span>
       </div>
+      {naming !== null && naming === selectedKey && selectedPath ? (
+        <ExtractForm
+          doc={doc}
+          onExtract={(name) => {
+            setNaming(null);
+            onExtract(selectedPath, name);
+          }}
+          onCancel={() => setNaming(null)}
+        />
+      ) : null}
       <ul
         role="tree"
         aria-label={focus}
         tabIndex={-1}
         onKeyDown={(event) => {
           if (event.key === 'Escape' && event.target === event.currentTarget) {
-            actions.onDeselect();
+            rowActions.onDeselect();
           }
         }}
       >
@@ -259,7 +373,7 @@ function TreePane({
             node={node}
             path={[at]}
             selected={selectedPath ? selectedPath.join('.') : null}
-            {...actions}
+            {...rowActions}
             key={rowKey(node, at)}
           />
         ))}
@@ -449,8 +563,9 @@ export default function Editor({
   const [doc, setDoc] = useState<SceneDocument>(
     () => initialDocument ?? starterDocument(),
   );
+  const [tabs, setTabs] = useState<readonly string[]>(() => [doc.root]);
+  const [focus, setFocus] = useState(doc.root);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const focus = doc.root;
   const selectedPath = selection?.definition === focus ? selection.path : null;
   const point = insertionPoint(doc, focus, selectedPath);
 
@@ -460,9 +575,27 @@ export default function Editor({
     setSelection(path ? { definition: focus, path } : null);
   };
 
+  /** Focus a component, opening a tab for it if it has none. */
+  const open = (name: string): void => {
+    setTabs((open) => (open.includes(name) ? open : [...open, name]));
+    setFocus(name);
+    setSelection(null);
+  };
+
+  /** Close a tab; the scene's own tab stays. */
+  const close = (name: string): void => {
+    const at = tabs.indexOf(name);
+    setTabs(tabs.filter((tab) => tab !== name));
+    if (focus === name) {
+      setFocus(tabs[at - 1] ?? doc.root);
+      setSelection(null);
+    }
+  };
+
   const actions: TreeActions = {
     onSelect: (path) => setSelection({ definition: focus, path }),
     onDeselect: () => setSelection(null),
+    onOpen: open,
     // Nothing is selected afterwards: the node is gone, and jumping to a
     // neighbour would move the selection somewhere nobody asked for.
     onDelete: (path) => change(removeNode(doc, focus, path), null),
@@ -478,17 +611,46 @@ export default function Editor({
   return (
     <div className="editor">
       <nav className="editor__tabs" role="tablist" aria-label="Open components">
-        <button role="tab" aria-selected="true" type="button">
-          {focus}
-        </button>
+        {tabs.map((name) => (
+          <span className="editor__tab" key={name}>
+            <button
+              role="tab"
+              type="button"
+              aria-selected={name === focus}
+              onClick={() => {
+                setFocus(name);
+                setSelection(null);
+              }}
+            >
+              {name}
+            </button>
+            {name === doc.root ? null : (
+              <button
+                type="button"
+                className="editor__close"
+                aria-label={`Close ${name}`}
+                onClick={() => close(name)}
+              >
+                ×
+              </button>
+            )}
+          </span>
+        ))}
       </nav>
       <CodePane doc={doc} />
       <div className="editor__center">
         <div className="editor__workspace">
           <TreePane
+            // A fresh pane per component, so a half-typed name for an
+            // extraction does not follow the focus to another one.
+            key={focus}
             doc={doc}
             focus={focus}
             selectedPath={selectedPath}
+            onExtract={(path, name) => {
+              setDoc(extractComponent(doc, focus, path, name));
+              open(name);
+            }}
             {...actions}
           />
           <ScenePane doc={doc} focus={focus} />
@@ -506,7 +668,12 @@ export default function Editor({
           }
         />
       </div>
-      <PropertiesPane doc={doc} selection={selection} onChange={setDoc} />
+      <PropertiesPane
+        doc={doc}
+        selection={selection}
+        onChange={setDoc}
+        onOpen={open}
+      />
     </div>
   );
 }
