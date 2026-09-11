@@ -460,6 +460,20 @@ describe('buildScene', () => {
     );
   });
 
+  test('refuses children under a building block that is not a frame', () => {
+    // A document can hold them, where written source cannot: the weight would
+    // vanish, and its mass with it.
+    const stray = createElement(
+      RotationalFrame,
+      { id: 'host' },
+      createElement(Box, null, createElement(Weight, { mass: 1 })),
+    );
+
+    expect(() => buildScene(stray)).toThrow(
+      /A <Box> is holding children, and only a frame can/,
+    );
+  });
+
   test('refuses a DOM element, naming it', () => {
     expect(() =>
       buildScene(

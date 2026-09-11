@@ -52,9 +52,6 @@ the shell made it cheap.
   [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
   `Function.name`, which a production build minifies. Dev builds and the tests
   keep real names, so nothing shows it yet.
-- Refuse children under a non-frame in `buildScene`. They are dropped silently
-  today, which changes the answer rather than the picture -- for a document,
-  only `canContain` stands in the way.
 - Types first or schema first, for components the editor declares? The core
   nine are types-first, forced by their core option classes, while
   [0014 page 5](docs/issues/0014/05-metadata.md) argues schema-first. Declared
@@ -127,3 +124,6 @@ the shell made it cheap.
   checked as it is typed, a defined instance opens by double-click or from the
   properties pane, and a component is refused where the scene already uses its
   ids.
+- **Children only under frames** -- a building block that is not a frame
+  refuses children in both routes, through one helper, rather than dropping
+  them.

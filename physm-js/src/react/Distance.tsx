@@ -1,7 +1,7 @@
 import resolveAnchor from './resolveAnchor';
 import { DistanceConstraint } from './../Constraint';
 import { useId } from 'react';
-import { useSceneNode } from './sceneNodes';
+import { refuseChildren, useSceneNode } from './sceneNodes';
 import type { ComponentMeta } from './componentMeta';
 import type { ConstraintEnd } from './resolveAnchor';
 import type { ConstraintNode } from './sceneNodes';
@@ -63,6 +63,7 @@ function describeDistance({
  * can be authored at any geometry. See `docs/constraints.md`.
  */
 export default function Distance(props: DistanceProps): null {
+  refuseChildren('Distance', (props as { children?: unknown }).children);
   useSceneNode(useId(), describeDistance(props), props);
 
   return null;

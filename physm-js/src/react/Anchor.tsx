@@ -1,6 +1,6 @@
 import FrameIdContext from './FrameIdContext';
 import { useContext, useId, useImperativeHandle } from 'react';
-import { useSceneNode } from './sceneNodes';
+import { refuseChildren, useSceneNode } from './sceneNodes';
 import type { ComponentMeta } from './componentMeta';
 import type { AnchorNode, AnchorPoint, SceneNodeContext } from './sceneNodes';
 import type { PositionLike } from './../Scene';
@@ -73,6 +73,7 @@ function describeAnchor(
  * anchor mounted would stay unresolved with nothing to retry it.
  */
 export default function Anchor(props: AnchorProps): null {
+  refuseChildren('Anchor', (props as { children?: unknown }).children);
   const { ref } = props;
   const frameId = useContext(FrameIdContext);
   const key = useId();

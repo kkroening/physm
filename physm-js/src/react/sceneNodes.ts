@@ -1,10 +1,17 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import {
+  Children,
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import type Constraint from './../Constraint';
 import type Decal from './../Decal';
 import type Frame from './../Frame';
 import type { FrameId } from './../Frame';
 import type Weight from './../Weight';
 import type { PositionLike } from './../Scene';
+import type { ReactNode } from 'react';
 
 /**
  * What an `<Anchor>` reports: a frame, and optionally a point on it.
@@ -334,4 +341,23 @@ export function buildChildren(
   }
 
   return children;
+}
+
+/**
+ * Refuse children under a building block that is not a frame.
+ *
+ * Only a frame holds children. Anything else would drop them unseen, and a
+ * `<Weight>` dropped that way takes its mass out of the rig -- which changes
+ * the answer rather than the picture. Hand-written JSX cannot get here, since
+ * the props types have no `children`, but an element rendered from a document
+ * can. Both builders call this, so they refuse the same thing.
+ */
+export function refuseChildren(name: string, children: unknown): void {
+  if (Children.toArray(children as ReactNode).length) {
+    throw new Error(
+      `A <${name}> is holding children, and only a frame can: they would be ` +
+        'dropped, which changes the answer rather than the picture. Move them ' +
+        'into the frame that holds it.',
+    );
+  }
 }

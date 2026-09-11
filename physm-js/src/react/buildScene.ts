@@ -1,6 +1,7 @@
 import Scene from './Scene';
 import assembleScene from './assembleScene';
 import { addAnchor } from './resolveAnchor';
+import { refuseChildren } from './sceneNodes';
 import { Fragment, isValidElement } from 'react';
 import type {
   AnchorPoint,
@@ -188,11 +189,15 @@ function walkNode(node: ReactNode, index: number, walk: Walk): void {
     }
 
     refuseMissingProps(type, props);
-    place(
-      sceneNode(props, { key: `@${path}`, frameId: walk.frameId }),
-      props.children,
-      { ...walk, path },
-    );
+    const node = sceneNode(props, { key: `@${path}`, frameId: walk.frameId });
+    if (node.slot !== 'frame') {
+      refuseChildren(
+        (type as { meta?: { name: string } }).meta?.name ?? 'building block',
+        props.children,
+      );
+    }
+
+    place(node, props.children, { ...walk, path });
     return;
   }
 

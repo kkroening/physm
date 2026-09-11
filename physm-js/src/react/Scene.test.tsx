@@ -17,6 +17,7 @@ import { CoincidenceConstraint as CoreCoincidenceConstraint } from './../Constra
 import { DistanceConstraint as CoreDistanceConstraint } from './../Constraint';
 import { DEFAULT_GRAVITY } from './../Scene';
 import { StrictMode } from 'react';
+import { createElement } from 'react';
 import { render } from '@testing-library/react';
 import { useRef } from 'react';
 import type { AnchorPoint } from './sceneNodes';
@@ -387,6 +388,22 @@ describe('Scene (authoring)', () => {
         </svg>,
       ),
     ).toThrow(/must be inside a frame/);
+  });
+
+  test('refuses children under a building block that is not a frame, as the walk does', () => {
+    const stray = createElement(
+      RotationalFrame,
+      { id: 'host' },
+      createElement(Box, null, createElement(Weight, { mass: 1 })),
+    );
+
+    expect(() =>
+      render(
+        <svg>
+          <Scene>{stray}</Scene>
+        </svg>,
+      ),
+    ).toThrow(/A <Box> is holding children, and only a frame can/);
   });
 
   test('a Weight alone at the root is refused too, not taken for an empty scene', () => {
