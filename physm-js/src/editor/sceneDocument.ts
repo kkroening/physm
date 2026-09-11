@@ -724,6 +724,11 @@ export function extractionRefusal(
  * Move the node at `path`, and everything under it, into a new component named
  * `name`, leaving an instance of it in its place.
  *
+ * It also keeps a place for the new component's children: at the origin of its
+ * outermost frame, passed on to the place of an instance that keeps one, or
+ * beside the node. The place builds nothing until an instance is given
+ * children.
+ *
  * A pure document edit. The scene it builds is unchanged, up to the ids of
  * frames nobody named: ids are scene-wide, so whatever names one -- inside the
  * subtree or out -- still finds it. That is also the limit on reuse. A

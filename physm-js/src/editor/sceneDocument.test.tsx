@@ -388,7 +388,7 @@ describe('extracting a component', () => {
 
   test('from an instance whose component keeps a place, it passes children on', () => {
     // Given to a rig, they go where its pendulum keeps its place.
-    const next = extractComponent(starterDocument(), 'Scene', [1, 2], 'Rig');
+    const next = extractComponent(starterDocument(), 'Scene', [1, 2, 0], 'Rig');
 
     expect(definitionOf(next, 'Rig').body).toEqual([
       {
