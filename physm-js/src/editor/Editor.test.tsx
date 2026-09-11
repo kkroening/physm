@@ -1,4 +1,6 @@
+import Coincidence from './../react/Coincidence';
 import Editor from './Editor';
+import RotationalFrame from './../react/RotationalFrame';
 import Weight from './../react/Weight';
 import coreComponents from './../react/coreComponents';
 import { documentFrom } from './sceneDocument';
@@ -41,6 +43,39 @@ describe('Editor', () => {
       expect(within(library).getByText(meta.name)).toBeInTheDocument();
     }
     expect(within(library).getByText('Pendulum')).toBeInTheDocument();
+  });
+
+  test('a scene with no consistent start says why, and the editor stays up', () => {
+    // The same pin added twice. The rig builds, but solving for velocities
+    // consistent with its constraints finds four rows against two coordinates
+    // -- a failure from computing the starting state, not from building it.
+    const pin = (
+      <Coincidence
+        frame1="a"
+        frame2="b"
+        position1={[1, 1]}
+        position2={[0, 1]}
+      />
+    );
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <RotationalFrame id="a" initialState={[0, 1]}>
+              <Weight mass={1} position={[1, 0]} />
+            </RotationalFrame>
+            <RotationalFrame id="b" position={[1, 0]}>
+              <Weight mass={1} position={[1, 0]} />
+            </RotationalFrame>
+            {pin}
+            {pin}
+          </>,
+        )}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/over-determined/);
+    expect(screen.getByRole('tree', { name: 'Scene' })).toBeVisible();
   });
 
   test('a scene that does not build says why, and the editor stays up', () => {

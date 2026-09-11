@@ -9,6 +9,7 @@ import useElementSize from './../useElementSize';
 import { definitionOf, elementOf } from './sceneDocument';
 import { useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
+import type { StateMap } from './../Frame';
 import type { ComponentRef, DocNode, SceneDocument } from './sceneDocument';
 import type { ReactElement } from 'react';
 
@@ -86,14 +87,23 @@ function TreePane({
   );
 }
 
-/** A scene, or the reason there is not one. */
+/**
+ * A scene and the state it starts in, or the reason there is not one.
+ *
+ * The initial state is computed here, inside the `try`, rather than while
+ * drawing: solving for consistent initial velocities fails on a rig whose
+ * constraints repeat each other or sit at a singular pose, and a throw from
+ * render would take the whole editor down with it.
+ */
 function useBuiltScene(
   doc: SceneDocument,
   focus: string,
-): { scene: CoreScene } | { error: string } {
+): { scene: CoreScene; initial: StateMap } | { error: string } {
   return useMemo(() => {
     try {
-      return { scene: buildScene(elementOf(doc, focus)) };
+      const scene = buildScene(elementOf(doc, focus));
+
+      return { scene, initial: scene.getInitialStateMap() };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
     }
@@ -125,7 +135,7 @@ function ScenePane({
         {'scene' in built ? (
           <SceneView
             scene={built.scene}
-            stateMap={built.scene.getInitialStateMap()}
+            stateMap={built.initial}
             xformMatrix={xformMatrix}
           />
         ) : null}
