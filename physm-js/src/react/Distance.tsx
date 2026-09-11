@@ -88,8 +88,18 @@ Distance.meta = {
       required: true,
       summary: true,
     },
-    position1: { kind: 'point', label: 'First point', default: [0, 0] },
-    position2: { kind: 'point', label: 'Second point', default: [0, 0] },
+    position1: {
+      kind: 'point',
+      relativeTo: 'frame1',
+      label: 'First point',
+      default: [0, 0],
+    },
+    position2: {
+      kind: 'point',
+      relativeTo: 'frame2',
+      label: 'Second point',
+      default: [0, 0],
+    },
 
     // No default: an omitted length is adopted from the gap the pose places.
     length: { kind: 'length', label: 'Length' },

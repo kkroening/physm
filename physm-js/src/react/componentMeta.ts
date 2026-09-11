@@ -15,9 +15,15 @@ export type PropKind =
   /** Radians, shown in degrees. */
   | 'angle'
   | 'flag'
-  /** `[x, y]`, in the enclosing frame's coordinates. */
+  /**
+   * `[x, y]`, relative to a frame: the enclosing one, except on a constraint,
+   * where it is the frame its end names -- see `PropSpec.relativeTo`.
+   */
   | 'point'
-  /** `[q, q̇]`: a frame's initial coordinate and its rate. */
+  /**
+   * `[q, q̇]`: a frame's initial coordinate and its rate, in the unit
+   * `PropSpec.coordinate` names.
+   */
   | 'state'
   /** A CSS colour. */
   | 'color'
@@ -26,8 +32,13 @@ export type PropKind =
   /** One end of a constraint: an anchor's id, or a frame's. */
   | 'end';
 
-/** One prop, described for an editor and for generated source. */
-export interface PropSpec {
+/**
+ * One prop, described for an editor and for generated source.
+ *
+ * `T` is the prop's own type, so a `default` or an `initial` that the prop
+ * would not accept fails to type-check -- see `PropSpecs`.
+ */
+export interface PropSpec<T = unknown> {
   readonly kind: PropKind;
   readonly label: string;
 
@@ -41,7 +52,7 @@ export interface PropSpec {
    * for, which no `[x, y]` expresses -- so once such a prop is set, it stays in
    * the source.
    */
-  readonly default?: unknown;
+  readonly default?: T;
 
   /** The component cannot be built without it. */
   readonly required?: boolean;
@@ -51,9 +62,27 @@ export interface PropSpec {
    *
    * A required prop has no default by definition, so something has to fill it
    * the moment the component is dropped into a scene -- or the scene it lands
-   * in does not build.
+   * in does not build. **Except a constraint's ends**, which have none: what a
+   * constraint joins is a person's to pick, so an inserted constraint waits
+   * for both before it builds.
    */
-  readonly initial?: unknown;
+  readonly initial?: T;
+
+  /**
+   * For a constraint's point: the end whose frame it is in.
+   *
+   * Not the enclosing frame, which for a constraint is usually the scene
+   * itself. It is also the end to check for an `<Anchor>` that states its own
+   * point, which wins over this prop.
+   */
+  readonly relativeTo?: 'frame1' | 'frame2';
+
+  /**
+   * For a state: what its coordinate is. An angle is held in radians, shown in
+   * degrees, and a number is taken as it is. The rate is in the same unit, per
+   * second.
+   */
+  readonly coordinate?: 'angle' | 'number';
 
   /**
    * Worth showing, dimmed, in a tree row.
@@ -73,7 +102,9 @@ export interface PropSpec {
  * forget to describe it, and its metadata stops type-checking.
  */
 export type PropSpecs<P> = {
-  readonly [K in Exclude<keyof P, 'children' | 'ref'>]-?: PropSpec;
+  readonly [K in Exclude<keyof P, 'children' | 'ref'>]-?: PropSpec<
+    Exclude<P[K], undefined>
+  >;
 };
 
 /** What a component contributes to a scene: a frame, a decal, and so on. */
@@ -101,11 +132,12 @@ export interface ComponentMeta<P> {
 /**
  * Whether a node of one slot may sit directly inside another, or at the root.
  *
- * The same rules the builders enforce, stated where an editor can ask them
- * *before* an insertion rather than learn them from a failed build: a scene
- * carries no mass of its own, so a weight at the root has nowhere to go, and an
- * anchor marks a point on a frame, so it needs one. Only a frame has children
- * at all.
+ * Asked *before* an insertion, rather than learned from a failed build -- and
+ * for a document it is the only guard on part of it. The builders refuse a
+ * weight or an anchor at the root: a scene carries no mass of its own, and an
+ * anchor marks a point on a frame. "Only a frame has children" is held by the
+ * props types for hand-written JSX, and by nothing when a scene is built, where
+ * a non-frame's children are dropped.
  */
 export function canContain(parent: Slot | 'root', child: Slot): boolean {
   switch (parent) {

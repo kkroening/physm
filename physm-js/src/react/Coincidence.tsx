@@ -85,9 +85,14 @@ Coincidence.meta = {
       required: true,
       summary: true,
     },
-    position1: { kind: 'point', label: 'First point', default: [0, 0] },
+    position1: {
+      kind: 'point',
+      relativeTo: 'frame1',
+      label: 'First point',
+      default: [0, 0],
+    },
 
     // No default: an omitted second point is solved for, from the pose.
-    position2: { kind: 'point', label: 'Second point' },
+    position2: { kind: 'point', relativeTo: 'frame2', label: 'Second point' },
   },
 } satisfies ComponentMeta<CoincidenceProps>;

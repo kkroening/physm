@@ -74,7 +74,12 @@ TrackFrame.meta = {
     id: { kind: 'name', label: 'Id', summary: true },
     position: { kind: 'point', label: 'Position', default: [0, 0] },
     angle: { kind: 'angle', label: 'Angle', default: 0 },
-    initialState: { kind: 'state', label: 'Initial state', default: [0, 0] },
+    initialState: {
+      kind: 'state',
+      coordinate: 'number',
+      label: 'Initial state',
+      default: [0, 0],
+    },
     resistance: { kind: 'number', label: 'Resistance', default: 0 },
   },
 } satisfies ComponentMeta<TrackFrameProps>;

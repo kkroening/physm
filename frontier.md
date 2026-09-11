@@ -43,6 +43,14 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Further out
 
+- Refuse children under a non-frame in `buildScene`. They are dropped silently
+  today, which changes the answer rather than the picture -- for a document,
+  only `canContain` stands in the way.
+- Types first or schema first, for components the editor declares? The core
+  nine are types-first, forced by their core option classes, while
+  [0014 page 5](docs/issues/0014/05-metadata.md) argues schema-first. Declared
+  components take no props until promote-to-prop, so it stays open -- Karl's
+  call.
 - Refuse a repeated frame id in the core `Scene`. daglet's toposort skips an id
   it has already sorted, so the second frame silently loses its coordinate.
 - Scene picking and dragging
@@ -71,7 +79,9 @@ the same scene. Play is cheap once the shell exists and may come forward.
   route on the demo rig and after every prop changes. Resolves
   [0006](docs/issues/0006.md).
 - **Core metadata** — each of the nine building blocks carries a static `meta`:
-  its tag, category, slot, description, and a spec per prop (kind, label, and a
-  default, or `required` with an `initial`). A missing spec is a compile error,
-  `coreComponents` lists the nine, and `canContain` states the slot rules. Every
-  default is checked by building with the prop omitted and with it stated.
+  its tag, category, slot, description, and a spec per prop: kind, label, and
+  a default, or `required` -- with an `initial` to insert, except a
+  constraint's ends, which a person picks. A spec is typed by its prop, a
+  missing one is a compile error, `coreComponents` lists the nine, and
+  `canContain` says where each may go. Every default is checked by building
+  with the prop omitted and with it stated.

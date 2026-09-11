@@ -73,7 +73,12 @@ RotationalFrame.meta = {
   props: {
     id: { kind: 'name', label: 'Id', summary: true },
     position: { kind: 'point', label: 'Position', default: [0, 0] },
-    initialState: { kind: 'state', label: 'Initial state', default: [0, 0] },
+    initialState: {
+      kind: 'state',
+      coordinate: 'angle',
+      label: 'Initial state',
+      default: [0, 0],
+    },
     resistance: { kind: 'number', label: 'Resistance', default: 0 },
   },
 } satisfies ComponentMeta<RotationalFrameProps>;

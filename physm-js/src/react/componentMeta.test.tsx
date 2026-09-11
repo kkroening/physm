@@ -6,7 +6,7 @@ import coreComponents from './coreComponents';
 import { canContain } from './componentMeta';
 import { createElement } from 'react';
 import type CoreScene from './../Scene';
-import type { ComponentMeta } from './componentMeta';
+import type { ComponentMeta, PropSpecs } from './componentMeta';
 import type { FunctionComponent, ReactNode } from 'react';
 
 /** A core component, seen as the editor sees it: a function with a `meta`. */
@@ -123,6 +123,37 @@ describe('component metadata', () => {
         buildScene(host(meta, createElement(component, requiredProps(meta)))),
       ).not.toThrow();
     }
+  });
+
+  test('a state says what its coordinate is, and a constraint point which end it is on', () => {
+    for (const { meta } of described) {
+      for (const [name, spec] of Object.entries(meta.props)) {
+        if (spec.kind === 'state') {
+          expect([meta.name, name, spec.coordinate]).toEqual([
+            meta.name,
+            name,
+            meta.name === 'RotationalFrame' ? 'angle' : 'number',
+          ]);
+        }
+
+        if (spec.kind === 'point' && meta.slot === 'constraint') {
+          // The end it names has to be one of this component's ends.
+          expect(meta.props[spec.relativeTo ?? '']?.kind).toBe('end');
+          expect(spec.relativeTo).toBe(
+            name === 'position1' ? 'frame1' : 'frame2',
+          );
+        }
+      }
+    }
+  });
+
+  test('a spec is typed by its prop', () => {
+    const specs: PropSpecs<{ width?: number }> = {
+      // @ts-expect-error -- a string is no default for a number.
+      width: { kind: 'length', label: 'Width', default: '1' },
+    };
+
+    expect(specs.width.kind).toBe('length');
   });
 
   test('canContain agrees with the builders about the root', () => {
