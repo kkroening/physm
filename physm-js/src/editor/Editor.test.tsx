@@ -3,10 +3,12 @@ import Coincidence from './../react/Coincidence';
 import Editor from './Editor';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
+import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import coreComponents from './../react/coreComponents';
-import { documentFrom } from './sceneDocument';
+import { documentFrom, nodesFrom } from './sceneDocument';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
 
 describe('Editor', () => {
   test('opens on the starter scene, with every pane showing it', () => {
@@ -190,6 +192,10 @@ describe('Editor, editing props', () => {
     expect(
       within(props).getByRole('heading', { name: 'Weight' }),
     ).toBeVisible();
+
+    fireEvent.keyDown(within(tree).getByText('Box'), { key: ' ' });
+
+    expect(within(props).getByRole('heading', { name: 'Box' })).toBeVisible();
   });
 
   test('a half-typed number stays as typed, and commits what it can', () => {
@@ -242,25 +248,113 @@ describe('Editor, editing props', () => {
     expect(angle).toHaveValue('90');
   });
 
-  test("a rotational frame's state is edited in degrees", () => {
+  test("a rotational frame's state is edited in degrees, the rate included", () => {
     render(
       <Editor
         initialDocument={documentFrom(
-          <RotationalFrame id="arm" initialState={[Math.PI / 2, 0]}>
+          <RotationalFrame id="arm" initialState={[Math.PI / 2, Math.PI]}>
             <Weight mass={1} position={[1, 0]} />
           </RotationalFrame>,
         )}
       />,
     );
-    const value = within(select('RotationalFrame')).getByLabelText(
-      'Initial state value',
+    const state = within(select('RotationalFrame')).getByRole('group', {
+      name: 'Initial state',
+    });
+
+    expect(within(state).getByLabelText('Initial state value')).toHaveValue(
+      '90',
+    );
+    expect(within(state).getByLabelText('Initial state rate')).toHaveValue(
+      '180',
+    );
+    expect(state).toHaveTextContent('°/s');
+
+    fireEvent.change(within(state).getByLabelText('Initial state rate'), {
+      target: { value: '90' },
+    });
+
+    expect(code()).toContain(
+      `initialState={[${Math.PI / 2}, ${90 / (180 / Math.PI)}]}`,
+    );
+  });
+
+  test('a point or state written as a bare number is read as the core reads it', () => {
+    // `initialState={0.5}` is `[0.5, 0]` to the core, and `position={3}` is
+    // `[3, 0]`: editing one half has to keep the other.
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <RotationalFrame id="arm" initialState={0.5}>
+              <Weight mass={1} position={[1, 0]} />
+            </RotationalFrame>
+            <Box position={3} />
+          </>,
+        )}
+      />,
+    );
+    fireEvent.change(
+      within(select('RotationalFrame')).getByLabelText('Initial state rate'),
+      { target: { value: '10' } },
     );
 
-    expect(value).toHaveValue('90');
+    expect(code()).toContain(`initialState={[0.5, ${10 / (180 / Math.PI)}]}`);
 
-    fireEvent.change(value, { target: { value: '45' } });
+    const box = select('Box');
 
-    expect(code()).toContain(`initialState={[${Math.PI / 4}, 0]}`);
+    expect(within(box).getByLabelText('Position x')).toHaveValue('3');
+
+    fireEvent.change(within(box).getByLabelText('Position y'), {
+      target: { value: '1' },
+    });
+
+    expect(code()).toContain('position={[3, 1]}');
+  });
+
+  test("an imported component's props are shown, not edited", () => {
+    function Gadget({ size }: { size: number }): ReactElement {
+      return <TrackFrame id={`gadget-${size}`} />;
+    }
+
+    render(<Editor initialDocument={documentFrom(<Gadget size={2} />)} />);
+    const props = select('Gadget');
+
+    expect(props).toHaveTextContent('Imported from its own module');
+    expect(within(props).getByText('size')).toBeVisible();
+    expect(within(props).getByText('2')).toBeVisible();
+    expect(within(props).queryByRole('textbox')).toBeNull();
+  });
+
+  test("a constraint's end suggests every id in the document, once each", () => {
+    const doc = documentFrom(
+      <>
+        <TrackFrame id="cart" />
+        <Coincidence frame1="cart" frame2="cart" />
+      </>,
+    );
+    // A second definition, naming one id of its own and one the scene has.
+    const [arm] = nodesFrom(
+      <TrackFrame id="cart">
+        <RotationalFrame id="arm" />
+      </TrackFrame>,
+    );
+    render(
+      <Editor
+        initialDocument={{
+          ...doc,
+          definitions: [...doc.definitions, { name: 'Arm', body: [arm] }],
+        }}
+      />,
+    );
+    const end = within(select('Coincidence')).getByLabelText('First end');
+    const offered = [
+      ...document
+        .getElementById(end.getAttribute('list')!)!
+        .querySelectorAll('option'),
+    ].map((option) => option.value);
+
+    expect(offered.sort()).toEqual(['arm', 'cart']);
   });
 
   test('emptying a field returns the prop to its default', () => {

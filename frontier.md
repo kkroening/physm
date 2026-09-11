@@ -41,6 +41,9 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Further out
 
+- Keyboard in the tree, as a tree: a roving tabindex on the tree items, Up and
+  Down to move focus, Enter and Space to select. Focus lands on a row with no
+  role today, so a screen reader hears nothing when a node is selected.
 - Keep the last scene that built drawn, dimmed, under a build error, reset on
   a change of focus. With every keystroke a new document, an edit can pass
   through states that do not build -- retyping a position under a stated

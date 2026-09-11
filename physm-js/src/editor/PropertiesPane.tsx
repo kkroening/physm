@@ -141,6 +141,20 @@ function NumberInput({
 }
 
 /**
+ * A point or a state as the core reads it: a bare number is `[n, 0]`, and a
+ * short array is filled out with zeros.
+ */
+function pairOf(value: unknown): readonly number[] | undefined {
+  if (typeof value === 'number') {
+    return [value, 0];
+  }
+
+  return Array.isArray(value)
+    ? [Number(value[0] ?? 0), Number(value[1] ?? 0)]
+    : undefined;
+}
+
+/**
  * `[x, y]` or `[q, q̇]`: two numbers, set together.
  *
  * Emptying one half is refused rather than read as removing the prop, which the
@@ -148,37 +162,42 @@ function NumberInput({
  */
 function PairInputs({ spec, value, onChange }: FieldProps): ReactElement {
   const axes = spec.kind === 'point' ? ['x', 'y'] : ['value', 'rate'];
+
   // A rotational frame's state is an angle and its rate: both in degrees.
   const scale =
     spec.kind === 'state' && spec.coordinate === 'angle' ? DEGREES : 1;
-  const pair = Array.isArray(value) ? (value as readonly number[]) : undefined;
-  const fallback = Array.isArray(spec.default)
-    ? (spec.default as readonly number[])
-    : undefined;
+  const pair = pairOf(value);
+  const fallback = pairOf(spec.default);
 
   return (
     <>
       {axes.map((axis, index) => (
-        <DraftInput
-          key={axis}
-          aria-label={`${spec.label} ${axis}`}
-          inputMode="decimal"
-          shown={pair ? formatNumber(pair[index]! * scale) : ''}
-          placeholder={
-            fallback ? formatNumber(fallback[index]! * scale) : absenceOf(spec)
-          }
-          commit={(text) => {
-            const parsed = parseNumber(text);
-            if (parsed === null) {
-              return false;
+        <Fragment key={axis}>
+          <DraftInput
+            aria-label={`${spec.label} ${axis}`}
+            inputMode="decimal"
+            shown={pair ? formatNumber(pair[index]! * scale) : ''}
+            placeholder={
+              fallback
+                ? formatNumber(fallback[index]! * scale)
+                : absenceOf(spec)
             }
+            commit={(text) => {
+              const parsed = parseNumber(text);
+              if (parsed === null) {
+                return false;
+              }
 
-            const next = [...(pair ?? fallback ?? [0, 0])];
-            next[index] = parsed / scale;
-            onChange(next);
-            return true;
-          }}
-        />
+              const next = [...(pair ?? fallback ?? [0, 0])];
+              next[index] = parsed / scale;
+              onChange(next);
+              return true;
+            }}
+          />
+          {scale === DEGREES ? (
+            <span className="editor__unit">{index === 0 ? '°' : '°/s'}</span>
+          ) : null}
+        </Fragment>
       ))}
     </>
   );
@@ -358,6 +377,7 @@ function NodeProps({
   }
 
   const { meta } = node.type.component;
+
   // Anchor and frame ids are scene-wide, so every definition's count.
   const names = [
     ...new Set(doc.definitions.flatMap(({ body }) => idsIn(body))),
