@@ -44,6 +44,9 @@ export function insertionPoint(
     return {
       parent: [],
       index: definitionOf(doc, definition).body.length,
+      // Every body is held to the root's rules, whichever definition it is.
+      // That is what lets an instance of a defined component go wherever a
+      // frame can: no body holds a weight or an anchor at its top.
       holder: 'root',
     };
   }
@@ -86,9 +89,10 @@ function definitionsUsedBy(
 /**
  * Why `ref` cannot go at `point` in `definition`, or `null` when it can.
  *
- * The containment rules are `canContain`'s -- the ones the builders enforce --
- * so the library never offers what the build would refuse. A composite states
- * no slot, and goes wherever a frame could. And a component the document
+ * It checks containment by slot, through `canContain`, and recursion -- not
+ * everything a build can refuse. A composite states no slot, and goes wherever
+ * a frame could, which holds because every body is held to the root's rules:
+ * see `insertionPoint`. And a component the document
  * defines cannot go anywhere inside itself, which would recurse without end.
  */
 export function refusalOf(

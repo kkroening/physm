@@ -16,7 +16,7 @@ import {
   removeNode,
 } from './sceneDocument';
 import { insertionPoint, newNode, refusalOf } from './insertion';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
 import type { StateMap } from './../Frame';
 import type {
@@ -72,6 +72,7 @@ function siblingCount(
 /** What the tree can do to a node: select it, or change the structure there. */
 interface TreeActions {
   readonly onSelect: (path: NodePath) => void;
+  readonly onDeselect: () => void;
   readonly onDelete: (path: NodePath) => void;
   readonly onMove: (path: NodePath, by: -1 | 1) => void;
 }
@@ -100,14 +101,32 @@ function TreeRow({
   selected: string | null;
 }): ReactElement {
   const summary = summaryOf(node);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const isSelected = selected === path.join('.');
+
+  // Keyboard focus follows the selection while it is in the tree. Rows are
+  // keyed by position, so after a move the focused row shows a different node,
+  // and the next keystroke would act on that one instead.
+  useEffect(() => {
+    const row = rowRef.current;
+    if (
+      isSelected &&
+      row &&
+      row !== document.activeElement &&
+      row.closest('[role="tree"]')?.contains(document.activeElement)
+    ) {
+      row.focus();
+    }
+  }, [isSelected]);
 
   return (
     <li
       role="treeitem"
-      aria-selected={selected === path.join('.')}
+      aria-selected={isSelected}
       aria-expanded={node.children.length ? true : undefined}
     >
       <div
+        ref={rowRef}
         className="editor__row"
         data-kind={node.type.kind}
         tabIndex={0}
@@ -116,9 +135,15 @@ function TreeRow({
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             actions.onSelect(path);
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            actions.onDeselect();
           } else if (event.key === 'Delete' || event.key === 'Backspace') {
             event.preventDefault();
             actions.onDelete(path);
+            // Off the row: it now shows the next node, which a second press
+            // would delete as well. The tree takes focus and ignores Delete.
+            event.currentTarget.closest<HTMLElement>('[role="tree"]')?.focus();
           } else if (
             event.altKey &&
             (event.key === 'ArrowUp' || event.key === 'ArrowDown')
@@ -174,7 +199,20 @@ function TreePane({
   };
 
   return (
-    <section className="editor__tree" aria-label="Tree">
+    <section
+      className="editor__tree"
+      aria-label="Tree"
+      onClick={(event) => {
+        // A click on the tree's empty space, not on a row or a tool.
+        const target = event.target as HTMLElement;
+        if (
+          target === event.currentTarget ||
+          target.getAttribute('role') === 'tree'
+        ) {
+          actions.onDeselect();
+        }
+      }}
+    >
       <div className="editor__heading editor__toolbar">
         <span>{focus}</span>
         <span className="editor__actions">
@@ -206,7 +244,16 @@ function TreePane({
           </button>
         </span>
       </div>
-      <ul role="tree" aria-label={focus}>
+      <ul
+        role="tree"
+        aria-label={focus}
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && event.target === event.currentTarget) {
+            actions.onDeselect();
+          }
+        }}
+      >
         {body.map((node, at) => (
           <TreeRow
             node={node}
@@ -415,6 +462,7 @@ export default function Editor({
 
   const actions: TreeActions = {
     onSelect: (path) => setSelection({ definition: focus, path }),
+    onDeselect: () => setSelection(null),
     // Nothing is selected afterwards: the node is gone, and jumping to a
     // neighbour would move the selection somewhere nobody asked for.
     onDelete: (path) => change(removeNode(doc, focus, path), null),

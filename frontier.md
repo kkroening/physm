@@ -15,7 +15,9 @@ building blocks into one described by components.
 - an instance of a defined component opens by double-click, or from the
   properties pane
 - ids, a frame's or an anchor's, are scene-wide, so a component whose subtree
-  names one cannot be added a second time
+  names one cannot be added where its ids are already used -- the MVP's floor.
+  Promote-to-prop, or scoping ids per instance, is how such a component becomes
+  reusable.
 
 ## Next — the MVP
 

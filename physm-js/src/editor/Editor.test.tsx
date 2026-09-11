@@ -537,6 +537,64 @@ describe('Editor, changing structure', () => {
     expect(code()).toMatch(/<Weight mass=\{50\} \/>\s*<Pendulum \/>/);
   });
 
+  test('from the keyboard, each press acts on the node it acted on before', () => {
+    render(<Editor />);
+    const tree = screen.getByRole('tree', { name: 'Scene' });
+    const focusRow = (tag: string): void => {
+      (
+        within(tree).getByText(tag).closest('.editor__row') as HTMLElement
+      ).focus();
+    };
+    const press = (key: string, altKey = false): void => {
+      fireEvent.keyDown(document.activeElement!, { key, altKey });
+    };
+
+    // Focus a row once, then keep pressing wherever focus is, as a keyboard
+    // does -- rows are keyed by position, so the row can change under it.
+    focusRow('Pendulum');
+    press('Enter');
+    press('ArrowUp', true);
+    press('ArrowUp', true);
+
+    expect(code()).toMatch(/<Pendulum \/>\s*<Box width=\{2\} \/>\s*<Weight/);
+
+    press('ArrowDown', true);
+
+    expect(code()).toMatch(/<Box width=\{2\} \/>\s*<Pendulum \/>\s*<Weight/);
+
+    // A second Delete removes nothing the first did not.
+    press('Delete');
+    press('Delete');
+
+    expect(code()).not.toContain('<Pendulum />');
+    expect(code()).toContain('<Box width={2} />');
+    expect(code()).toContain('<Weight mass={50} />');
+
+    focusRow('Box');
+    press('Enter');
+    press('Backspace');
+
+    expect(code()).not.toContain('<Box');
+  });
+
+  test('Escape, or a click on empty tree, lets the end of the body be chosen again', () => {
+    render(<Editor />);
+    const tree = screen.getByRole('tree', { name: 'Scene' });
+    const line = within(tree).getByText('Line');
+    fireEvent.click(line);
+
+    expect(library()).toHaveTextContent('Adds after the selected Line.');
+
+    fireEvent.keyDown(line, { key: 'Escape' });
+
+    expect(library()).toHaveTextContent('Adds to the end of Scene.');
+
+    fireEvent.click(line);
+    fireEvent.click(tree);
+
+    expect(library()).toHaveTextContent('Adds to the end of Scene.');
+  });
+
   test('a new constraint says what it needs before the scene builds', () => {
     render(<Editor />);
     fireEvent.click(

@@ -243,7 +243,7 @@ function walkChildren(children: ReactNode, walk: Walk): void {
  * lets a rig be built in a test, a worker or a tool that holds the rig as data.
  *
  * Both routes build from each binding component's `sceneNode`, so they agree by
- * construction on what a given element means. Two things differ, deliberately:
+ * construction on what a given element means. Three things differ, deliberately:
  *
  * - **Sibling order is JSX order**, always. Mounting orders siblings by when
  *   they registered, which is JSX order only for a tree whose shape never
@@ -253,6 +253,9 @@ function walkChildren(children: ReactNode, walk: Walk): void {
  *   mounting uses React's `useId`. Both are stable for a given tree; they are
  *   not the same string, so a state map built against one does not carry to
  *   the other.
+ * - **A building block missing a required prop is refused**, naming it by its
+ *   label. Mounting relies on TypeScript to rule one out, and gets whatever the
+ *   component does without it.
  *
  * And one thing it cannot do: **resolve an `<Anchor>` named by ref.** A ref is
  * filled in by an effect, and nothing here runs one. Name the anchor by `id`.
