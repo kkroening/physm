@@ -8,9 +8,12 @@ import Weight from './../react/Weight';
 import starterDocument from './starterDocument';
 import { extractComponent, insertNode, removeNode } from './sceneDocument';
 import {
+  dropPoint,
+  dropRefusal,
   indentPoint,
   indentRefusal,
   insertionPoint,
+  movedIndex,
   newNode,
   outdentPoint,
   outdentRefusal,
@@ -740,5 +743,95 @@ describe('moving a node into another', () => {
       'An instance of Strut in Scene holds a Weight, which could not stay ' +
         'where its children would go.',
     );
+  });
+});
+
+describe('dropping a row on another', () => {
+  // Scene: [Line, TrackFrame [Box, Weight, FixedFrame [Pendulum]]].
+  const doc = starterDocument();
+
+  test('inside a row, after its last child', () => {
+    expect(dropPoint(doc, 'Scene', [1], 'inside')).toEqual({
+      parent: [1],
+      index: 3,
+      holder: 'frame',
+    });
+  });
+
+  test('before a row, among its siblings', () => {
+    expect(dropPoint(doc, 'Scene', [1, 1], 'before')).toEqual({
+      parent: [1],
+      index: 1,
+      holder: 'frame',
+    });
+
+    // At the top of the body, the root's rules -- as every body is held to.
+    expect(dropPoint(doc, 'Scene', [1], 'before')).toEqual({
+      parent: [],
+      index: 1,
+      holder: 'root',
+    });
+  });
+
+  test('on the body itself, where adding with nothing selected lands', () => {
+    expect(dropPoint(doc, 'Scene', null, 'inside')).toEqual(
+      insertionPoint(doc, 'Scene', null),
+    );
+  });
+
+  test('not inside a node that takes no children', () => {
+    expect(dropPoint(doc, 'Scene', [1, 0], 'inside')).toBeNull();
+    expect(dropRefusal(doc, 'Scene', [0], [1, 0], 'inside')).toBe(
+      'A Box takes no children.',
+    );
+  });
+
+  test('the index counts the list once the node has left it', () => {
+    const point = dropPoint(doc, 'Scene', [1, 2], 'before')!;
+
+    expect(point.index).toBe(2);
+
+    // The box, moved from before the fixed frame, lands second rather than
+    // third: everything after it shifted down when it left.
+    expect(movedIndex([1, 0], point)).toBe(1);
+
+    // Out of another list, nothing shifted.
+    expect(movedIndex([0], point)).toBe(2);
+  });
+
+  test('not inside itself, nor where it already stands', () => {
+    expect(dropRefusal(doc, 'Scene', [1], [1], 'inside')).toBe(
+      'A node cannot go inside itself.',
+    );
+    expect(dropRefusal(doc, 'Scene', [1], [1, 2], 'inside')).toBe(
+      'A node cannot go inside itself.',
+    );
+
+    // Its own gap, and the gap of the row below it: both leave it where it is.
+    expect(dropRefusal(doc, 'Scene', [1, 1], [1, 1], 'before')).toBe(
+      'It is already there.',
+    );
+    expect(dropRefusal(doc, 'Scene', [1, 1], [1, 2], 'before')).toBe(
+      'It is already there.',
+    );
+
+    // As does the last child dropped inside the parent it already ends.
+    expect(dropRefusal(doc, 'Scene', [1, 2], [1], 'inside')).toBe(
+      'It is already there.',
+    );
+  });
+
+  test('held to the rules of adding there', () => {
+    // A weight cannot stand at the top of a body, dropped before the ground
+    // or at the end of it.
+    expect(dropRefusal(doc, 'Scene', [1, 1], [0], 'before')).toBe(
+      'Weight has to go inside a frame.',
+    );
+    expect(dropRefusal(doc, 'Scene', [1, 1], null, 'inside')).toBe(
+      'Weight has to go inside a frame.',
+    );
+
+    // A frame goes wherever a frame can.
+    expect(dropRefusal(doc, 'Scene', [1], [0], 'before')).toBeNull();
   });
 });

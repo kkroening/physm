@@ -22,6 +22,7 @@ import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
 import useSimulation from './useSimulation';
 import {
+  afterRemoval,
   definitionOf,
   deletionRefusal,
   elementOf,
@@ -36,9 +37,12 @@ import {
 } from './sceneDocument';
 import { historyOf, recorded, redone, undone } from './history';
 import {
+  dropPoint,
+  dropRefusal,
   indentPoint,
   indentRefusal,
   insertionPoint,
+  movedIndex,
   newNode,
   outdentPoint,
   outdentRefusal,
@@ -58,7 +62,7 @@ import type {
   SceneDocument,
 } from './sceneDocument';
 import type { History, Step } from './history';
-import type { InsertionPoint } from './insertion';
+import type { DropWhere, InsertionPoint } from './insertion';
 import type { Mat3 } from './../Mat3';
 import type { MouseEvent, ReactElement } from 'react';
 import type { ScreenPoint } from './placeGizmos';
@@ -123,6 +127,38 @@ interface TreeActions {
   /** Move a node into the one above it, or out of its parent. */
   readonly onIndent: (path: NodePath) => void;
   readonly onOutdent: (path: NodePath) => void;
+
+  /** Move a node onto a row: inside it, or among its siblings before it. */
+  readonly onDropNode: (
+    from: NodePath,
+    target: NodePath | null,
+    where: DropWhere,
+  ) => void;
+}
+
+/**
+ * A row being dragged, and what dropping it would do.
+ *
+ * Where a drop lands is which element takes it -- the gap above a row, the row
+ * itself, or the tree's own space -- rather than where in a row the pointer
+ * sits, so it reads the same to a test as to a person.
+ */
+interface TreeDrag {
+  /** The row being dragged, by its path joined; `null` when none is. */
+  readonly dragging: string | null;
+
+  /** The target under the pointer, as `<path>:<where>`; `null` for none. */
+  readonly over: string | null;
+
+  /** Why a drop there would be refused, or `null` when it would not. */
+  readonly refusalAt: (
+    target: NodePath | null,
+    where: DropWhere,
+  ) => string | null;
+  readonly onPickUp: (path: NodePath) => void;
+  readonly onEnd: () => void;
+  readonly onOver: (key: string | null) => void;
+  readonly onDrop: (target: NodePath | null, where: DropWhere) => void;
 }
 
 /**
@@ -298,6 +334,7 @@ function TreeRow({
   tabbable,
   matched,
   onFocusRow,
+  drag,
   ...actions
 }: TreeActions & {
   node: DocNode;
@@ -311,6 +348,9 @@ function TreeRow({
   /** The rows find has turned up, by their paths joined. */
   matched: ReadonlySet<string>;
   onFocusRow: (key: string) => void;
+
+  /** The drag under way, which every row is a target of: see `TreeDrag`. */
+  drag: TreeDrag;
 }): ReactElement {
   const summary = summaryOf(node);
   const itemRef = useRef<HTMLLIElement>(null);
@@ -396,7 +436,37 @@ function TreeRow({
       }}
     >
       <div
+        className="editor__gap"
+        data-over={drag.over === `${key}:before` ? '' : undefined}
+        onDragOver={(event) => {
+          if (!drag.refusalAt(path, 'before')) {
+            event.preventDefault();
+            drag.onOver(`${key}:before`);
+          }
+        }}
+        onDragLeave={() => drag.onOver(null)}
+        onDrop={(event) => {
+          event.preventDefault();
+          drag.onDrop(path, 'before');
+        }}
+      />
+      <div
         className="editor__row"
+        draggable
+        onDragStart={() => drag.onPickUp(path)}
+        onDragEnd={() => drag.onEnd()}
+        data-over={drag.over === `${key}:inside` ? '' : undefined}
+        onDragOver={(event) => {
+          if (!drag.refusalAt(path, 'inside')) {
+            event.preventDefault();
+            drag.onOver(`${key}:inside`);
+          }
+        }}
+        onDragLeave={() => drag.onOver(null)}
+        onDrop={(event) => {
+          event.preventDefault();
+          drag.onDrop(path, 'inside');
+        }}
         data-kind={type.kind}
         data-match={matched.has(key) ? '' : undefined}
         title={
@@ -422,6 +492,7 @@ function TreeRow({
         <ul role="group">
           {node.children.map((child, index) => (
             <TreeRow
+              drag={drag}
               node={child}
               path={[...path, index]}
               selected={selected}
@@ -549,6 +620,37 @@ function TreePane({
   // with the old one: it follows the node to where it went. Only from the
   // keys -- the toolbar's buttons keep the focus a run of clicks needs -- and
   // only when there is a move, so a refused keystroke leaves the focus alone.
+  const [dragging, setDragging] = useState<NodePath | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const drag: TreeDrag = {
+    dragging: dragging ? dragging.join('.') : null,
+    over,
+    // Nothing dragged refuses every target, so a file dragged in from
+    // elsewhere marks no row and drops nowhere.
+    refusalAt: (target, where) =>
+      dragging
+        ? dropRefusal(doc, focus, dragging, target, where)
+        : 'Nothing is being dragged.',
+    onPickUp: (path) => {
+      setDragging(path);
+      actions.onSelect(path);
+    },
+    onEnd: () => {
+      setDragging(null);
+      setOver(null);
+    },
+    onOver: setOver,
+    onDrop: (target, where) => {
+      // One guard, where the move is made: the pane asks the rules only to
+      // mark a target while a drag is over it.
+      if (dragging) {
+        actions.onDropNode(dragging, target, where);
+      }
+
+      setDragging(null);
+      setOver(null);
+    },
+  };
   const [moved, setMoved] = useState(0);
 
   useEffect(() => {
@@ -789,6 +891,24 @@ function TreePane({
         role="tree"
         aria-label={focus}
         tabIndex={-1}
+        data-over={drag.over === 'end' ? '' : undefined}
+        onDragOver={(event) => {
+          // Only the tree's own space, not a row's dragover on its way up.
+          if (
+            event.target === event.currentTarget &&
+            !drag.refusalAt(null, 'inside')
+          ) {
+            event.preventDefault();
+            drag.onOver('end');
+          }
+        }}
+        onDragLeave={() => drag.onOver(null)}
+        onDrop={(event) => {
+          if (event.target === event.currentTarget) {
+            event.preventDefault();
+            drag.onDrop(null, 'inside');
+          }
+        }}
         onBlur={(event) => {
           // Out of the tree altogether, not from one row to another.
           if (
@@ -828,6 +948,7 @@ function TreePane({
       >
         {body.map((node, at) => (
           <TreeRow
+            drag={drag}
             node={node}
             path={[at]}
             selected={selectedPath ? selectedPath.join('.') : null}
@@ -1801,6 +1922,21 @@ export default function Editor({
       if (index >= 0 && index < siblingCount(doc, focus, parent)) {
         change(moveNode(doc, focus, path, parent, index), [...parent, index]);
       }
+    },
+    onDropNode: (from, target, where) => {
+      const point = dropPoint(doc, focus, target, where);
+      if (!point || dropRefusal(doc, focus, from, target, where)) {
+        return;
+      }
+
+      // `moveNode` takes the list's path as it reads before the move and the
+      // index as it reads after; the selection needs both after, since a node
+      // that left a list before its destination has shifted it.
+      const index = movedIndex(from, point);
+      change(moveNode(doc, focus, from, point.parent, index), [
+        ...afterRemoval(point.parent, from),
+        index,
+      ]);
     },
     onIndent: (path) => {
       const point = indentPoint(doc, focus, path);

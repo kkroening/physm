@@ -508,7 +508,7 @@ export function removeNode(
  * Only a path that passes *through* the removed node's list, at a later
  * sibling, moves -- by one, at that level. Everything else is untouched.
  */
-function afterRemoval(path: NodePath, removed: NodePath): NodePath {
+export function afterRemoval(path: NodePath, removed: NodePath): NodePath {
   const level = removed.length - 1;
   const sameList =
     path.length > level &&

@@ -6,10 +6,10 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Drag a row onto another.** The tree moves a node in and out a level at a
-time, with Alt+Shift and an arrow or the toolbar's buttons. A drag would move
-it anywhere in one gesture: dropped onto a row it goes inside, held to the
-same rules as adding there, and dropped between two rows it goes among them.
+**One walk from state to pose.** `FrameView`, the gizmos and
+`Scene.getPosMatrixMap` each compose a frame's pose from the state map, and
+agree because tests hold them to it. Reading the core's map everywhere,
+composed with the view, would make the agreement structural.
 
 ## Next — the MVP
 
@@ -50,10 +50,6 @@ was built while gizmos were in review.
   the scene's own tab, and a component's tab draws it as authored -- so undoing
   an edit made in a component's tab, which returns there, pauses the run.
   Whether undo should stay on the scene's tab while it runs is Karl's call.
-- One walk from state to pose. `FrameView`, the gizmos and
-  `Scene.getPosMatrixMap` each compose a frame's pose from the state map, and
-  agree because tests hold them to it. Reading the core's map everywhere,
-  composed with the view, would make the agreement structural.
 - Constants for repeated values in the code: a value used across a rig -- a
   rod's length by its line, its circle and its weight -- written once, as a
   named constant the rest refer to. Naming them is most of the problem.
@@ -257,3 +253,10 @@ was built while gizmos were in review.
   plain click never tells apart. A node another body wrote is shown read-only,
   saying where it is written, with the way back to the node here that produced
   it and a way into that component's own tab.
+- **Dragging a row** — a row dragged onto another goes inside it, after its
+  last child; dropped in the gap above a row it goes among those siblings; and
+  dropped on the tree's own space it goes to the end of the body. Where it
+  lands is which element takes the drop rather than where in a row the pointer
+  sits. A drop is held to the rules of adding there, and to two of its own: a
+  node cannot go inside itself, and one dropped where it already stands is
+  refused rather than recorded as a step that changes nothing.
