@@ -6,12 +6,11 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Snapping.** A drag writes `position` to the nearest hundredth. Snapping -- to
-the grid, to another frame's origin, to a decal's end -- matters more here than
-in a drawing tool, because a rig whose frames are *nearly* coincident is
-[0002](docs/issues/0002.md)'s pinned scene waiting to happen
-([0014 page 7](docs/issues/0014/07-editing.md#dragging-in-the-scene)). The tree
-stays the failsafe, so snapping can ship imperfect without blocking anything.
+**The last scene that built, under a build error.** With every keystroke a
+new document, an edit can pass through states that do not build -- retyping a
+position under a stated length, say -- and the scene pane goes blank, hiding
+what the edit is doing to the rig. Keep the last scene that built drawn,
+dimmed, under the error, and let a change of focus clear it.
 
 ## Next — the MVP
 
@@ -44,10 +43,6 @@ was built while gizmos were in review.
 - Type-ahead in the tree: a typed letter moves to the next row whose name
   starts with it, as the ARIA tree pattern recommends for a long tree. The
   starter's five rows need none; a rig of a few dozen would.
-- Keep the last scene that built drawn, dimmed, under a build error, reset on
-  a change of focus. With every keystroke a new document, an edit can pass
-  through states that do not build -- retyping a position under a stated
-  length, say -- and a blank pane hides what the edit is doing to the rig.
 - Watch the running scene from a component's tab. Page 8 wants a `Pendulum`
   tab to show that pendulum's frames moving as part of the rig; which instance
   a tab shows, when the scene has several, is open. Until then Play runs from
@@ -61,6 +56,11 @@ was built while gizmos were in review.
 - While a drag is under way, show the parent's axes at the grabbed node. A
   drag writes `position` along them, but the grabbed gizmo shows the node's
   own +x, which for a rotational node is turned by its angle.
+- Snapping to a grid. The pane draws no grid yet, so there is nothing to see a
+  snap against: draw one first, then let a drag snap to it.
+- Snapping to a box's corners and centre, and to the world's origin. Neither
+  is a target yet, though the origin is where a top-level frame most often
+  goes back to. Karl's call.
 - What a drag does while the scene plays. The frame drifts from the pointer,
   since its own coordinate and its parents' keep moving: pause while a drag is
   held, refuse one during play, or keep the live nudge. Karl's call.
@@ -187,3 +187,8 @@ was built while gizmos were in review.
   one row: the focused one while the focus is in the tree, and the selection
   or the first row coming back in. The arrows move through the rest: Up and
   Down, Home and End, Right into a node's children and Left back out.
+- **Snapping to points** — a dragged frame's origin snaps, exactly, to another
+  frame's origin, a line's end or a circle's centre within eight pixels, with
+  a ring on what it snaps to; Alt places it freely. Nothing that moves with
+  the dragged frame is a target, and it snaps only in the pose the code
+  builds: in a run's pose a drag is free.

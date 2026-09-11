@@ -1651,6 +1651,158 @@ describe('Editor, dragging', () => {
     // The world's x: along the arm's own axes this would be [0, -1].
     expect(code()).toContain('position={[1, 0]}');
   });
+
+  test("a dragged frame snaps to a line's end, exactly", () => {
+    const { container } = render(<Editor />);
+
+    // The ground's right end is at (216, 9): this takes the cart's origin to
+    // within four pixels of it.
+    dragScene(container, onCart, [213, 4]);
+
+    expect(code()).toContain('position={[12, -0.5]}');
+  });
+
+  test('it is the origin that snaps, not the pointer', () => {
+    const { container } = render(<Editor />);
+
+    // Grabbed by the tip of the cart's +x pointer, eleven pixels from its
+    // origin: the origin lands within four pixels of the ground's end, and
+    // the pointer eight away.
+    dragScene(container, [11, 0], [224, 7]);
+
+    expect(code()).toContain('position={[12, -0.5]}');
+  });
+
+  test('Alt places it freely, snapping to nothing', () => {
+    const { container } = render(<Editor />);
+    fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
+      clientX: onCart[0],
+      clientY: onCart[1],
+    });
+    fireEvent.mouseMove(window, {
+      clientX: 213,
+      clientY: 4,
+      buttons: 1,
+      altKey: true,
+    });
+    fireEvent.mouseUp(window, { clientX: 213, clientY: 4 });
+
+    expect(code()).toContain('position={[11.83, -0.39]}');
+  });
+
+  test('a ring marks what the drag snaps to, while the drag lasts', () => {
+    const { container } = render(<Editor />);
+    fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
+      clientX: onCart[0],
+      clientY: onCart[1],
+    });
+    fireEvent.mouseMove(window, { clientX: 213, clientY: 4, buttons: 1 });
+    const ring = container.querySelector('.editor__snap');
+
+    expect([ring?.getAttribute('cx'), ring?.getAttribute('cy')]).toEqual([
+      '216',
+      '9',
+    ]);
+
+    fireEvent.mouseUp(window, { clientX: 213, clientY: 4 });
+
+    expect(container.querySelector('.editor__snap')).toBeNull();
+  });
+
+  test('nothing that moves with the frame is a target', () => {
+    const { container } = render(<Editor />);
+
+    // Three pixels from where the pivot is -- but the pivot rides on the cart,
+    // so it would only follow the drag.
+    dragScene(container, onCart, [3, 5]);
+
+    expect(code()).toContain('position={[0.17, -0.44]}');
+  });
+
+  test("a frame snaps onto another's origin, finer than a hundredth", () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <TrackFrame id="a" />
+            <TrackFrame id="b" position={[2.125, 1]} />
+          </>,
+        )}
+      />,
+    );
+    dragScene(container, [0, -3], [37, -20]);
+
+    expect(code()).toMatch(/<TrackFrame id="a" position=\{\[2\.125, 1\]\} \/>/);
+  });
+
+  test("a nested frame snaps along its parent's axes", () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <Line startPos={[1, 3]} endPos={[2, 3]} />
+            <RotationalFrame id="arm" initialState={[Math.PI / 2, 0]}>
+              <TrackFrame id="tip" position={[2, 0]} />
+            </RotationalFrame>
+          </>,
+        )}
+      />,
+    );
+
+    // The tip hangs at (0, -36) on screen and the line starts at (18, -54):
+    // this takes the tip's origin within about two pixels of it.
+    dragScene(container, [0, -36], [17, -52]);
+
+    // One unit along the arm's x and one against its y. Read in the world's
+    // axes, it would be [3, 1].
+    expect(code()).toContain('position={[3, -1]}');
+  });
+
+  test('a paused run offers nothing to snap to, and Reset brings it back', () => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
+    });
+    try {
+      const { container } = render(<Editor />);
+      const svg = container.querySelector('.editor__scene svg')!;
+
+      // Press just above the cart's origin, wherever it is, and move -- away
+      // first, so it is a drag however near the end it began -- until the
+      // origin lands within four pixels of the ground's end.
+      const dragTowardTheEnd = (): void => {
+        const link = container.querySelector(
+          '.editor__gizmo .editor__gizmo-link',
+        )!;
+        fireEvent.mouseDown(svg, {
+          clientX: Number(link.getAttribute('x2')),
+          clientY: Number(link.getAttribute('y2')) - 3,
+        });
+        fireEvent.mouseMove(window, { clientX: 100, clientY: 100, buttons: 1 });
+        fireEvent.mouseMove(window, { clientX: 213, clientY: 4, buttons: 1 });
+      };
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+      dragTowardTheEnd();
+
+      // In the run's pose, a snap would be exact about a pose the code never
+      // builds.
+      expect(container.querySelector('.editor__snap')).toBeNull();
+
+      fireEvent.mouseUp(window, { clientX: 213, clientY: 4 });
+      fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+      dragTowardTheEnd();
+
+      expect(container.querySelector('.editor__snap')).not.toBeNull();
+
+      fireEvent.mouseUp(window, { clientX: 213, clientY: 4 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 /** The scene tree's rows, as a screen reader finds them. */
