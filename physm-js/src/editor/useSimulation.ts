@@ -22,6 +22,14 @@ export interface Simulation {
   readonly reset: () => void;
 }
 
+/**
+ * What a run that diverges says. The solver's own message names its internals;
+ * the person needs what happened to the rig, and what to do about it.
+ */
+const DIVERGED =
+  'The simulation diverged: a coordinate stopped being a number. Reset starts ' +
+  'it over.';
+
 /** A run: the scene it belongs to, where it is, and the structure it began in. */
 interface Run {
   readonly scene: CoreScene;
@@ -42,6 +50,11 @@ function messageOf(caught: unknown): string {
  * `docs/issues/0014/08-play.md`: a prop edit leaves the motion alone, and a
  * structural edit resets it. `JsSolver`, because the editor's scenes are small
  * and it needs no wasm module loaded first.
+ *
+ * No scene -- an edit that does not build, or a tab with nothing to play --
+ * stops the run and keeps it, so the next scene that builds takes it up by the
+ * same rule. A run that diverges stops and says so, rather than starting over
+ * where nobody asked it to.
  */
 export default function useSimulation(
   built: { scene: CoreScene; initial: StateMap } | null,
@@ -97,15 +110,15 @@ export default function useSimulation(
     }
   };
 
-  // A new scene: move the run to it, if there is one.
+  // A new scene: move the run to it, if there is one. With no scene, the run
+  // stops where it is and waits for the next.
   useEffect(() => {
     if (!scene) {
-      solverRef.current = null;
-      setRun(null);
       setPlaying(false);
     } else if (solverRef.current && solverRef.current.scene !== scene) {
       solverHere();
     }
+
     // `solverHere` reads `stateMap` and `structure`, which change with every
     // tick and every edit; the move is owed only when the scene does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,13 +143,13 @@ export default function useSimulation(
         try {
           solver.tick(STEP, steps);
         } catch (caught) {
-          if (!(caught instanceof InvalidStateMapError)) {
-            setError(messageOf(caught));
-            setPlaying(false);
-            return;
-          }
-
-          solver.resetStateMap();
+          setError(
+            caught instanceof InvalidStateMapError
+              ? DIVERGED
+              : messageOf(caught),
+          );
+          setPlaying(false);
+          return;
         }
 
         setRun({

@@ -10,8 +10,9 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 or dot at its own origin, and a faint line to its parent's -- so a frame that
 draws nothing still has something to see, and later something to click. They
 are not part of the scene and are never emitted
-([0014 page 7](docs/issues/0014/07-editing.md)). They are the part of the MVP
-[page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) defines that remains.
+([0014 page 7](docs/issues/0014/07-editing.md)). Gizmos are what remains of the
+MVP [page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) defines; picking
+and dragging come after it, and page 7 describes both.
 
 - gizmos first: they make the frame tree legible in the scene pane
 - then picking: decals hit-test their own geometry, frames their gizmo, and a
@@ -51,6 +52,10 @@ the shell made it cheap.
   a change of focus. With every keystroke a new document, an edit can pass
   through states that do not build -- retyping a position under a stated
   length, say -- and a blank pane hides what the edit is doing to the rig.
+- Watch the running scene from a component's tab. Page 8 wants a `Pendulum`
+  tab to show that pendulum's frames moving as part of the rig; which instance
+  a tab shows, when the scene has several, is open. Until then Play runs from
+  the scene's own tab, and a component's tab draws it as authored.
 - Take an imported component's tag from the module lookup
   [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
   `Function.name`, which a production build minifies. Dev builds and the tests
@@ -60,9 +65,11 @@ the shell made it cheap.
   [0014 page 5](docs/issues/0014/05-metadata.md) argues schema-first. Declared
   components take no props until promote-to-prop, so it stays open -- Karl's
   call.
-- Scene picking and dragging
 - Promote to prop, or scope ids per instance: either makes a component that
-  names an id reusable. Which comes first is Karl's call.
+  names an id reusable. Which comes first is Karl's call. A promoted prop that
+  sets a count -- page 8's `segmentCount` -- changes the structure but arrives
+  as a prop edit, which carries the run over; whether it resets instead, and
+  how the editor tells, is part of the same call.
 - Code pane highlighting, and scroll-once on focus change
 - Codegen polish: round numbers (`-Math.PI / 2`), constants for repeated values
 - The constraint-first direction ([0014 page 9](docs/issues/0014/09-horizon.md))
@@ -130,6 +137,8 @@ the shell made it cheap.
 - **Children only under frames** -- a building block that is not a frame
   refuses children in both routes, through one helper, rather than dropping
   them.
-- **Play** — Play, Pause and Reset run the focused component on `JsSolver`. A
-  prop edit carries each frame's state over and a structural edit restarts it,
-  and a stalled or hidden tab does not come back to a burst of catch-up steps.
+- **Play** — Play, Pause and Reset run the scene on `JsSolver`, from its own
+  tab. A prop edit carries each frame's state over and a structural edit
+  restarts it; an edit that does not build, or a visit to a component's tab,
+  pauses the run and keeps it. A run that diverges stops and says so, and a
+  stalled or hidden tab does not come back to a burst of catch-up steps.

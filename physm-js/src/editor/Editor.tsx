@@ -407,7 +407,13 @@ function useBuiltScene(
 }
 
 /**
- * The focused component, drawn at its authored pose.
+ * The focused component, drawn at its authored pose -- or, on the scene's own
+ * tab, running.
+ *
+ * Play runs the whole scene, never a component on its own. Page 8 of
+ * `docs/issues/0014` makes the simulation the module's, and what a component
+ * would do with no world around it is a question it leaves open. So a
+ * component's tab draws it as authored, and the scene's run waits for its tab.
  *
  * A scene that fails to build shows why instead of taking the editor down with
  * it: a half-made rig is the normal state of a document being edited, and the
@@ -426,7 +432,11 @@ function ScenePane({
   const svgRef = useRef<SVGSVGElement>(null);
   const size = useElementSize(svgRef);
   const built = useBuiltScene(doc, focus);
-  const simulation = useSimulation('scene' in built ? built : null, structure);
+  const playable = focus === doc.root;
+  const simulation = useSimulation(
+    playable && 'scene' in built ? built : null,
+    structure,
+  );
   const xformMatrix = getViewXformMatrix([0, 0], VIEW_SCALE, size);
   const failure = 'error' in built ? built.error : simulation.error;
 
@@ -442,16 +452,21 @@ function ScenePane({
         ) : null}
       </svg>
       <div className="editor__playback">
+        {playable ? null : (
+          <p className="editor__hint">
+            Play runs the whole scene: open {doc.root} to play it.
+          </p>
+        )}
         <button
           type="button"
-          disabled={'error' in built}
+          disabled={!playable || 'error' in built}
           onClick={simulation.playing ? simulation.pause : simulation.play}
         >
           {simulation.playing ? 'Pause' : 'Play'}
         </button>
         <button
           type="button"
-          disabled={!simulation.started}
+          disabled={!playable || !simulation.started}
           onClick={simulation.reset}
         >
           Reset
@@ -588,8 +603,11 @@ export default function Editor({
   const [tabs, setTabs] = useState<readonly string[]>(() => [doc.root]);
   const [focus, setFocus] = useState(doc.root);
   const [selection, setSelection] = useState<Selection | null>(null);
+
   // Counts structural edits, which restart a run where a prop edit carries it
-  // over. A change of focus counts: it shows a different scene.
+  // over. Each call has to come with a new document: a count that moves with no
+  // new scene leaves the run's stamp behind, and the next prop edit would start
+  // the run over.
   const [structure, setStructure] = useState(0);
   const restructure = (): void => setStructure((count) => count + 1);
   const selectedPath = selection?.definition === focus ? selection.path : null;
@@ -607,7 +625,6 @@ export default function Editor({
     setTabs((open) => (open.includes(name) ? open : [...open, name]));
     setFocus(name);
     setSelection(null);
-    restructure();
   };
 
   /** Close a tab; the scene's own tab stays. */
@@ -617,7 +634,6 @@ export default function Editor({
     if (focus === name) {
       setFocus(tabs[at - 1] ?? doc.root);
       setSelection(null);
-      restructure();
     }
   };
 
@@ -649,7 +665,6 @@ export default function Editor({
               onClick={() => {
                 setFocus(name);
                 setSelection(null);
-                restructure();
               }}
             >
               {name}

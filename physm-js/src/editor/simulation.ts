@@ -25,6 +25,7 @@ export function stepsFor(
   carried: number,
 ): { steps: number; carry: number } {
   const total = carried + Math.max(elapsed, 0);
+
   // The tolerance is for the carry: two halves of a step can sum to a hair
   // under one, and a floor would then hold that step back a frame.
   const steps = Math.min(Math.floor(total / STEP + 1e-9), MAX_STEPS);
