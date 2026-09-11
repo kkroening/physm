@@ -1,4 +1,5 @@
 import Anchor from './../react/Anchor';
+import Box from './../react/Box';
 import Coincidence from './../react/Coincidence';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
@@ -6,7 +7,15 @@ import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import starterDocument from './starterDocument';
 import { extractComponent, insertNode, removeNode } from './sceneDocument';
-import { insertionPoint, newNode, refusalOf } from './insertion';
+import {
+  indentPoint,
+  indentRefusal,
+  insertionPoint,
+  newNode,
+  outdentPoint,
+  outdentRefusal,
+  refusalOf,
+} from './insertion';
 import type {
   ComponentRef,
   CoreComponent,
@@ -436,5 +445,300 @@ describe('insertion, a component that keeps a place for children', () => {
         children,
       ),
     ).toBe('Pendulum already has a place for its children.');
+  });
+});
+
+describe('moving a node into another', () => {
+  // Scene: [TrackFrame [Box, Weight], RotationalFrame, Line].
+  function scene(): SceneDocument {
+    const node = (component: unknown, children: DocNode[] = []): DocNode => ({
+      ...newNode(core(component)),
+      children,
+    });
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: [
+            node(TrackFrame, [node(Box), node(Weight)]),
+            node(RotationalFrame),
+            node(Line),
+          ],
+        },
+      ],
+    };
+  }
+
+  test('into the node above goes after its last child, held to its rules', () => {
+    expect(indentPoint(scene(), 'Scene', [1])).toEqual({
+      parent: [0],
+      index: 2,
+      holder: 'frame',
+    });
+    expect(indentPoint(scene(), 'Scene', [2])).toEqual({
+      parent: [1],
+      index: 0,
+      holder: 'frame',
+    });
+    expect(indentRefusal(scene(), 'Scene', [1])).toBeNull();
+  });
+
+  test('not with nothing above, nor into a node that takes no children', () => {
+    expect(indentPoint(scene(), 'Scene', [0])).toBeNull();
+    expect(indentRefusal(scene(), 'Scene', [0])).toBe(
+      'There is nothing above it to move it into.',
+    );
+    expect(indentPoint(scene(), 'Scene', [0, 1])).toBeNull();
+    expect(indentRefusal(scene(), 'Scene', [0, 1])).toBe(
+      'A Box above it takes no children.',
+    );
+  });
+
+  test('out of its parent goes just after it, held to the rules there', () => {
+    expect(outdentPoint(scene(), 'Scene', [0, 0])).toEqual({
+      parent: [],
+      index: 1,
+      holder: 'root',
+    });
+    expect(outdentRefusal(scene(), 'Scene', [0, 0])).toBeNull();
+
+    // A weight cannot stand at the top of a body.
+    expect(outdentRefusal(scene(), 'Scene', [0, 1])).toBe(
+      'Weight has to go inside a frame.',
+    );
+  });
+
+  test('out of a frame inside a frame, it lands under the frame outside', () => {
+    // A weight two frames deep comes out to the frame above it, which holds
+    // weights -- where the root would not.
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: [
+            {
+              ...newNode(core(TrackFrame)),
+              children: [
+                {
+                  ...newNode(core(RotationalFrame)),
+                  children: [newNode(core(Weight))],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(outdentPoint(doc, 'Scene', [0, 0, 0])).toEqual({
+      parent: [0],
+      index: 1,
+      holder: 'frame',
+    });
+    expect(outdentRefusal(doc, 'Scene', [0, 0, 0])).toBeNull();
+  });
+
+  test('not from the top of the body', () => {
+    expect(outdentPoint(scene(), 'Scene', [1])).toBeNull();
+    expect(outdentRefusal(scene(), 'Scene', [1])).toBe(
+      'It is at the top of the body already.',
+    );
+  });
+
+  test("into an instance, held to its place's rules", () => {
+    // The starter's pendulum keeps its place in a frame, so a weight can go
+    // into it -- from the cart's box, below it, it would first move up.
+    const doc = starterDocument();
+
+    // Scene: [Line, TrackFrame [Box, Weight, Pendulum]]: the pendulum is above
+    // nothing it could go into, and the weight moves out to the root refused.
+    expect(indentRefusal(doc, 'Scene', [1, 2])).toBe(
+      'A Weight above it takes no children.',
+    );
+    expect(outdentRefusal(doc, 'Scene', [1, 1])).toBe(
+      'Weight has to go inside a frame.',
+    );
+  });
+
+  /** A component's place for its instances' children. */
+  function place(): DocNode {
+    return newNode({ kind: 'children' });
+  }
+
+  /**
+   * A scene holding one Pendulum, itself `body`, and giving it a weight. The
+   * instance is buried in a frame, so that a search for it has to recurse.
+   */
+  function held(
+    body: DocNode[],
+    ...extra: SceneDocument['definitions']
+  ): SceneDocument {
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: [
+            {
+              ...newNode(core(TrackFrame)),
+              children: [
+                {
+                  ...newNode(defined('Pendulum')),
+                  children: [newNode(core(Weight))],
+                },
+              ],
+            },
+          ],
+        },
+        { name: 'Pendulum', body },
+        ...extra,
+      ],
+    };
+  }
+
+  test("not a place an instance's children could not follow", () => {
+    // Pendulum: [RotationalFrame [Weight, place]].
+    const doc = held([
+      {
+        ...newNode(core(RotationalFrame)),
+        children: [newNode(core(Weight)), place()],
+      },
+    ]);
+
+    // Out of the frame, the place would stand at the top of the body, where
+    // the weight the scene's instance holds could not follow it -- a refusal
+    // about a body the move never touches.
+    expect(outdentPoint(doc, 'Pendulum', [0, 1])).toEqual({
+      parent: [],
+      index: 1,
+      holder: 'root',
+    });
+    expect(outdentRefusal(doc, 'Pendulum', [0, 1])).toBe(
+      'An instance of Pendulum in Scene holds a Weight, which could not stay ' +
+        'where its children would go.',
+    );
+
+    // The weight beside it is refused for its own sake, not the instance's.
+    expect(outdentRefusal(doc, 'Pendulum', [0, 0])).toBe(
+      'Weight has to go inside a frame.',
+    );
+  });
+
+  test('only a place is asked about; another move is judged on its own', () => {
+    // The place at the top of the body, which the instance's weight already
+    // contradicts -- a document the editor would not have let happen. The
+    // frame inside the other still comes out, because its own move is fine.
+    const doc = held([
+      {
+        ...newNode(core(TrackFrame)),
+        children: [newNode(core(RotationalFrame))],
+      },
+      place(),
+    ]);
+
+    expect(outdentRefusal(doc, 'Pendulum', [0, 0])).toBeNull();
+
+    // And moving the place into a frame only widens what an instance may hold.
+    expect(indentRefusal(doc, 'Pendulum', [1])).toBeNull();
+  });
+
+  test("into an instance, held to that component's place", () => {
+    // Rod keeps its place at the top of its body, so a Rod's children stand
+    // where the Rod does -- and a weight cannot stand at the top of a body.
+    const doc = held([newNode(defined('Rod')), place()], {
+      name: 'Rod',
+      body: [place()],
+    });
+
+    expect(indentPoint(doc, 'Pendulum', [1])).toEqual({
+      parent: [0],
+      index: 0,
+      holder: 'root',
+    });
+    expect(indentRefusal(doc, 'Pendulum', [1])).toBe(
+      'An instance of Pendulum in Scene holds a Weight, which could not stay ' +
+        'where its children would go.',
+    );
+  });
+
+  test('in whichever body holds the instance, which it names', () => {
+    // Scene: [Rig]; Rig: [TrackFrame [Pendulum [Weight]]] -- the instance is
+    // nowhere near the scene's own body.
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        { name: 'Scene', body: [newNode(defined('Rig'))] },
+        {
+          name: 'Rig',
+          body: [
+            {
+              ...newNode(core(TrackFrame)),
+              children: [
+                {
+                  ...newNode(defined('Pendulum')),
+                  children: [newNode(core(Weight))],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          name: 'Pendulum',
+          body: [
+            {
+              ...newNode(core(RotationalFrame)),
+              children: [newNode(core(Weight)), place()],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(outdentRefusal(doc, 'Pendulum', [0, 1])).toBe(
+      'An instance of Pendulum in Rig holds a Weight, which could not stay ' +
+        'where its children would go.',
+    );
+  });
+
+  test("by what this component's instances hold, not another's", () => {
+    // Scene: [TrackFrame [Pendulum, Strut [Weight]]] -- the strut's weight
+    // says nothing about where a pendulum's children may go.
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: [
+            {
+              ...newNode(core(TrackFrame)),
+              children: [
+                newNode(defined('Pendulum')),
+                {
+                  ...newNode(defined('Strut')),
+                  children: [newNode(core(Weight))],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          name: 'Pendulum',
+          body: [{ ...newNode(core(RotationalFrame)), children: [place()] }],
+        },
+        {
+          name: 'Strut',
+          body: [{ ...newNode(core(RotationalFrame)), children: [place()] }],
+        },
+      ],
+    };
+
+    expect(outdentRefusal(doc, 'Pendulum', [0, 0])).toBeNull();
+    expect(outdentRefusal(doc, 'Strut', [0, 0])).toBe(
+      'An instance of Strut in Scene holds a Weight, which could not stay ' +
+        'where its children would go.',
+    );
   });
 });
