@@ -86,6 +86,15 @@ stated twice, so nothing can drift. The technique is the ordinary
 schema-to-type inference that validation libraries use, and it needs no build
 step.
 
+**The nine building blocks go the other way, and have to.** Their props types
+come from core option classes (`BoxDecalOptions` and its kin), which the
+constructors keep as the API — a schema that generated them would make the core
+depend on the binding's metadata. So there the props type is primary, and the
+specs are typed by it: a missing spec is a compile error, a mistyped default a
+type error, and each default is held to the builder by a test. Whether
+components the *editor* declares derive their types from the schema, as argued
+here, is still open: they take no props until promote-to-prop exists.
+
 `index` simply is not in `props`. But that raises a question the schema has to
 answer rather than dodge, because `render`'s parameter type is inferred from
 `props`: **how does a declared component recurse, if its accumulator cannot be a

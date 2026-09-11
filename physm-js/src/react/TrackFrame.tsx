@@ -2,6 +2,7 @@ import CoreTrackFrame from './../TrackFrame';
 import FrameIdContext from './FrameIdContext';
 import { ParentKeyContext, useSceneNode } from './sceneNodes';
 import { useContext, useId } from 'react';
+import type { ComponentMeta } from './componentMeta';
 import type { FrameId } from './../Frame';
 import type { FrameNode, SceneNodeContext } from './sceneNodes';
 import type { ReactElement, ReactNode } from 'react';
@@ -63,3 +64,22 @@ export default function TrackFrame(props: TrackFrameProps): ReactElement {
 }
 
 TrackFrame.sceneNode = describeTrackFrame;
+
+TrackFrame.meta = {
+  name: 'TrackFrame',
+  category: 'Frames',
+  slot: 'frame',
+  description: 'A prismatic joint: one coordinate, sliding along an angle.',
+  props: {
+    id: { kind: 'name', label: 'Id', summary: true },
+    position: { kind: 'point', label: 'Position', default: [0, 0] },
+    angle: { kind: 'angle', label: 'Angle', default: 0 },
+    initialState: {
+      kind: 'state',
+      coordinate: 'number',
+      label: 'Initial state',
+      default: [0, 0],
+    },
+    resistance: { kind: 'number', label: 'Resistance', default: 0 },
+  },
+} satisfies ComponentMeta<TrackFrameProps>;

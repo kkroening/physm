@@ -2,6 +2,7 @@ import resolveAnchor from './resolveAnchor';
 import { DistanceConstraint } from './../Constraint';
 import { useId } from 'react';
 import { useSceneNode } from './sceneNodes';
+import type { ComponentMeta } from './componentMeta';
 import type { ConstraintEnd } from './resolveAnchor';
 import type { ConstraintNode } from './sceneNodes';
 import type { PositionLike } from './../Scene';
@@ -68,3 +69,39 @@ export default function Distance(props: DistanceProps): null {
 }
 
 Distance.sceneNode = describeDistance;
+
+Distance.meta = {
+  name: 'Distance',
+  category: 'Constraints',
+  slot: 'constraint',
+  description: 'Two points held a fixed distance apart.',
+  props: {
+    frame1: {
+      kind: 'end',
+      label: 'First end',
+      required: true,
+      summary: true,
+    },
+    frame2: {
+      kind: 'end',
+      label: 'Second end',
+      required: true,
+      summary: true,
+    },
+    position1: {
+      kind: 'point',
+      relativeTo: 'frame1',
+      label: 'First point',
+      default: [0, 0],
+    },
+    position2: {
+      kind: 'point',
+      relativeTo: 'frame2',
+      label: 'Second point',
+      default: [0, 0],
+    },
+
+    // No default: an omitted length is adopted from the gap the pose places.
+    length: { kind: 'length', label: 'Length' },
+  },
+} satisfies ComponentMeta<DistanceProps>;
