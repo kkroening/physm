@@ -1,6 +1,6 @@
 import CoreLineDecal from './../LineDecal';
 import { useId } from 'react';
-import { useSceneNode } from './sceneNodes';
+import { refuseChildren, useSceneNode } from './sceneNodes';
 import type { ComponentMeta } from './componentMeta';
 import type { LineDecalOptions } from './../LineDecal';
 import type { SceneNode } from './sceneNodes';
@@ -13,6 +13,7 @@ function describeLine(props: LineProps): SceneNode {
 
 /** A line drawn in the enclosing frame's coordinates. */
 export default function Line(props: LineProps): null {
+  refuseChildren('Line', (props as { children?: unknown }).children);
   useSceneNode(useId(), describeLine(props), props);
 
   return null;

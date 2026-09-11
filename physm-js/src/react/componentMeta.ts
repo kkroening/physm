@@ -132,12 +132,12 @@ export interface ComponentMeta<P> {
 /**
  * Whether a node of one slot may sit directly inside another, or at the root.
  *
- * Asked *before* an insertion, rather than learned from a failed build -- and
- * for a document it is the only guard on part of it. The builders refuse a
- * weight or an anchor at the root: a scene carries no mass of its own, and an
- * anchor marks a point on a frame. "Only a frame has children" is held by the
- * props types for hand-written JSX, and by nothing when a scene is built, where
- * a non-frame's children are dropped.
+ * Asked *before* an insertion, rather than learned from a failed build. The
+ * builders refuse the same things: a weight or an anchor at the root -- a scene
+ * carries no mass of its own, and an anchor marks a point on a frame -- and
+ * children under anything but a frame, which both refuse through
+ * `refuseChildren`. Hand-written JSX meets that last rule in the props types
+ * first.
  */
 export function canContain(parent: Slot | 'root', child: Slot): boolean {
   switch (parent) {

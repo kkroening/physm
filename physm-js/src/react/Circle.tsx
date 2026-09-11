@@ -1,6 +1,6 @@
 import CoreCircleDecal from './../CircleDecal';
 import { useId } from 'react';
-import { useSceneNode } from './sceneNodes';
+import { refuseChildren, useSceneNode } from './sceneNodes';
 import type { ComponentMeta } from './componentMeta';
 import type { CircleDecalOptions } from './../CircleDecal';
 import type { SceneNode } from './sceneNodes';
@@ -13,6 +13,7 @@ function describeCircle(props: CircleProps): SceneNode {
 
 /** A circle drawn in the enclosing frame's coordinates. */
 export default function Circle(props: CircleProps): null {
+  refuseChildren('Circle', (props as { children?: unknown }).children);
   useSceneNode(useId(), describeCircle(props), props);
 
   return null;

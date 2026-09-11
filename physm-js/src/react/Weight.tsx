@@ -1,6 +1,6 @@
 import CoreWeight from './../Weight';
 import { useId } from 'react';
-import { useSceneNode } from './sceneNodes';
+import { refuseChildren, useSceneNode } from './sceneNodes';
 import type { ComponentMeta } from './componentMeta';
 import type { SceneNode } from './sceneNodes';
 import type { WeightOptions } from './../Weight';
@@ -15,6 +15,7 @@ function describeWeight({ mass, ...options }: WeightProps): SceneNode {
 
 /** A point mass in the enclosing frame's coordinates. */
 export default function Weight(props: WeightProps): null {
+  refuseChildren('Weight', (props as { children?: unknown }).children);
   useSceneNode(useId(), describeWeight(props), props);
 
   return null;

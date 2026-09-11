@@ -1,7 +1,7 @@
 import resolveAnchor from './resolveAnchor';
 import { CoincidenceConstraint } from './../Constraint';
 import { useId } from 'react';
-import { useSceneNode } from './sceneNodes';
+import { refuseChildren, useSceneNode } from './sceneNodes';
 import type { ComponentMeta } from './componentMeta';
 import type { ConstraintEnd } from './resolveAnchor';
 import type { ConstraintNode } from './sceneNodes';
@@ -60,6 +60,7 @@ function describeCoincidence({
  * at whatever geometry the scene places. See `docs/constraints.md`.
  */
 export default function Coincidence(props: CoincidenceProps): null {
+  refuseChildren('Coincidence', (props as { children?: unknown }).children);
   useSceneNode(useId(), describeCoincidence(props), props);
 
   return null;

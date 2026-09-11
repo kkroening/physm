@@ -17,6 +17,7 @@ import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import buildScene from './buildScene';
+import coreComponents from './coreComponents';
 import { CoincidenceConstraint, DistanceConstraint } from './../Constraint';
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
@@ -458,6 +459,44 @@ describe('buildScene', () => {
     expect(() => buildScene(unfinished)).toThrow(
       /<Coincidence> needs First end and Second end set/,
     );
+  });
+
+  test('every building block that is not a frame refuses children, in both routes', () => {
+    // A document can put children under a leaf, where written source cannot.
+    // The walk decides by slot, and each leaf component calls the refusal
+    // itself when mounted -- so every leaf is held to both, and one that forgot
+    // its call would fail here rather than drop a weight's mass unseen.
+    const leaves = coreComponents.filter(({ meta }) => meta.slot !== 'frame');
+
+    expect(leaves).toHaveLength(7);
+
+    for (const leaf of leaves) {
+      const { meta } = leaf;
+      // Required props first, since the walk checks them before children.
+      const props = Object.fromEntries(
+        Object.entries(meta.props)
+          .filter(([, spec]) => spec.required)
+          .map(([name, spec]) => [
+            name,
+            spec.kind === 'end' ? 'host' : spec.initial,
+          ]),
+      );
+      const stray = createElement(
+        RotationalFrame,
+        { id: 'host' },
+        createElement(
+          leaf as unknown as (props: object) => null,
+          props,
+          createElement(Weight, { mass: 1 }),
+        ),
+      );
+      const refusal = new RegExp(
+        `A <${meta.name}> is holding children, and only a frame can`,
+      );
+
+      expect(() => buildScene(stray), meta.name).toThrow(refusal);
+      expect(() => assemble(stray), meta.name).toThrow(refusal);
+    }
   });
 
   test('refuses a DOM element, naming it', () => {

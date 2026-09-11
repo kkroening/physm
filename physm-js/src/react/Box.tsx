@@ -1,6 +1,6 @@
 import CoreBoxDecal from './../BoxDecal';
 import { useId } from 'react';
-import { useSceneNode } from './sceneNodes';
+import { refuseChildren, useSceneNode } from './sceneNodes';
 import type { ComponentMeta } from './componentMeta';
 import type { BoxDecalOptions } from './../BoxDecal';
 import type { SceneNode } from './sceneNodes';
@@ -13,6 +13,7 @@ function describeBox(props: BoxProps): SceneNode {
 
 /** A box drawn in the enclosing frame's coordinates. */
 export default function Box(props: BoxProps): null {
+  refuseChildren('Box', (props as { children?: unknown }).children);
   useSceneNode(useId(), describeBox(props), props);
 
   return null;
