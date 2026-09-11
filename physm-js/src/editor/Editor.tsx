@@ -23,6 +23,7 @@ import useElementSize from './../useElementSize';
 import useSimulation from './useSimulation';
 import {
   definitionOf,
+  deletionRefusal,
   elementOf,
   extractComponent,
   extractionRefusal,
@@ -65,7 +66,14 @@ const CATEGORIES = ['Frames', 'Shapes', 'Physics', 'Constraints'] as const;
 
 /** A node's tag, as the tree and library name it. */
 function tagOf(ref: ComponentRef): string {
-  return ref.kind === 'core' ? ref.component.meta.name : ref.name;
+  switch (ref.kind) {
+    case 'core':
+      return ref.component.meta.name;
+    case 'children':
+      return 'Children';
+    default:
+      return ref.name;
+  }
 }
 
 /**
@@ -500,6 +508,9 @@ function TreePane({
   const extractRefusal = selectedPath
     ? extractionRefusal(doc, focus, selectedPath)
     : null;
+  const deleteRefusal = selectedPath
+    ? deletionRefusal(doc, focus, selectedPath)
+    : null;
   const rowActions: TreeActions = {
     ...actions,
     onSelect: (path) => {
@@ -627,8 +638,8 @@ function TreePane({
           </button>
           <button
             type="button"
-            title="Delete (Del)"
-            disabled={!selectedPath}
+            title={deleteRefusal ?? 'Delete (Del)'}
+            disabled={!selectedPath || deleteRefusal !== null}
             onClick={onSelected(actions.onDelete)}
           >
             Delete
@@ -1448,6 +1459,15 @@ function LibraryPane({
           <ul>{defined.map(({ name }) => entry({ kind: 'defined', name }))}</ul>
         </div>
       ) : null}
+      <div className="editor__shelf">
+        <div className="editor__heading">This component</div>
+        <ul>
+          {entry(
+            { kind: 'children' },
+            "Where this component's instances put the children they are given.",
+          )}
+        </ul>
+      </div>
     </section>
   );
 }
@@ -1613,7 +1633,11 @@ export default function Editor({
     onOpen: open,
     // Nothing is selected afterwards: the node is gone, and jumping to a
     // neighbour would move the selection somewhere nobody asked for.
-    onDelete: (path) => change(removeNode(doc, focus, path), null),
+    onDelete: (path) => {
+      if (!deletionRefusal(doc, focus, path)) {
+        change(removeNode(doc, focus, path), null);
+      }
+    },
     onMove: (path, by) => {
       const parent = path.slice(0, -1);
       const index = path[path.length - 1]! + by;

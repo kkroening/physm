@@ -25,6 +25,9 @@ export type CoreComponent = AnyComponent & {
  *   props, never its body, so it can be expanded but not edited.
  * - **defined** -- a component this document defines. Its body is document
  *   data, so it is editable all the way down.
+ * - **children** -- no component, but the place a defined component's body
+ *   keeps for the children an instance is given: at most one in a body, and
+ *   never in the scene's own, which has no instances.
  */
 export type ComponentRef =
   | { readonly kind: 'core'; readonly component: CoreComponent }
@@ -33,7 +36,8 @@ export type ComponentRef =
       readonly name: string;
       readonly component: AnyComponent;
     }
-  | { readonly kind: 'defined'; readonly name: string };
+  | { readonly kind: 'defined'; readonly name: string }
+  | { readonly kind: 'children' };
 
 /** One authored element: what it is, its props, and its authored children. */
 export interface DocNode {
@@ -233,11 +237,15 @@ export function elementOf(
     }
 
     const { body } = definitionOf(doc, definitionName);
-    const component: FunctionComponent = () =>
+    const component: FunctionComponent<{ children?: ReactNode }> = ({
+      children,
+    }) =>
       createElement(
         Fragment,
         null,
-        ...body.map((node, index) => render(definitionName, node, [index])),
+        ...body.map((node, index) =>
+          render(definitionName, node, [index], children),
+        ),
       );
 
     // Named, so an error from inside it says which definition it came from.
@@ -247,23 +255,37 @@ export function elementOf(
     return component;
   };
 
-  const typeOf = (ref: ComponentRef): FunctionComponent =>
+  const typeOf = (
+    ref: Exclude<ComponentRef, { kind: 'children' }>,
+  ): FunctionComponent =>
     (ref.kind === 'defined'
       ? componentFor(ref.name)
       : ref.component) as unknown as FunctionComponent;
 
   // Children go in as separate arguments rather than one array: an array child
   // is a list React expects keys on, and these are fixed siblings, not a list.
+  //
+  // `given` is what the instance being rendered was given as children, which
+  // go where its body keeps a place for them.
   const render = (
     definition: string,
     node: DocNode,
     path: NodePath,
+    given: ReactNode,
   ): ReactElement => {
+    if (node.type.kind === 'children') {
+      return createElement(
+        Fragment,
+        node.key === undefined ? null : { key: node.key },
+        given,
+      );
+    }
+
     const element = createElement(
       typeOf(node.type),
       node.key === undefined ? node.props : { ...node.props, key: node.key },
       ...node.children.map((child, index) =>
-        render(definition, child, [...path, index]),
+        render(definition, child, [...path, index], given),
       ),
     );
     origins?.set(element, { definition, path });
@@ -272,6 +294,33 @@ export function elementOf(
   };
 
   return createElement(componentFor(name));
+}
+
+/**
+ * Where a definition's body keeps its instances' children, or `null` for a
+ * body with no place for them.
+ */
+export function placeholderPath(
+  doc: SceneDocument,
+  definition: string,
+): NodePath | null {
+  const search = (
+    nodes: readonly DocNode[],
+    parent: NodePath,
+  ): NodePath | null => {
+    for (const [index, node] of nodes.entries()) {
+      const path = [...parent, index];
+      const found =
+        node.type.kind === 'children' ? path : search(node.children, path);
+      if (found) {
+        return found;
+      }
+    }
+
+    return null;
+  };
+
+  return search(definitionOf(doc, definition).body, []);
 }
 
 /** A node by path, or a throw naming the path. */
@@ -589,12 +638,44 @@ export function nameRefusal(doc: SceneDocument, name: string): string | null {
     return `${name} is already a component in this scene.`;
   }
 
-  if (imported.has(name) || name === 'ReactElement') {
+  if (name === 'Children') {
+    return 'Children names the place a component keeps for its children.';
+  }
+
+  if (imported.has(name) || name === 'ReactElement' || name === 'ReactNode') {
     return `${name} is already imported by the generated module.`;
   }
 
   return BUILT_INS.has(name)
     ? `${name} is a JavaScript built-in, which generated code may use.`
+    : null;
+}
+
+/**
+ * Why the node at `path` cannot be deleted, or `null` when it can: it holds
+ * its body's place for children while an instance of the body's component has
+ * some, which would be left with nowhere to go.
+ */
+export function deletionRefusal(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+): string | null {
+  const holdsPlace = everyNode([nodeAt(doc, definition, path)]).some(
+    ({ type }) => type.kind === 'children',
+  );
+  const given = doc.definitions.some(({ body }) =>
+    everyNode(body).some(
+      ({ type, children }) =>
+        type.kind === 'defined' &&
+        type.name === definition &&
+        children.length > 0,
+    ),
+  );
+
+  return holdsPlace && given
+    ? `An instance of ${definition} holds children, which would then have ` +
+        'nowhere to go: delete them first.'
     : null;
 }
 
@@ -610,7 +691,15 @@ export function extractionRefusal(
   definition: string,
   path: NodePath,
 ): string | null {
-  const { type } = nodeAt(doc, definition, path);
+  const node = nodeAt(doc, definition, path);
+  if (everyNode([node]).some(({ type }) => type.kind === 'children')) {
+    return (
+      `This holds ${definition}'s place for its children, which has to stay ` +
+      `in ${definition}.`
+    );
+  }
+
+  const { type } = node;
   if (type.kind !== 'core' || canContain('root', type.component.meta.slot)) {
     return null;
   }
