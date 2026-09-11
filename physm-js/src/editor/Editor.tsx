@@ -11,7 +11,11 @@ import coreComponents from './../react/coreComponents';
 import emitScene, { rangeKey } from './emitScene';
 import getViewXformMatrix from './../getViewXformMatrix';
 import hitsAt from './hitsAt';
-import movedPosition, { placedPosition } from './movedPosition';
+import movedPosition, {
+  griddedPosition,
+  placedPosition,
+  positionGrid,
+} from './movedPosition';
 import placeGizmos from './placeGizmos';
 import scrollTopFor from './scrollTopFor';
 import snapPoints, { nearestSnap } from './snapPoints';
@@ -675,6 +679,9 @@ interface Drag {
   readonly origin: ScreenPoint;
   readonly targets: readonly ScreenPoint[];
 
+  /** The grid it snaps to, whole units of `position` on screen: `null` for none. */
+  readonly grid: Mat3 | null;
+
   /** Names the drag to the history, so all of it is one step. */
   readonly field: string;
   moved: boolean;
@@ -741,7 +748,9 @@ function useBuiltScene(
  * would do with no world around it is a question it leaves open. So a
  * component's tab draws it as authored, and the scene's run waits for its tab.
  *
- * Under the scene, a faint grid marks every whole unit of the world.
+ * Under the scene, a faint grid marks every whole unit of the world -- or,
+ * while a drag that snaps lasts, of the dragged frame's `position`, which is
+ * the grid it snaps to.
  *
  * A click selects what it hit, as the node in the focused body nearest to it --
  * so a click on a component's instance selects the instance. Clicking the same
@@ -751,7 +760,8 @@ function useBuiltScene(
  * when the focused body wrote that node, since otherwise there is nowhere to
  * write to. The pointer says which, before the press. Held within a few
  * pixels of another frame's origin, a line's end or a circle's centre, the
- * origin snaps to it exactly; Alt places it freely instead. While it moves,
+ * origin snaps to it exactly; short of that, each coordinate within a few
+ * pixels of a whole unit snaps to it; Alt places it freely instead. While it moves,
  * its parent's axes -- the ones `position` is read along -- go through it.
  *
  * A scene that fails to build shows why instead of taking the editor down with
@@ -842,6 +852,10 @@ function ScenePane({
   // The node a drag under way moves, and the body it is in, once it has moved.
   const [dragging, setDragging] = useState<Selection | null>(null);
 
+  // The grid a drag under way snaps to, drawn in the world's place until it
+  // ends.
+  const [dragGrid, setDragGrid] = useState<Mat3 | null>(null);
+
   /** Where a mouse event lands, in the pane's own coordinates. */
   const pointOf = (event: {
     clientX: number;
@@ -919,25 +933,32 @@ function ScenePane({
 
     event.preventDefault();
     drags.current += 1;
+    const position = vec3.coerce(
+      (nodeAt(doc, focus, target.path).props.position ?? [0, 0]) as
+        number | readonly number[],
+    );
+
+    // Only in the pose the code builds: a snap is a claim about where frames
+    // are, and in a run's pose it would be exact about one never built.
+    const authored =
+      'scene' in built &&
+      drawn !== null &&
+      atAuthoredPose(drawn.stateMap, built.initial);
     drag.current = {
       path: target.path,
       doc,
       definition: focus,
-      position: vec3.coerce(
-        (nodeAt(doc, focus, target.path).props.position ?? [0, 0]) as
-          number | readonly number[],
-      ),
+      position,
       parentXform: placement.parentXform,
       from,
       origin: placement.origin,
-      // Only in the pose the code builds: a snap is a claim about where frames
-      // are, and in a run's pose it would be exact about one never built.
       targets:
-        'scene' in built &&
-        drawn &&
-        atAuthoredPose(drawn.stateMap, built.initial)
+        authored && drawn
           ? snapPoints(drawn.scene, drawn.stateMap, xformMatrix, target.frame)
           : [],
+      grid: authored
+        ? positionGrid(position, placement.parentXform, placement.origin)
+        : null,
       field: `drag ${drags.current}`,
       moved: false,
     };
@@ -953,6 +974,7 @@ function ScenePane({
       setCursor('');
       setSnapMark(null);
       setDragging(null);
+      setDragGrid(null);
     };
 
     const move = (moveEvent: globalThis.MouseEvent): void => {
@@ -983,10 +1005,12 @@ function ScenePane({
         current.moved = true;
         onPick(current.path);
         setDragging({ definition: current.definition, path: current.path });
+        setDragGrid(current.grid);
       }
 
       // Where the origin goes with the pointer, and the point it snaps to
       // there: the nearest in reach, unless Alt says to place it freely.
+      // Short of a point, each coordinate snaps to the grid on its own.
       const origin: ScreenPoint = [
         current.origin[0] + to[0] - current.from[0],
         current.origin[1] + to[1] - current.from[1],
@@ -1002,12 +1026,19 @@ function ScenePane({
             current.origin,
             snap,
           )
-        : movedPosition(
-            current.position,
-            current.parentXform,
-            current.from,
-            to,
-          );
+        : current.grid && !moveEvent.altKey
+          ? griddedPosition(
+              current.position,
+              current.parentXform,
+              current.from,
+              to,
+            )
+          : movedPosition(
+              current.position,
+              current.parentXform,
+              current.from,
+              to,
+            );
       onEdit(
         setProp(
           current.doc,
@@ -1064,6 +1095,11 @@ function ScenePane({
         )
       : undefined;
 
+  // The grid a drag snaps to, in the world's place -- in the tab it began in
+  // only, like the axes above.
+  const lattice =
+    dragging?.definition === focus && dragGrid ? dragGrid : xformMatrix;
+
   return (
     <section className="editor__scene" aria-label="Scene">
       <svg
@@ -1073,7 +1109,7 @@ function ScenePane({
         onMouseMove={hover}
         style={cursor ? { cursor } : undefined}
       >
-        <Grid xformMatrix={xformMatrix} size={size} />
+        <Grid lattice={lattice} size={size} />
         {drawn ? (
           <>
             <SceneView {...drawn} xformMatrix={xformMatrix} />

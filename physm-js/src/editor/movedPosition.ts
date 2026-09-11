@@ -4,6 +4,13 @@ import type { Mat3 } from './../Mat3';
 import type { ScreenPoint } from './placeGizmos';
 import type { Vec3 } from './../Vec3';
 
+/**
+ * How near a whole unit a dragged coordinate has to come to snap to it, in
+ * pixels. Half a point's reach, since the grid has a line at every unit: at
+ * eight pixels, a coordinate would be snapped most of the way across one.
+ */
+const GRID_REACH = 4;
+
 /** A value to the nearest hundredth. */
 function rounded(value: number): number {
   return Math.round(value * 100) / 100 || 0;
@@ -72,4 +79,49 @@ export default function movedPosition(
   const [x, y] = moved(position, parentXform, from, to);
 
   return [rounded(x), rounded(y)];
+}
+
+/**
+ * Where a drag takes a `position`, as `movedPosition` has it -- but with each
+ * coordinate that comes within `GRID_REACH` pixels of a whole unit snapped to
+ * it. Each on its own, so a drag along a grid line keeps to it; and in the
+ * parent's units, so the code gets whole numbers however the parent is placed.
+ */
+export function griddedPosition(
+  position: Vec3,
+  parentXform: Mat3,
+  from: ScreenPoint,
+  to: ScreenPoint,
+): [number, number] {
+  const pixelsPerUnit = mat3.scaleFactor(parentXform);
+  const snapped = (value: number): number => {
+    const whole = Math.round(value);
+
+    return Math.abs(value - whole) * pixelsPerUnit <= GRID_REACH
+      ? whole || 0
+      : rounded(value);
+  };
+  const [x, y] = moved(position, parentXform, from, to);
+
+  return [snapped(x), snapped(y)];
+}
+
+/**
+ * The grid a drag snaps to, as a transform to the screen: a unit of it for
+ * each whole unit of the frame's `position`, placed where the frame's origin
+ * goes at that value. That is the parent's own grid for a rotational frame; a
+ * track frame's coordinate slides its origin along the track, and the grid
+ * with it.
+ */
+export function positionGrid(
+  position: Vec3,
+  parentXform: Mat3,
+  origin: ScreenPoint,
+): Mat3 {
+  const [x, y] = vec3.toPlanar(
+    mat3.apply(mat3.invert(parentXform), vec3.point(origin[0], origin[1])),
+  );
+  const [px, py] = vec3.toPlanar(position);
+
+  return mat3.multiply(parentXform, mat3.translation(x - px, y - py));
 }

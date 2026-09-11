@@ -1,3 +1,4 @@
+import * as mat3 from './../Mat3';
 import Grid from './Grid';
 import getViewXformMatrix from './../getViewXformMatrix';
 import gridLines from './gridLines';
@@ -11,27 +12,43 @@ function wholeNumbers(from: number, to: number): number[] {
   return Array.from({ length: to - from + 1 }, (_, index) => from + index);
 }
 
+/** A value to a millionth, without the noise an inverse leaves. */
+function near(value: number): number {
+  return Math.round(value * 1e6) / 1e6 || 0;
+}
+
 /** A line's two ends, as `[x1, y1, x2, y2]`. */
 function endsOf(line: Element): number[] {
   return ['x1', 'y1', 'x2', 'y2'].map((name) =>
-    Number(line.getAttribute(name)),
+    near(Number(line.getAttribute(name))),
   );
 }
 
 describe('gridLines', () => {
-  test('a line at every whole unit in view, where the view draws it', () => {
-    const { vertical, horizontal } = gridLines(xformMatrix, [400, 300]);
+  test('a line at every whole unit in view, straight across the pane', () => {
+    const { xLines, yLines } = gridLines(xformMatrix, [400, 300]);
 
     // 200 pixels either side of the middle is 11.1 units, and 150 is 8.3.
-    expect(vertical.map(({ unit }) => unit)).toEqual(wholeNumbers(-11, 11));
-    expect(horizontal.map(({ unit }) => unit)).toEqual(wholeNumbers(-8, 8));
-    vertical.forEach(({ unit, at }) => {
-      expect(at).toBeCloseTo(200 + 18 * unit, 9);
-    });
+    expect(xLines.map(({ unit }) => unit)).toEqual(wholeNumbers(-11, 11));
+    expect(yLines.map(({ unit }) => unit)).toEqual(wholeNumbers(-8, 8));
 
-    // The world is y-up and the screen y-down.
-    horizontal.forEach(({ unit, at }) => {
-      expect(at).toBeCloseTo(150 - 18 * unit, 9);
+    // Bottom to top and left to right, the world being y-up and the screen
+    // y-down.
+    xLines.forEach(({ unit, from, to }) => {
+      expect([...from, ...to].map(near)).toEqual([
+        near(200 + 18 * unit),
+        300,
+        near(200 + 18 * unit),
+        0,
+      ]);
+    });
+    yLines.forEach(({ unit, from, to }) => {
+      expect([...from, ...to].map(near)).toEqual([
+        0,
+        near(150 - 18 * unit),
+        400,
+        near(150 - 18 * unit),
+      ]);
     });
   });
 
@@ -39,20 +56,41 @@ describe('gridLines', () => {
     // Moved 13.6 units left and 2.2 down: the pane shows x from 2.49 to
     // 24.71, and y from -6.13 to 10.53.
     const moved = getViewXformMatrix([-13.6, -2.2], 18, [400, 300]);
-    const { vertical, horizontal } = gridLines(moved, [400, 300]);
+    const { xLines, yLines } = gridLines(moved, [400, 300]);
 
-    expect(vertical.map(({ unit }) => unit)).toEqual(wholeNumbers(3, 24));
-    expect(horizontal.map(({ unit }) => unit)).toEqual(wholeNumbers(-6, 10));
-    expect(vertical[0]!.at).toBeCloseTo(200 + 18 * (3 - 13.6), 9);
-    expect(horizontal[0]!.at).toBeCloseTo(150 - 18 * (-6 - 2.2), 9);
+    expect(xLines.map(({ unit }) => unit)).toEqual(wholeNumbers(3, 24));
+    expect(yLines.map(({ unit }) => unit)).toEqual(wholeNumbers(-6, 10));
+    expect(xLines[0]!.from[0]).toBeCloseTo(200 + 18 * (3 - 13.6), 9);
+    expect(yLines[0]!.from[1]).toBeCloseTo(150 - 18 * (-6 - 2.2), 9);
+  });
+
+  test('a turned grid runs along its own axes, over the whole pane', () => {
+    const lattice = mat3.multiply(xformMatrix, mat3.rotation(Math.PI / 6));
+    const { xLines, yLines } = gridLines(lattice, [400, 300]);
+
+    // Turned by 30 degrees, the pane's corners reach 13.8 units along the
+    // grid's x either way, and 12.8 along its y.
+    expect(xLines.map(({ unit }) => unit)).toEqual(wholeNumbers(-13, 13));
+    expect(yLines.map(({ unit }) => unit)).toEqual(wholeNumbers(-12, 12));
+
+    // The line of x = 1 runs along the grid's y, which is the screen's
+    // (-sin, -cos) of the turn, through the point a unit along its x.
+    const { from, to } = xLines.find(({ unit }) => unit === 1)!;
+    const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    const [dx, dy] = [(to[0] - from[0]) / length, (to[1] - from[1]) / length];
+    const [px, py] = [200 + 18 * Math.cos(Math.PI / 6), 150 - 9];
+
+    expect(dx).toBeCloseTo(-Math.sin(Math.PI / 6), 9);
+    expect(dy).toBeCloseTo(-Math.cos(Math.PI / 6), 9);
+    expect((px - from[0]) * dy - (py - from[1]) * dx).toBeCloseTo(0, 9);
   });
 });
 
 describe('Grid', () => {
-  test("its lines cross the pane, and the world's axes are drawn apart", () => {
+  test("its lines cross the pane, and the grid's own axes are drawn apart", () => {
     const { container } = render(
       <svg>
-        <Grid xformMatrix={xformMatrix} size={[400, 300]} />
+        <Grid lattice={xformMatrix} size={[400, 300]} />
       </svg>,
     );
 
@@ -69,9 +107,9 @@ describe('Grid', () => {
     // Every other unit in view: 22 across and 16 down.
     expect(container.querySelectorAll('.editor__grid-line')).toHaveLength(38);
 
-    // Top to bottom at x = 3, and side to side at y = 2.
+    // Bottom to top at x = 3, and side to side at y = 2.
     expect(endsOf(container.querySelector('[data-x="3"]')!)).toEqual([
-      254, 0, 254, 300,
+      254, 300, 254, 0,
     ]);
     expect(endsOf(container.querySelector('[data-y="2"]')!)).toEqual([
       0, 114, 400, 114,

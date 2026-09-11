@@ -1,53 +1,54 @@
 import gridLines from './gridLines';
+import type { GridLine } from './gridLines';
 import type { Mat3 } from './../Mat3';
 import type { ReactElement } from 'react';
 
-/** How a line of the grid is drawn: the world's own axes a shade darker than the rest. */
-function classOf(unit: number): string {
-  return unit === 0 ? 'editor__grid-axis' : 'editor__grid-line';
+/** A line of the grid, its own axes a shade darker than the rest. */
+function GridLineView({
+  line: { unit, from, to },
+  axis,
+}: {
+  line: GridLine;
+  axis: 'x' | 'y';
+}): ReactElement {
+  return (
+    <line
+      className={unit === 0 ? 'editor__grid-axis' : 'editor__grid-line'}
+      data-x={axis === 'x' ? unit : undefined}
+      data-y={axis === 'y' ? unit : undefined}
+      x1={from[0]}
+      y1={from[1]}
+      x2={to[0]}
+      y2={to[1]}
+    />
+  );
 }
 
 /**
- * A faint line at every whole unit of the world, across the scene pane and
- * under the scene, so a position can be read off the picture -- and the
- * world's own axes a shade darker, so its origin can be found.
+ * A faint line at every whole unit of a grid, across the scene pane and under
+ * the scene, so a position can be read off the picture -- and the grid's own
+ * axes a shade darker, so its origin can be found. `lattice` takes its units to
+ * the screen: the view, for the world's grid.
  *
  * Like a gizmo, it belongs to the editor: the scene and the code written from
  * it never mention one.
  */
 export default function Grid({
-  xformMatrix,
+  lattice,
   size,
 }: {
-  xformMatrix: Mat3;
+  lattice: Mat3;
   size: readonly [number, number];
 }): ReactElement {
-  const [width, height] = size;
-  const { vertical, horizontal } = gridLines(xformMatrix, size);
+  const { xLines, yLines } = gridLines(lattice, size);
 
   return (
     <g className="editor__grid">
-      {vertical.map(({ unit, at }) => (
-        <line
-          className={classOf(unit)}
-          data-x={unit}
-          x1={at}
-          y1={0}
-          x2={at}
-          y2={height}
-          key={`x${unit}`}
-        />
+      {xLines.map((line) => (
+        <GridLineView line={line} axis="x" key={`x${line.unit}`} />
       ))}
-      {horizontal.map(({ unit, at }) => (
-        <line
-          className={classOf(unit)}
-          data-y={unit}
-          x1={0}
-          y1={at}
-          x2={width}
-          y2={at}
-          key={`y${unit}`}
-        />
+      {yLines.map((line) => (
+        <GridLineView line={line} axis="y" key={`y${line.unit}`} />
       ))}
     </g>
   );
