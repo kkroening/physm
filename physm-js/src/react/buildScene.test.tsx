@@ -6,12 +6,14 @@ import Coincidence from './Coincidence';
 import CoreBoxDecal from './../BoxDecal';
 import CoreCircleDecal from './../CircleDecal';
 import CoreLineDecal from './../LineDecal';
+import CoreFixedFrame from './../FixedFrame';
 import CoreRotationalFrame from './../RotationalFrame';
 import CoreScene from './../Scene';
 import CoreTrackFrame from './../TrackFrame';
 import CoreWeight from './../Weight';
 import Distance from './Distance';
 import Line from './Line';
+import FixedFrame from './FixedFrame';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
@@ -72,7 +74,7 @@ function normalized(scene: CoreScene): unknown {
 }
 
 /**
- * All nine building blocks with every prop set: none at its default when `k`
+ * All ten building blocks with every prop set: none at its default when `k`
  * is 1, and every one different between `k` = 1 and 2.
  *
  * The constraints join three pairs of weighted pivots set `gap` apart at
@@ -136,6 +138,11 @@ function fullRig(k: 1 | 2): ReactElement {
           <Weight mass={7 * k} position={[3 * k, 0]} drag={6 * k} />
         </RotationalFrame>
       </TrackFrame>
+      <FixedFrame id="mount" position={[-10 * k, 2]} angle={0.3 * k}>
+        <RotationalFrame id="hung" initialState={[0.2 * k, 0]}>
+          <Weight mass={2} position={[1, 0]} />
+        </RotationalFrame>
+      </FixedFrame>
       {pivot('c1', -20)}
       {pivot('c2', -20 + gap)}
       {pivot('d1', 0, <Anchor id="d1-top" position={[0, 1]} />)}
@@ -226,6 +233,18 @@ function handBuilt(k: 1 | 2): CoreScene {
             weights: [
               new CoreWeight(7 * k, { position: [3 * k, 0], drag: 6 * k }),
             ],
+          }),
+        ],
+      }),
+      new CoreFixedFrame({
+        id: 'mount',
+        position: [-10 * k, 2],
+        angle: 0.3 * k,
+        frames: [
+          new CoreRotationalFrame({
+            id: 'hung',
+            initialState: [0.2 * k, 0],
+            weights: [new CoreWeight(2, { position: [1, 0] })],
           }),
         ],
       }),

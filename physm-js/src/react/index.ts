@@ -21,6 +21,7 @@ export { default as SceneView } from './SceneView';
 export { default as FrameView } from './FrameView';
 export { default as DecalView } from './DecalView';
 
+export { default as FixedFrame } from './FixedFrame';
 export { default as RotationalFrame } from './RotationalFrame';
 export { default as TrackFrame } from './TrackFrame';
 
