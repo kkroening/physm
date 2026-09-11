@@ -701,6 +701,38 @@ describe('Editor, components and tabs', () => {
     expect(screen.getByRole('status')).toHaveTextContent('already a component');
   });
 
+  test('a weight alone cannot be extracted, and the button says why', () => {
+    render(<Editor />);
+    select('Weight');
+    const extract = screen.getByRole('button', {
+      name: 'Extract to component',
+    });
+
+    expect(extract).toBeDisabled();
+    expect(extract).toHaveAttribute(
+      'title',
+      expect.stringMatching(/has to go inside a frame/),
+    );
+  });
+
+  test('an abandoned name closes with the selection, and does not come back', () => {
+    render(<Editor />);
+    select('Box');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Extract to component' }),
+    );
+
+    expect(screen.getByLabelText('Component name')).toBeVisible();
+
+    select('Weight');
+
+    expect(screen.queryByLabelText('Component name')).toBeNull();
+
+    select('Box');
+
+    expect(screen.queryByLabelText('Component name')).toBeNull();
+  });
+
   test('a component that names ids cannot be added a second time', () => {
     render(<Editor />);
     select('TrackFrame');

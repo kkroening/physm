@@ -11,6 +11,7 @@ import {
   definitionOf,
   elementOf,
   extractComponent,
+  extractionRefusal,
   insertNode,
   moveNode,
   nameRefusal,
@@ -263,7 +264,24 @@ function TreePane({
   selectedPath: NodePath | null;
   onExtract: (path: NodePath, name: string) => void;
 }): ReactElement {
-  const [naming, setNaming] = useState(false);
+  // The path the name is being typed for: the form shows only while that is
+  // still the selection, and a selection made in the tree clears it.
+  const [naming, setNaming] = useState<string | null>(null);
+  const selectedKey = selectedPath ? selectedPath.join('.') : null;
+  const extractRefusal = selectedPath
+    ? extractionRefusal(doc, focus, selectedPath)
+    : null;
+  const rowActions: TreeActions = {
+    ...actions,
+    onSelect: (path) => {
+      setNaming(null);
+      actions.onSelect(path);
+    },
+    onDeselect: () => {
+      setNaming(null);
+      actions.onDeselect();
+    },
+  };
   const { body } = definitionOf(doc, focus);
   const index = selectedPath ? selectedPath[selectedPath.length - 1]! : null;
   const count = selectedPath
@@ -286,7 +304,7 @@ function TreePane({
           target === event.currentTarget ||
           target.getAttribute('role') === 'tree'
         ) {
-          actions.onDeselect();
+          rowActions.onDeselect();
         }
       }}
     >
@@ -314,9 +332,9 @@ function TreePane({
           <button
             type="button"
             aria-label="Extract to component"
-            title="Extract to component"
-            disabled={!selectedPath}
-            onClick={() => setNaming(true)}
+            title={extractRefusal ?? 'Extract to component'}
+            disabled={!selectedPath || extractRefusal !== null}
+            onClick={() => setNaming(selectedKey)}
           >
             Extract
           </button>
@@ -330,14 +348,14 @@ function TreePane({
           </button>
         </span>
       </div>
-      {naming && selectedPath ? (
+      {naming !== null && naming === selectedKey && selectedPath ? (
         <ExtractForm
           doc={doc}
           onExtract={(name) => {
-            setNaming(false);
+            setNaming(null);
             onExtract(selectedPath, name);
           }}
-          onCancel={() => setNaming(false)}
+          onCancel={() => setNaming(null)}
         />
       ) : null}
       <ul
@@ -346,7 +364,7 @@ function TreePane({
         tabIndex={-1}
         onKeyDown={(event) => {
           if (event.key === 'Escape' && event.target === event.currentTarget) {
-            actions.onDeselect();
+            rowActions.onDeselect();
           }
         }}
       >
@@ -355,7 +373,7 @@ function TreePane({
             node={node}
             path={[at]}
             selected={selectedPath ? selectedPath.join('.') : null}
-            {...actions}
+            {...rowActions}
             key={rowKey(node, at)}
           />
         ))}

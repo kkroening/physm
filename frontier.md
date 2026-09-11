@@ -32,9 +32,12 @@ Roughly one PR each.
 10. **Play** — *in view*
 11. **Gizmos**
 
-The MVP is through 9, and done: load a scene, see its tree, edit props, add, delete and
-reorder nodes, extract a component and reuse it, and export TSX that rebuilds to
-the same scene. Play is cheap once the shell exists and may come forward.
+Steps 1-9 are done: load a scene, see its tree, edit props, add, delete and
+reorder nodes, extract a component and reuse it -- one that names no id, for
+now -- and export TSX that rebuilds to the same scene.
+[0014 page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) also counts
+gizmos in the MVP, so step 11 is what remains of it. Play came forward because
+the shell made it cheap.
 
 ## Further out
 
@@ -58,7 +61,8 @@ the same scene. Play is cheap once the shell exists and may come forward.
   components take no props until promote-to-prop, so it stays open -- Karl's
   call.
 - Scene picking and dragging
-- Promote to prop
+- Promote to prop, or scope ids per instance: either makes a component that
+  names an id reusable. Which comes first is Karl's call.
 - Code pane highlighting, and scroll-once on focus change
 - Codegen polish: round numbers (`-Math.PI / 2`), constants for repeated values
 - The constraint-first direction ([0014 page 9](docs/issues/0014/09-horizon.md))

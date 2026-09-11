@@ -1,6 +1,7 @@
 import Anchor from './../react/Anchor';
 import Coincidence from './../react/Coincidence';
 import Line from './../react/Line';
+import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import starterDocument from './starterDocument';
@@ -9,6 +10,7 @@ import { insertionPoint, newNode, refusalOf } from './insertion';
 import type {
   ComponentRef,
   CoreComponent,
+  DocNode,
   SceneDocument,
 } from './sceneDocument';
 
@@ -114,7 +116,7 @@ describe('refusalOf, for ids', () => {
     const atRoot = insertionPoint(doc, 'Scene', null);
 
     expect(refusalOf(doc, 'Scene', atRoot, defined('Cart'))).toMatch(
-      /Cart names 'cart', and ids are scene-wide/,
+      /Cart names 'cart', which would then appear twice in the scene/,
     );
     // Pendulum, now inside Cart, names none.
     expect(refusalOf(doc, 'Scene', atRoot, defined('Pendulum'))).toBeNull();
@@ -152,9 +154,95 @@ describe('refusalOf, for ids already in use', () => {
     const atRoot = insertionPoint(doc, 'Scene', null);
 
     expect(refusalOf(doc, 'Scene', atRoot, defined('Arm'))).toMatch(
-      /Arm names 'cart', which the scene already uses/,
+      /Arm names 'cart', which would then appear twice in the scene/,
     );
     expect(refusalOf(doc, 'Scene', atRoot, defined('Spare'))).toBeNull();
+  });
+});
+
+/** A node of a building block, with the props given. */
+function nodeOf(
+  component: unknown,
+  props: Record<string, unknown> = {},
+): DocNode {
+  return { type: core(component), props, children: [] };
+}
+
+/** An instance of a component the document defines. */
+function instanceOf(name: string): DocNode {
+  return { type: defined(name), props: {}, children: [] };
+}
+
+describe('refusalOf, through the expansion', () => {
+  test('counts what the scene reaches, not where the document writes it', () => {
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        { name: 'Scene', body: [instanceOf('Wheel'), instanceOf('Wheel')] },
+        { name: 'Wheel', body: [nodeOf(RotationalFrame)] },
+        { name: 'Hub', body: [nodeOf(TrackFrame, { id: 'hub' })] },
+        // Placed nowhere, so their shared id collides nowhere yet.
+        { name: 'Arm', body: [nodeOf(TrackFrame, { id: 'cart' })] },
+        { name: 'Leg', body: [nodeOf(TrackFrame, { id: 'cart' })] },
+      ],
+    };
+
+    // Wheel appears twice in the scene, so one Hub in it is two there.
+    expect(
+      refusalOf(
+        doc,
+        'Wheel',
+        insertionPoint(doc, 'Wheel', null),
+        defined('Hub'),
+      ),
+    ).toMatch(/Hub names 'hub', which would then appear twice in the scene/);
+    expect(
+      refusalOf(
+        doc,
+        'Scene',
+        insertionPoint(doc, 'Scene', null),
+        defined('Arm'),
+      ),
+    ).toBeNull();
+  });
+
+  test('refuses a second copy of a component whose constraint reaches outside it', () => {
+    const frames = [
+      nodeOf(TrackFrame, { id: 'a' }),
+      nodeOf(TrackFrame, { id: 'b' }),
+    ];
+    const weld = {
+      name: 'Weld',
+      body: [nodeOf(Coincidence, { frame1: 'a', frame2: 'b' })],
+    };
+    const placed: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        { name: 'Scene', body: [...frames, instanceOf('Weld')] },
+        weld,
+      ],
+    };
+    const unplaced: SceneDocument = {
+      root: 'Scene',
+      definitions: [{ name: 'Scene', body: frames }, weld],
+    };
+
+    expect(
+      refusalOf(
+        placed,
+        'Scene',
+        insertionPoint(placed, 'Scene', null),
+        defined('Weld'),
+      ),
+    ).toMatch(/Weld holds a constraint on 'a', outside itself/);
+    expect(
+      refusalOf(
+        unplaced,
+        'Scene',
+        insertionPoint(unplaced, 'Scene', null),
+        defined('Weld'),
+      ),
+    ).toBeNull();
   });
 });
 
