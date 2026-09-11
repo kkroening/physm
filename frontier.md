@@ -6,19 +6,24 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Gizmos.** In editor mode every frame draws an origin gizmo -- a small cross
-or dot at its own origin, and a faint line to its parent's -- so a frame that
-draws nothing still has something to see, and later something to click. They
-are not part of the scene and are never emitted
-([0014 page 7](docs/issues/0014/07-editing.md)). Gizmos are what remains of the
-MVP [page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) defines; picking
-and dragging come after it, and page 7 describes both.
+**Undo.** [0014 page 10](docs/issues/0014/10-staging.md) puts undo in the MVP
+from the start: retrofitting it onto a mutable document is the classic rewrite,
+and a document that is replaced rather than mutated makes it nearly free. Every
+edit here already returns a new document, so undo is a stack of past ones. What
+needs deciding is what one step is -- page 7 coalesces a field's run of
+keystrokes into one -- and where the selection and focus go back to.
 
-- gizmos first: they make the frame tree legible in the scene pane
-- then picking: decals hit-test their own geometry, frames their gizmo, and a
-  click selects the nearest authored ancestor
-- then dragging: a gizmo's drag writes `position` in the parent's frame
-- in that order, as page 10 has it
+After it, from [page 7](docs/issues/0014/07-editing.md), in this order:
+
+- picking: decals hit-test their own geometry, frames their gizmo, topmost
+  first, and a click selects the nearest *authored* ancestor of what it hit
+- dragging: a gizmo's drag writes `position` in the parent's frame, with
+  snapping to the grid and to other origins, and only an authored node drags.
+  It needs undo most -- a drag is a stream of edits, and a slip is easy -- and
+  gizmos that show which way +x points, since a drag writes along the parent's
+  axes and today's cross looks the same after a quarter turn
+- the tree stays the failsafe, so either can ship imperfect without blocking
+  anything
 
 ## Next — the MVP
 
@@ -34,14 +39,17 @@ Roughly one PR each.
 8. ~~**Insert, delete, reorder**~~ — done
 9. ~~**Extract to component, and tabs**~~ — done
 10. ~~**Play**~~ — done
-11. **Gizmos** — *in view*
+11. ~~**Gizmos**~~ — done
+12. **Undo** — *in view*
 
-Steps 1-9 are done: load a scene, see its tree, edit props, add, delete and
-reorder nodes, extract a component and reuse it -- one that names no id, for
-now -- and export TSX that rebuilds to the same scene.
-[0014 page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) also counts
-gizmos in the MVP, so step 11 is what remains of it. Play came forward because
-the shell made it cheap.
+[0014 page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) draws the MVP
+at its steps 1-6 plus gizmos, and two pieces of those steps are left: undo,
+which step 5 wants from the start, and promote to prop, from step 6, which
+waits on Karl's call below. Everything else is done: load a scene, see its
+tree, edit props, add, delete and reorder nodes, extract a component and reuse
+it -- one that names no id, for now -- export TSX that rebuilds to the same
+scene, and see every frame in the scene pane, one that draws nothing included.
+Play came forward because the shell made it cheap.
 
 ## Further out
 
@@ -56,6 +64,10 @@ the shell made it cheap.
   tab to show that pendulum's frames moving as part of the rig; which instance
   a tab shows, when the scene has several, is open. Until then Play runs from
   the scene's own tab, and a component's tab draws it as authored.
+- One walk from state to pose. `FrameView`, the gizmos and
+  `Scene.getPosMatrixMap` each compose a frame's pose from the state map, and
+  agree because tests hold them to it. Reading the core's map everywhere,
+  composed with the view, would make the agreement structural.
 - Take an imported component's tag from the module lookup
   [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
   `Function.name`, which a production build minifies. Dev builds and the tests
@@ -142,3 +154,8 @@ the shell made it cheap.
   restarts it; an edit that does not build, or a visit to a component's tab,
   pauses the run and keeps it. A run that diverges stops and says so, and a
   stalled or hidden tab does not come back to a burst of catch-up steps.
+- **Gizmos** — in the scene pane every frame draws a small cross at its origin,
+  turned with its axes and the same size at any zoom, and a faint line back to
+  its parent's origin, the world's at the top. The editor draws them over the
+  scene from the same pose, so a frame that draws nothing can still be seen,
+  and none reaches the scene or the code written from it.
