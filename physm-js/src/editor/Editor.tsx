@@ -1,4 +1,5 @@
 import './Editor.css';
+import Gizmos from './Gizmos';
 import PropertiesPane from './PropertiesPane';
 import SceneView from './../react/SceneView';
 import buildScene from './../react/buildScene';
@@ -408,7 +409,7 @@ function useBuiltScene(
 
 /**
  * The focused component, drawn at its authored pose -- or, on the scene's own
- * tab, running.
+ * tab, running -- with every frame's origin marked over it.
  *
  * Play runs the whole scene, never a component on its own. Page 8 of
  * `docs/issues/0014` makes the simulation the module's, and what a component
@@ -440,15 +441,21 @@ function ScenePane({
   const xformMatrix = getViewXformMatrix([0, 0], VIEW_SCALE, size);
   const failure = 'error' in built ? built.error : simulation.error;
 
+  // One pose for the scene and its gizmos, so a gizmo is always where its frame
+  // is drawn.
+  const drawn =
+    'scene' in built
+      ? { scene: built.scene, stateMap: simulation.stateMap ?? built.initial }
+      : null;
+
   return (
     <section className="editor__scene" aria-label="Scene">
       <svg ref={svgRef}>
-        {'scene' in built ? (
-          <SceneView
-            scene={built.scene}
-            stateMap={simulation.stateMap ?? built.initial}
-            xformMatrix={xformMatrix}
-          />
+        {drawn ? (
+          <>
+            <SceneView {...drawn} xformMatrix={xformMatrix} />
+            <Gizmos {...drawn} xformMatrix={xformMatrix} />
+          </>
         ) : null}
       </svg>
       <div className="editor__playback">

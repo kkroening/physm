@@ -135,6 +135,29 @@
   height: 100%;
 }
 
+/* Every frame's origin, over the scene: slate on the scene's blue, with the
+   line back to the parent's origin fainter than the cross. The halo keeps a
+   gizmo readable over a solid shape, which is often where a frame sits. */
+.editor__gizmo {
+  filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);
+}
+
+.editor__gizmo-arm,
+.editor__gizmo-link {
+  stroke: #28506b;
+  stroke-linecap: round;
+}
+
+.editor__gizmo-arm {
+  stroke-width: 1.5;
+}
+
+.editor__gizmo-link {
+  stroke-width: 1;
+  stroke-opacity: 0.45;
+  stroke-dasharray: 2 3;
+}
+
 .editor__error {
   position: absolute;
   inset: auto 0.75rem 0.75rem;
@@ -430,11 +453,13 @@
   margin-top: 0.6rem;
 }
 
-/* Play, pause and reset, over the scene they run. */
+/* Play, pause and reset, over the scene they run -- and no wider than it, so a
+   hint wraps inside the pane rather than running over the tree. */
 .editor__playback {
   position: absolute;
   top: 0.6rem;
   right: 0.6rem;
+  max-width: calc(100% - 1.2rem);
   display: flex;
   align-items: center;
   gap: 0.3rem;
@@ -444,6 +469,7 @@
 .editor__playback .editor__hint {
   margin-right: 0.3rem;
   color: #4d6275;
+  text-align: right;
 }
 
 .editor__playback button {

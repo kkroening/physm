@@ -6,19 +6,20 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Gizmos.** In editor mode every frame draws an origin gizmo -- a small cross
-or dot at its own origin, and a faint line to its parent's -- so a frame that
-draws nothing still has something to see, and later something to click. They
-are not part of the scene and are never emitted
-([0014 page 7](docs/issues/0014/07-editing.md)). Gizmos are what remains of the
-MVP [page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) defines; picking
-and dragging come after it, and page 7 describes both.
+**Picking.** A click in the scene selects what it hit
+([0014 page 7](docs/issues/0014/07-editing.md)): decals hit-test their own
+geometry, which is already boxes, circles and line segments, and frames their
+gizmo. Overlapping hits resolve to the topmost, with repeated clicks cycling
+deeper. A click selects the nearest *authored* ancestor of what it hit, since
+that is the node a person can act on -- a frame inside a component's instance
+selects the instance. The new part is leading a built frame back to the
+document node that produced it.
 
-- gizmos first: they make the frame tree legible in the scene pane
-- then picking: decals hit-test their own geometry, frames their gizmo, and a
-  click selects the nearest authored ancestor
-- then dragging: a gizmo's drag writes `position` in the parent's frame
-- in that order, as page 10 has it
+- picking first: every node the tree can select, the scene can too
+- then dragging: a gizmo's drag writes `position` in the parent's frame, with
+  snapping to the grid and to other origins, and only an authored node drags
+- the tree stays the failsafe, so either can ship imperfect without blocking
+  anything
 
 ## Next — the MVP
 
@@ -34,14 +35,14 @@ Roughly one PR each.
 8. ~~**Insert, delete, reorder**~~ — done
 9. ~~**Extract to component, and tabs**~~ — done
 10. ~~**Play**~~ — done
-11. **Gizmos** — *in view*
+11. ~~**Gizmos**~~ — done
 
-Steps 1-9 are done: load a scene, see its tree, edit props, add, delete and
-reorder nodes, extract a component and reuse it -- one that names no id, for
-now -- and export TSX that rebuilds to the same scene.
-[0014 page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) also counts
-gizmos in the MVP, so step 11 is what remains of it. Play came forward because
-the shell made it cheap.
+The MVP [0014 page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) defines
+is done: load a scene, see its tree, edit props, add, delete and reorder nodes,
+extract a component and reuse it -- one that names no id, for now -- export TSX
+that rebuilds to the same scene, and see every frame in the scene pane, one
+that draws nothing included. Play came forward because the shell made it
+cheap; picking and dragging are the first steps past the MVP.
 
 ## Further out
 
@@ -142,3 +143,8 @@ the shell made it cheap.
   restarts it; an edit that does not build, or a visit to a component's tab,
   pauses the run and keeps it. A run that diverges stops and says so, and a
   stalled or hidden tab does not come back to a burst of catch-up steps.
+- **Gizmos** — in the scene pane every frame draws a small cross at its origin,
+  turned with its axes and the same size at any zoom, and a faint line back to
+  its parent's origin, the world's at the top. The editor draws them over the
+  scene from the same pose, so a frame that draws nothing can still be seen,
+  and none reaches the scene or the code written from it.

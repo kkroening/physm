@@ -794,6 +794,24 @@ describe('Editor, playing', () => {
     expect(bob(container)).toBe(moved);
   });
 
+  test('every frame shows a gizmo, and the gizmos move with the scene', () => {
+    const { container } = render(<Editor />);
+    const gizmos = (): string[] =>
+      [...container.querySelectorAll('.editor__scene .editor__gizmo')].map(
+        (gizmo) => gizmo.innerHTML,
+      );
+    const start = gizmos();
+
+    // The cart, and the pendulum's pivot: the tree's one frame, and the one
+    // inside the component it uses.
+    expect(start).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    run(300);
+
+    expect(gizmos()).not.toEqual(start);
+  });
+
   test('reset returns to the start', () => {
     const { container } = render(<Editor />);
     const start = bob(container);
