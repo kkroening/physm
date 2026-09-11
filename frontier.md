@@ -15,9 +15,7 @@ coincident is [0002](docs/issues/0002.md)'s pinned scene waiting to happen.
 Only an authored node drags, since there is nowhere to write the result
 otherwise.
 
-- first, gizmos that show which way +x points, since a drag writes along the
-  parent's axes and today's cross looks the same after a quarter turn
-- then the drag, writing `position` as it goes, one undo step per drag
+- the drag first, writing `position` as it goes, one undo step per drag
 - then snapping
 - the tree stays the failsafe, so dragging can ship imperfect without blocking
   anything
@@ -173,3 +171,7 @@ was built while gizmos were in review.
   returns to the tab the edit was made in, closes a tab whose component is
   gone, and puts back the selection from before the edit; redoing puts back the
   one it made. Only a structural step restarts the run.
+- **+x on every gizmo** — a gizmo's +x arm runs on as far again, so which way
+  a frame's x axis points can be read off the picture, where a plain cross
+  looks the same after a quarter turn. A drag writes along the parent's axes,
+  so this came first.

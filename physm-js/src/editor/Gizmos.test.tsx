@@ -178,4 +178,29 @@ describe('Gizmos', () => {
     // The slider does not turn, so its axes are the arm's, turned by 1.1.
     expectPointsClose(x!.direction, [Math.cos(1.1), -Math.sin(1.1)]);
   });
+
+  test('the +x arm runs on as far again, so a quarter turn shows', () => {
+    const turn = 0.5;
+    const scene = buildScene(
+      <RotationalFrame id="arm" initialState={[turn, 0]} />,
+    );
+    const container = draw(scene, scene.getInitialStateMap(), view(18));
+    const [x] = [
+      ...container.querySelectorAll('[data-frame-id="arm"] .editor__gizmo-arm'),
+    ];
+    const pointer = container.querySelector(
+      '[data-frame-id="arm"] .editor__gizmo-pointer',
+    )!;
+    const [, xEnd] = ends(x!);
+    const [pointerStart] = ends(pointer);
+
+    // It starts where the +x arm ends, and goes on the same way, half the
+    // cross's width again.
+    expectPointsClose(pointerStart, xEnd);
+    expectPointsClose(run(pointer).direction, [
+      Math.cos(turn),
+      -Math.sin(turn),
+    ]);
+    expect(run(pointer).length).toBeCloseTo(run(x!).length / 2, 9);
+  });
 });
