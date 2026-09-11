@@ -59,7 +59,8 @@ was built while gizmos were in review.
   named constant the rest refer to. Naming them is most of the problem.
 - Snapping to a box's corners and centre, and to the world's origin as a
   point. Neither is a target yet -- Karl's call -- though a frame at the top
-  reaches the origin as a crossing of the grid.
+  whose origin sits at its position reaches the origin as a crossing of the
+  grid: any rotational frame, and a track frame at a coordinate of zero.
 - What a drag does while the scene plays. The frame drifts from the pointer,
   since its own coordinate and its parents' keep moving: pause while a drag is
   held, refuse one during play, or keep the live nudge. Karl's call.

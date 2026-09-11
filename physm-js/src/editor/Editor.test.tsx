@@ -1626,6 +1626,47 @@ function parentAxes(container: HTMLElement): {
   });
 }
 
+/**
+ * Give every element a client size of 400 by 300, so the scene pane has a grid
+ * to draw and the world's origin sits at its middle; `restore` undoes it.
+ */
+function paneOf400By300(): { restore: () => void } {
+  const width = vi
+    .spyOn(Element.prototype, 'clientWidth', 'get')
+    .mockReturnValue(400);
+  const height = vi
+    .spyOn(Element.prototype, 'clientHeight', 'get')
+    .mockReturnValue(300);
+
+  return {
+    restore: () => {
+      width.mockRestore();
+      height.mockRestore();
+    },
+  };
+}
+
+/** A line's two ends under `root`, as `[x1, y1, x2, y2]`, to a millionth. */
+function endsOf(root: Element, selector: string): number[] {
+  const line = root.querySelector(selector)!;
+
+  return ['x1', 'y1', 'x2', 'y2'].map(
+    (name) => Math.round(Number(line.getAttribute(name)) * 1e6) / 1e6 || 0,
+  );
+}
+
+/** Where the lines through two pairs of ends cross. */
+function crossingOf(
+  [x1, y1, x2, y2]: readonly number[],
+  [x3, y3, x4, y4]: readonly number[],
+): number[] {
+  const across = (x1! - x2!) * (y3! - y4!) - (y1! - y2!) * (x3! - x4!);
+  const along =
+    ((x1! - x3!) * (y3! - y4!) - (y1! - y3!) * (x3! - x4!)) / across;
+
+  return [x1! + along * (x2! - x1!), y1! + along * (y2! - y1!)];
+}
+
 describe('Editor, dragging', () => {
   // As in picking: the cart's gizmo is at the pane's corner, and this is just
   // above it, clear of the pivot's.
@@ -2013,14 +2054,56 @@ describe('Editor, dragging', () => {
   });
 
   test("a nested frame snaps to its parent's grid, drawn while the drag lasts", () => {
-    // A pane of 400 by 300, so the grid has lines to draw, and the world's
-    // origin at its middle.
-    const width = vi
-      .spyOn(Element.prototype, 'clientWidth', 'get')
-      .mockReturnValue(400);
-    const height = vi
-      .spyOn(Element.prototype, 'clientHeight', 'get')
-      .mockReturnValue(300);
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(
+        <Editor
+          initialDocument={documentFrom(
+            <RotationalFrame id="arm" initialState={[Math.PI / 6, 0]}>
+              <TrackFrame id="tip" position={[2, 0]} initialState={[0.5, 0]} />
+            </RotationalFrame>,
+          )}
+        />,
+      );
+      const svg = container.querySelector('.editor__scene svg')!;
+
+      // The arm is turned 30 degrees, and the tip's coordinate slides its
+      // origin half a unit on from its position, 2.5 units along the arm:
+      // press there, and move a unit along the arm and two pixels across.
+      fireEvent.mouseDown(svg, { clientX: 239, clientY: 127 });
+      fireEvent.mouseMove(window, { clientX: 254, clientY: 116, buttons: 1 });
+
+      // While the drag lasts, the grid is whole units of the tip's position:
+      // its lines of x = 3 and y = 0 cross where the drag has taken the
+      // tip's origin, slide and all.
+      const [x, y] = crossingOf(
+        endsOf(svg, '.editor__grid [data-x="3"]'),
+        endsOf(svg, '.editor__grid [data-y="0"]'),
+      );
+      const [, , originX, originY] = endsOf(
+        svg,
+        '[data-frame-id="tip"] .editor__gizmo-link',
+      );
+
+      // To a hundred-thousandth: the ends are read to a millionth.
+      expect(x).toBeCloseTo(originX!, 5);
+      expect(y).toBeCloseTo(originY!, 5);
+
+      fireEvent.mouseUp(window, { clientX: 254, clientY: 116 });
+
+      // Whole numbers along the arm's axes -- and the world's grid again, its
+      // line of x = 0 straight up the pane's middle.
+      expect(code()).toContain('position={[3, 0]}');
+      expect(endsOf(svg, '.editor__grid [data-x="0"]')).toEqual([
+        200, 300, 200, 0,
+      ]);
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test("a drag's grid is drawn only in the tab the drag began in", () => {
+    const pane = paneOf400By300();
     try {
       const { container } = render(
         <Editor
@@ -2031,51 +2114,29 @@ describe('Editor, dragging', () => {
           )}
         />,
       );
+      fireEvent.click(rows()[0]!.firstElementChild!);
+      extract('Arm');
       const svg = container.querySelector('.editor__scene svg')!;
 
-      /** Which way a grid line runs, and whether it goes through the arm's origin. */
-      const lineOf = (
-        selector: string,
-      ): { run: readonly number[]; throughArm: boolean } => {
-        const line = svg.querySelector(selector)!;
-        const [x1, y1, x2, y2] = ['x1', 'y1', 'x2', 'y2'].map((name) =>
-          Number(line.getAttribute(name)),
-        );
-        const length = Math.hypot(x2! - x1!, y2! - y1!);
-        const [dx, dy] = [(x2! - x1!) / length, (y2! - y1!) / length];
-
-        return {
-          // One way round, whichever end the line starts at.
-          run: (dy < 0 ? [dx, dy] : [-dx, -dy]).map(
-            (value) => Math.round(value * 1e6) / 1e6 || 0,
-          ),
-          throughArm: Math.abs((200 - x1!) * dy - (150 - y1!) * dx) < 1e-6,
-        };
-      };
-
-      // The tip is two units along the arm, turned 30 degrees: press on it,
-      // and move a unit along the arm and two pixels across.
+      // In the arm's own tab: the tip, two units along the arm.
       fireEvent.mouseDown(svg, { clientX: 231, clientY: 132 });
       fireEvent.mouseMove(window, { clientX: 246, clientY: 121, buttons: 1 });
 
-      // The grid is the arm's while the drag lasts: its line of x = 0 runs
-      // along the arm's y, through the arm's origin.
-      expect(lineOf('[data-x="0"]')).toEqual({
-        run: [-0.5, -0.866025],
-        throughArm: true,
-      });
+      const [x1, , x2] = endsOf(svg, '.editor__grid [data-x="0"]');
+
+      expect(x1).not.toBeCloseTo(x2!, 6);
+
+      // However the focus comes to leave mid-drag, the scene's tab draws the
+      // world's grid, not the arm's.
+      fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+
+      expect(endsOf(svg, '.editor__grid [data-x="0"]')).toEqual([
+        200, 300, 200, 0,
+      ]);
 
       fireEvent.mouseUp(window, { clientX: 246, clientY: 121 });
-
-      // Whole numbers along the arm's axes -- and the world's grid again.
-      expect(code()).toContain('position={[3, 0]}');
-      expect(lineOf('[data-x="0"]')).toEqual({
-        run: [0, -1],
-        throughArm: true,
-      });
     } finally {
-      width.mockRestore();
-      height.mockRestore();
+      pane.restore();
     }
   });
 
@@ -2124,6 +2185,7 @@ describe('Editor, dragging', () => {
       vi.useRealTimers();
     }
   });
+
   test("in a run's pose there is no grid to snap to either", () => {
     vi.useFakeTimers({
       toFake: ['requestAnimationFrame', 'cancelAnimationFrame'],

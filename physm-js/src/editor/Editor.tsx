@@ -1095,6 +1095,11 @@ function ScenePane({
         )
       : undefined;
 
+  // The grid a drag snaps to, in the world's place -- in the tab it began in
+  // only, like the axes above.
+  const lattice =
+    dragging?.definition === focus && dragGrid ? dragGrid : xformMatrix;
+
   return (
     <section className="editor__scene" aria-label="Scene">
       <svg
@@ -1104,7 +1109,7 @@ function ScenePane({
         onMouseMove={hover}
         style={cursor ? { cursor } : undefined}
       >
-        <Grid lattice={dragGrid ?? xformMatrix} size={size} />
+        <Grid lattice={lattice} size={size} />
         {drawn ? (
           <>
             <SceneView {...drawn} xformMatrix={xformMatrix} />
