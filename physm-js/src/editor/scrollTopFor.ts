@@ -20,3 +20,20 @@ export default function scrollTopFor(
 
   return top < scrollTop ? top : Math.max(scrollTop, bottom - height);
 }
+
+/**
+ * Scroll `pane` to show `element` in it, by `scrollTopFor`'s rule. The pane's
+ * own scroll, measured, rather than `scrollIntoView`, which would scroll
+ * everything around the pane as well.
+ */
+export function scrollPaneTo(pane: HTMLElement, element: Element): void {
+  // Where the top of what the pane scrolls is on screen.
+  const offset = pane.getBoundingClientRect().top - pane.scrollTop;
+  const { top, bottom } = element.getBoundingClientRect();
+  pane.scrollTop = scrollTopFor(
+    pane.scrollTop,
+    pane.clientHeight,
+    top - offset,
+    bottom - offset,
+  );
+}

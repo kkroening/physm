@@ -17,7 +17,6 @@ import movedPosition, {
   positionGrid,
 } from './movedPosition';
 import placeGizmos from './placeGizmos';
-import scrollTopFor from './scrollTopFor';
 import snapPoints, { nearestSnap } from './snapPoints';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
@@ -36,7 +35,8 @@ import {
 } from './sceneDocument';
 import { historyOf, recorded, redone, undone } from './history';
 import { insertionPoint, newNode, refusalOf } from './insertion';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { scrollPaneTo } from './scrollTopFor';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
 import type Decal from './../Decal';
 import type { StateMap } from './../Frame';
@@ -199,6 +199,44 @@ function rowStarting(
   );
 }
 
+/** A node as find reads it: its tag, and each prop it states as `name=value`. */
+function findTextOf(node: DocNode): string {
+  return [
+    tagOf(node.type),
+    ...Object.entries(node.props)
+      .filter(([, value]) => value !== undefined)
+      .map(([name, value]) => `${name}=${JSON.stringify(value)}`),
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
+/**
+ * The paths of the nodes from `nodes` down whose find text holds `search`, in
+ * the order the tree draws them.
+ */
+function pathsMatching(
+  nodes: readonly DocNode[],
+  search: string,
+  parent: NodePath = [],
+): NodePath[] {
+  return nodes.flatMap((node, index) => {
+    const path = [...parent, index];
+
+    return [
+      ...(findTextOf(node).includes(search) ? [path] : []),
+      ...pathsMatching(node.children, search, path),
+    ];
+  });
+}
+
+/** The nodes find turns up for `query`, whatever its case: none for a blank one. */
+function pathsFound(nodes: readonly DocNode[], query: string): NodePath[] {
+  const search = query.trim().toLowerCase();
+
+  return search ? pathsMatching(nodes, search) : [];
+}
+
 /** Every row's key -- its path, joined -- in the order the tree draws them. */
 function rowKeys(nodes: readonly DocNode[], parent: NodePath = []): string[] {
   return nodes.flatMap((node, index) => {
@@ -214,6 +252,7 @@ function TreeRow({
   path,
   selected,
   tabbable,
+  matched,
   onFocusRow,
   ...actions
 }: TreeActions & {
@@ -224,6 +263,9 @@ function TreeRow({
 
   /** The one row Tab reaches, by its path joined: see `TreePane`. */
   tabbable: string;
+
+  /** The rows find has turned up, by their paths joined. */
+  matched: ReadonlySet<string>;
   onFocusRow: (key: string) => void;
 }): ReactElement {
   const summary = summaryOf(node);
@@ -297,6 +339,7 @@ function TreeRow({
       <div
         className="editor__row"
         data-kind={type.kind}
+        data-match={matched.has(key) ? '' : undefined}
         title={
           type.kind === 'defined'
             ? `Double-click to open ${type.name}`
@@ -324,6 +367,7 @@ function TreeRow({
               path={[...path, index]}
               selected={selected}
               tabbable={tabbable}
+              matched={matched}
               onFocusRow={onFocusRow}
               {...actions}
               key={rowKey(child, index)}
@@ -413,6 +457,17 @@ function TreePane({
   const [naming, setNaming] = useState<string | null>(null);
   const selectedKey = selectedPath ? selectedPath.join('.') : null;
 
+  // The pane scrolls to the selection when it changes -- by a find, say, or a
+  // click in the scene -- or it could be selected out of sight.
+  const paneRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const pane = paneRef.current;
+    const row = pane?.querySelector('[aria-selected="true"] > .editor__row');
+    if (pane && row) {
+      scrollPaneTo(pane, row);
+    }
+  }, [selectedKey]);
+
   if (naming !== null && naming !== selectedKey) {
     setNaming(null);
   }
@@ -476,6 +531,41 @@ function TreePane({
     selectedKey ??
     keys[0] ??
     '';
+
+  // What the find field holds, and the nodes it turns up, in the tree's order.
+  const [query, setQuery] = useState('');
+  const statusId = useId();
+  const found = pathsFound(body, query);
+  const matched = new Set(found.map((path) => path.join('.')));
+  const foundAt = found.findIndex((path) => path.join('.') === selectedKey);
+  const selectedPlace = selectedKey === null ? -1 : keys.indexOf(selectedKey);
+  const placeOf = (path: NodePath): number => keys.indexOf(path.join('.'));
+
+  /**
+   * The found node to select: the first from the selection on, or the next or
+   * the previous one -- round from the end to the start, and back.
+   */
+  const foundFrom = (
+    paths: readonly NodePath[],
+    step: 'here' | 'next' | 'previous',
+  ): NodePath | undefined => {
+    if (step === 'previous') {
+      const before = paths.filter((path) => placeOf(path) < selectedPlace);
+
+      return before[before.length - 1] ?? paths[paths.length - 1];
+    }
+
+    const from = step === 'here' ? selectedPlace : selectedPlace + 1;
+
+    return paths.find((path) => placeOf(path) >= from) ?? paths[0];
+  };
+  const findStatus = !query.trim()
+    ? ''
+    : found.length === 0
+      ? 'No match'
+      : foundAt === -1
+        ? `${found.length} found`
+        : `${foundAt + 1} of ${found.length}`;
   const index = selectedPath ? selectedPath[selectedPath.length - 1]! : null;
   const count = selectedPath
     ? siblingCount(doc, focus, selectedPath.slice(0, -1))
@@ -488,6 +578,7 @@ function TreePane({
 
   return (
     <section
+      ref={paneRef}
       className="editor__tree"
       aria-label="Tree"
       onClick={(event) => {
@@ -551,6 +642,50 @@ function TreePane({
           onCancel={() => setNaming(null)}
         />
       ) : null}
+      <div className="editor__find">
+        <input
+          type="search"
+          aria-label="Find a node"
+          aria-describedby={statusId}
+          placeholder="Find by tag, id or prop"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+
+            // The first from the selection on, so typing more keeps a
+            // selection that still matches.
+            const next = foundFrom(
+              pathsFound(body, event.target.value),
+              'here',
+            );
+            if (next) {
+              rowActions.onSelect(next);
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              const next = foundFrom(
+                found,
+                event.shiftKey ? 'previous' : 'next',
+              );
+              if (next) {
+                rowActions.onSelect(next);
+              }
+            } else if (event.key === 'Escape') {
+              // Cleared, and back to the tree, on the row Tab would reach.
+              event.preventDefault();
+              setQuery('');
+              paneRef.current
+                ?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]')
+                ?.focus();
+            }
+          }}
+        />
+        <span id={statusId} className="editor__find-status" role="status">
+          {findStatus}
+        </span>
+      </div>
       <ul
         role="tree"
         aria-label={focus}
@@ -598,6 +733,7 @@ function TreePane({
             path={[at]}
             selected={selectedPath ? selectedPath.join('.') : null}
             tabbable={tabbable}
+            matched={matched}
             onFocusRow={setFocused}
             {...rowActions}
             key={rowKey(node, at)}
@@ -1196,24 +1332,11 @@ function CodePane({
   const markRef = useRef<HTMLElement>(null);
 
   // Once a selection, not on every edit, which would pull the view away from
-  // what is being read. The pane's own scroll, measured, rather than
-  // `scrollIntoView`, which would scroll the editor around the pane as well.
+  // what is being read.
   useEffect(() => {
-    const pane = paneRef.current;
-    const mark = markRef.current;
-    if (!pane || !mark) {
-      return;
+    if (paneRef.current && markRef.current) {
+      scrollPaneTo(paneRef.current, markRef.current);
     }
-
-    // Where the top of what the pane scrolls is on screen.
-    const offset = pane.getBoundingClientRect().top - pane.scrollTop;
-    const { top, bottom } = mark.getBoundingClientRect();
-    pane.scrollTop = scrollTopFor(
-      pane.scrollTop,
-      pane.clientHeight,
-      top - offset,
-      bottom - offset,
-    );
   }, [selected]);
 
   return (

@@ -387,6 +387,26 @@
   outline-offset: 1px;
 }
 
+/* Find: a field over the tree, with what it turned up beside it. */
+.editor__find {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0.2rem 0 0.5rem;
+}
+
+.editor__find-status {
+  color: #4a6178;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A row find turned up: tinted, under the selection's own colour. */
+.editor__row[data-match] {
+  background-color: #f6e3a8;
+}
+
 [aria-selected='true'] > .editor__row,
 [aria-selected='true'] > .editor__row .editor__tag {
   background-color: #3d6fa8;
@@ -519,7 +539,8 @@
   margin: 0.2rem 0 0.5rem;
 }
 
-.editor__extract input {
+.editor__extract input,
+.editor__find input {
   flex: 1;
   width: 0;
   min-width: 6rem;
