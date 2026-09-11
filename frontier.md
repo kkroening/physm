@@ -6,12 +6,12 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**A grid, and snapping to it.** The pane draws no grid, so a position can
-only be read off the picture by eye, and a drag has nothing to snap to but
-other frames and decals. A faint grid at whole units, then its crossings as
-snap targets. Whose grid a nested frame snaps to is the question to settle
-first: the world's places its origin on a crossing but leaves its numbers
-ragged under a turned parent, and its parent's keeps them round.
+**Snapping to the grid.** A dragged frame's origin snaps to the grid's
+crossings as it does to any other point, a frame's origin or a decal's point
+first where both are in reach. Whose grid a nested frame snaps to is the
+question to settle first: the world's puts its origin on a crossing but
+leaves its numbers ragged under a moved or turned parent, and its parent's
+keeps them round -- drawn, then, while the drag lasts.
 
 ## Next — the MVP
 
@@ -221,3 +221,6 @@ was built while gizmos were in review.
   the frame's `position` is read along go through it, each named at its
   positive end: the world's for a frame at the top, and for one inside
   another its parent's, not its own.
+- **A grid** — the scene pane draws a faint line at every whole unit of the
+  world under the scene, and the world's own axes a shade darker, whether the
+  scene builds or not. Like the gizmos, it never reaches the code.

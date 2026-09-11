@@ -179,6 +179,24 @@
   height: 100%;
 }
 
+/* Every whole unit of the world, under the scene: faint enough to read a
+   position against without competing with the rig, and the world's own axes a
+   shade darker, so its origin can be found. */
+.editor__grid line {
+  stroke: #28506b;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+  pointer-events: none;
+}
+
+.editor__grid-line {
+  stroke-opacity: 0.08;
+}
+
+.editor__grid-axis {
+  stroke-opacity: 0.22;
+}
+
 /* Every frame's origin, over the scene: slate on the scene's blue, with the
    line back to the parent's origin fainter than the cross. The halo keeps a
    gizmo readable over a solid shape, which is often where a frame sits. */

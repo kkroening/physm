@@ -217,8 +217,11 @@ describe('Editor', () => {
     );
     fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
 
+    // Nothing but the grid, which is the editor's rather than the scene's.
     expect(screen.getByRole('alert')).toBeInTheDocument();
-    expect(svg.childElementCount).toBe(0);
+    expect(
+      [...svg.children].map((child) => child.getAttribute('class')),
+    ).toEqual(['editor__grid']);
   });
 
   test('a scene that does not build says why, and the editor stays up', () => {
@@ -232,6 +235,34 @@ describe('Editor', () => {
     expect(screen.getByRole('region', { name: 'Code' }).textContent).toContain(
       '<Weight mass={1} />',
     );
+  });
+
+  test('a grid is drawn under the scene, whether it builds or not', () => {
+    const { container, unmount } = render(<Editor />);
+
+    // First, so the scene draws over it -- and it is the editor's, not the
+    // scene's, so the code never mentions it.
+    expect(
+      container.querySelector('.editor__scene svg')!.firstElementChild,
+    ).toHaveClass('editor__grid');
+    expect(code()).not.toMatch(/grid/i);
+
+    unmount();
+    const failing = render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <TrackFrame id="a" />
+            <TrackFrame id="a" />
+          </>,
+        )}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(
+      failing.container.querySelector('.editor__scene svg')!.firstElementChild,
+    ).toHaveClass('editor__grid');
   });
 });
 
