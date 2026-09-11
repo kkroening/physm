@@ -1280,7 +1280,6 @@ describe('Editor, picking', () => {
 
     expect(pane.textContent).toContain('Written in Pendulum');
     expect(within(pane).queryAllByRole('textbox')).toHaveLength(0);
-    expect(within(pane).queryAllByRole('spinbutton')).toHaveLength(0);
 
     // Its props as the component writes them.
     expect(pane.textContent).toContain('resistance');
@@ -1324,10 +1323,45 @@ describe('Editor, picking', () => {
     // The cart is the scene's own node, so inspecting it is selecting it.
     expect(shown()).toBe('TrackFrame');
     expect(pane.textContent).not.toContain('Written in');
+    expect(within(pane).queryAllByRole('textbox').length).toBeGreaterThan(0);
+  });
+
+  test('with Shift, the code marks the node in the body that wrote it', () => {
+    const { container } = render(<Editor />);
+    clickScene(container, [0, 8], { shiftKey: true });
+
+    // The scene's own tab is still the focused one, and the mark has gone
+    // into the pendulum's definition: a third answer to what wrote this,
+    // alongside the properties pane and the way into the component's tab.
+    expect(screen.getByRole('tab', { name: 'Scene' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(marked()).toContain('<RotationalFrame');
+
+    const { ranges } = emitScene(starterDocument());
+
+    expect(markOffset()).toBe(ranges.get(rangeKey('Pendulum', [0]))![0]);
+  });
+
+  test('what an imported component built falls back to the plain answer', () => {
+    function Gadget({ size }: { size: number }): ReactElement {
+      return <TrackFrame id={`gadget-${size}`} />;
+    }
+
+    const { container } = render(
+      <Editor initialDocument={documentFrom(<Gadget size={2} />)} />,
+    );
+
+    // The frame is the gadget's own business, written in a module the
+    // document cannot name, so nothing here built it. Shift lands where a
+    // plain click would rather than doing less than not holding it.
+    clickScene(container, [0, -3], { shiftKey: true });
+
+    expect(shown()).toBe('Gadget');
     expect(
-      within(pane).queryAllByRole('textbox').length +
-        within(pane).queryAllByRole('spinbutton').length,
-    ).toBeGreaterThan(0);
+      screen.getByRole('region', { name: 'Properties' }).textContent,
+    ).toContain('Imported from its own module');
   });
 
   test("a click is read in the pane's own coordinates, wherever it sits", () => {

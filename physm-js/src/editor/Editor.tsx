@@ -1354,12 +1354,14 @@ function ScenePane({
       hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point).map(
         (hit): Picked | null => {
           const produced = built.authoredPathOf(hit);
-          if (event.shiftKey) {
-            const written = built.expandedOf(hit);
-
-            return written ? { selection: written, producer: produced } : null;
+          const written = event.shiftKey ? built.expandedOf(hit) : null;
+          if (written) {
+            return { selection: written, producer: produced };
           }
 
+          // Nothing wrote it that this document can name -- what an imported
+          // component built inside itself. Shift then lands where a plain
+          // click would, rather than doing less than not holding it.
           return produced
             ? {
                 selection: { definition: focus, path: produced },

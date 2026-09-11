@@ -361,7 +361,7 @@ function NodeProps({
 
     return (
       <>
-        <h2 className="editor__selected">{node.type.name}</h2>
+        <h2 className="editor__selected">{nodeName(node.type)}</h2>
         <p className="editor__hint">
           Defined in this scene. It takes no props.
         </p>
@@ -379,7 +379,7 @@ function NodeProps({
   if (node.type.kind === 'children') {
     return (
       <>
-        <h2 className="editor__selected">Children</h2>
+        <h2 className="editor__selected">{nodeName(node.type)}</h2>
         <p className="editor__hint">
           The children an instance of {selection.definition} is given go here:
           at the origin of the frame this sits in, at the top of the body with
@@ -393,7 +393,7 @@ function NodeProps({
   if (node.type.kind === 'imported') {
     return (
       <>
-        <h2 className="editor__selected">{node.type.name}</h2>
+        <h2 className="editor__selected">{nodeName(node.type)}</h2>
         <p className="editor__hint">
           Imported from its own module, which does not describe its props -- so
           they are shown here, but not edited.
@@ -419,7 +419,7 @@ function NodeProps({
 
   return (
     <>
-      <h2 className="editor__selected">{meta.name}</h2>
+      <h2 className="editor__selected">{nodeName(node.type)}</h2>
       <p className="editor__hint">{meta.description}</p>
       <div className="editor__fields">
         {Object.entries(meta.props).map(([name, spec]) => (
@@ -455,14 +455,6 @@ function selectedNode(
   }
 }
 
-/**
- * The selected node's props, edited in place.
- *
- * Every accepted keystroke is a new document, so the tree, scene and code
- * follow as it is typed. Which widget a prop gets comes from its component's
- * metadata -- a `length` refuses a negative, an `angle` is shown in degrees --
- * never from the value it happens to hold.
- */
 /**
  * A node another body wrote, reached by inspecting what it built in the scene.
  *
@@ -521,6 +513,15 @@ function ExpandedProps({
   );
 }
 
+/**
+ * The selected node: its props edited in place, or -- for a node another body
+ * wrote -- shown as that body writes them.
+ *
+ * Every accepted keystroke is a new document, so the tree, scene and code
+ * follow as it is typed. Which widget a prop gets comes from its component's
+ * metadata -- a `length` refuses a negative, an `angle` is shown in degrees --
+ * never from the value it happens to hold.
+ */
 export default function PropertiesPane({
   doc,
   focus,
