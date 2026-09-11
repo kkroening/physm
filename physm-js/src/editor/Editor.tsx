@@ -1,7 +1,7 @@
 import './Editor.css';
 import * as vec3 from './../Vec3';
 import Frame from './../Frame';
-import Gizmos from './Gizmos';
+import Gizmos, { ParentAxes } from './Gizmos';
 import PropertiesPane from './PropertiesPane';
 import SceneView from './../react/SceneView';
 import buildScene from './../react/buildScene';
@@ -747,7 +747,8 @@ function useBuiltScene(
  * when the focused body wrote that node, since otherwise there is nowhere to
  * write to. The pointer says which, before the press. Held within a few
  * pixels of another frame's origin, a line's end or a circle's centre, the
- * origin snaps to it exactly; Alt places it freely instead.
+ * origin snaps to it exactly; Alt places it freely instead. While it moves,
+ * its parent's axes -- the ones `position` is read along -- go through it.
  *
  * A scene that fails to build shows why instead of taking the editor down with
  * it: a half-made rig is the normal state of a document being edited, and the
@@ -833,6 +834,9 @@ function ScenePane({
 
   // What a drag under way has snapped to, marked on screen until it ends.
   const [snapMark, setSnapMark] = useState<ScreenPoint | null>(null);
+
+  // The node a drag under way moves, once it has moved.
+  const [dragging, setDragging] = useState<NodePath | null>(null);
 
   /** Where a mouse event lands, in the pane's own coordinates. */
   const pointOf = (event: {
@@ -944,6 +948,7 @@ function ScenePane({
       drag.current = null;
       setCursor('');
       setSnapMark(null);
+      setDragging(null);
     };
 
     const move = (moveEvent: globalThis.MouseEvent): void => {
@@ -973,6 +978,7 @@ function ScenePane({
       if (!current.moved) {
         current.moved = true;
         onPick(current.path);
+        setDragging(current.path);
       }
 
       // Where the origin goes with the pointer, and the point it snaps to
@@ -1043,6 +1049,16 @@ function ScenePane({
     onPick(paths[(selected + 1) % paths.length] ?? null);
   };
 
+  // The dragged frame's gizmo as the scene is drawn now -- where the drag has
+  // taken it, and in a run, where the run has.
+  const draggedPlacement =
+    dragging && 'scene' in built && drawn
+      ? placeGizmos(drawn.scene, drawn.stateMap, xformMatrix).find(
+          ({ frame }) =>
+            built.ownPathOf(frame)?.join('.') === dragging.join('.'),
+        )
+      : undefined;
+
   return (
     <section className="editor__scene" aria-label="Scene">
       <svg
@@ -1056,6 +1072,9 @@ function ScenePane({
           <>
             <SceneView {...drawn} xformMatrix={xformMatrix} />
             <Gizmos {...drawn} xformMatrix={xformMatrix} />
+            {draggedPlacement ? (
+              <ParentAxes placement={draggedPlacement} />
+            ) : null}
             {snapMark ? (
               <circle
                 className="editor__snap"

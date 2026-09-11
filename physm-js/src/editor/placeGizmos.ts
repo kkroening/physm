@@ -23,6 +23,9 @@ export interface GizmoPlacement {
   /** Which way the frame's own axes point on screen, as unit vectors. */
   readonly axes: readonly [ScreenPoint, ScreenPoint];
 
+  /** Which way its parent's axes point on screen: the ones its `position` is read along. */
+  readonly parentAxes: readonly [ScreenPoint, ScreenPoint];
+
   /** Where the +x pointer ends: along +x, twice as far out as the cross's arm. */
   readonly pointerEnd: ScreenPoint;
 }
@@ -71,6 +74,10 @@ function placeAll(
       parentOrigin: mat3.translationOf(parentXform),
       parentXform,
       axes: [x, screenAxis(xform, vec3.direction(0, 1))],
+      parentAxes: [
+        screenAxis(parentXform, vec3.direction(1, 0)),
+        screenAxis(parentXform, vec3.direction(0, 1)),
+      ],
       pointerEnd: [
         origin[0] + 2 * ARM_LENGTH * x[0],
         origin[1] + 2 * ARM_LENGTH * x[1],

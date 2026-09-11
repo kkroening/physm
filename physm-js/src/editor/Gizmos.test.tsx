@@ -1,10 +1,11 @@
 import Circle from './../react/Circle';
-import Gizmos from './Gizmos';
+import Gizmos, { ParentAxes } from './Gizmos';
 import RotationalFrame from './../react/RotationalFrame';
 import SceneView from './../react/SceneView';
 import TrackFrame from './../react/TrackFrame';
 import buildScene from './../react/buildScene';
 import getViewXformMatrix from './../getViewXformMatrix';
+import placeGizmos from './placeGizmos';
 import { render } from '@testing-library/react';
 import type CoreScene from './../Scene';
 import type { Mat3 } from './../Mat3';
@@ -203,5 +204,102 @@ describe('Gizmos', () => {
       -Math.sin(turn),
     ]);
     expect(run(pointer).length).toBeCloseTo(run(x!).length / 2, 9);
+  });
+});
+
+/** A frame's parent's axes, drawn as the scene pane draws them for a drag. */
+function drawParentAxes(
+  scene: CoreScene,
+  id: string,
+  xformMatrix: Mat3,
+): Element[] {
+  const placement = placeGizmos(
+    scene,
+    scene.getInitialStateMap(),
+    xformMatrix,
+  ).find(({ frame }) => frame.id === id)!;
+
+  return [
+    ...render(
+      <svg>
+        <ParentAxes placement={placement} />
+      </svg>,
+    ).container.querySelectorAll('.editor__parent-axis'),
+  ];
+}
+
+describe('ParentAxes', () => {
+  test("they go through the frame's origin, along its parent's axes, not its own", () => {
+    const scene = buildScene(
+      <RotationalFrame id="arm" position={[1, 2]} initialState={[0.3, 0]}>
+        <RotationalFrame id="tip" position={[3, 0]} initialState={[0.5, 0]} />
+      </RotationalFrame>,
+    );
+    const axes = drawParentAxes(scene, 'tip', view(18));
+
+    // The arm's origin is a unit right of the pane's middle and two up, and
+    // the tip three units along the arm, turned by 0.3.
+    const origin: Point = [218 + 54 * Math.cos(0.3), 114 - 54 * Math.sin(0.3)];
+
+    expect(axes).toHaveLength(2);
+    axes.forEach((axis) => {
+      const [[x1, y1], [x2, y2]] = ends(axis.querySelector('line')!);
+
+      expectPointsClose([(x1 + x2) / 2, (y1 + y2) / 2], origin);
+    });
+
+    // The arm's axes, at 0.3 -- where the tip's own are at 0.8.
+    const [x, y] = axes.map((axis) => run(axis.querySelector('line')!));
+
+    expectPointsClose(x!.direction, [Math.cos(0.3), -Math.sin(0.3)]);
+    expectPointsClose(y!.direction, [-Math.sin(0.3), -Math.cos(0.3)]);
+  });
+
+  test('each is named past its positive end', () => {
+    const scene = buildScene(
+      <RotationalFrame id="arm" initialState={[0.3, 0]} />,
+    );
+    const axes = drawParentAxes(scene, 'arm', view(18));
+
+    expect(axes.map((axis) => axis.querySelector('text')!.textContent)).toEqual(
+      ['x', 'y'],
+    );
+    axes.forEach((axis) => {
+      const line = axis.querySelector('line')!;
+      const text = axis.querySelector('text')!;
+      const [, end] = ends(line);
+      const { direction, length } = run(line);
+      const name: Point = [
+        Number(text.getAttribute('x')),
+        Number(text.getAttribute('y')),
+      ];
+      const past = [name[0] - end[0], name[1] - end[1]] as const;
+      const beyond = Math.hypot(...past);
+
+      // On along the axis from its positive end, clear of the line.
+      expect(beyond).toBeGreaterThan(0);
+      expect(beyond).toBeLessThan(length / 2);
+      expectPointsClose([past[0] / beyond, past[1] / beyond], direction);
+    });
+  });
+
+  test("a frame at the top has the world's, the same size at any zoom", () => {
+    const scene = buildScene(
+      <RotationalFrame id="hub" initialState={[0.5, 0]} />,
+    );
+    const [near, far] = [18, 40].map((scale) =>
+      drawParentAxes(scene, 'hub', view(scale)).map((axis) =>
+        run(axis.querySelector('line')!),
+      ),
+    );
+
+    // The world is y-up and the screen y-down; the hub's own turn is no part
+    // of it.
+    expectPointsClose(near![0]!.direction, [1, 0]);
+    expectPointsClose(near![1]!.direction, [0, -1]);
+
+    expect(near![0]!.length).toBeGreaterThan(0);
+    expect(far![0]!.length).toBeCloseTo(near![0]!.length, 9);
+    expect(far![1]!.length).toBeCloseTo(near![1]!.length, 9);
   });
 });

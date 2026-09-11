@@ -6,11 +6,12 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**The parent's axes, while dragging.** A drag writes `position` along the
-parent's axes, but the grabbed gizmo shows the node's own +x, which for a
-rotational node is turned by its angle. While a drag is under way, draw the
-parent's axes at the grabbed node, so what the drag writes can be read off the
-picture.
+**A grid, and snapping to it.** The pane draws no grid, so a position can
+only be read off the picture by eye, and a drag has nothing to snap to but
+other frames and decals. A faint grid at whole units, then its crossings as
+snap targets. Whose grid a nested frame snaps to is the question to settle
+first: the world's places its origin on a crossing but leaves its numbers
+ragged under a turned parent, and its parent's keeps them round.
 
 ## Next — the MVP
 
@@ -61,8 +62,6 @@ was built while gizmos were in review.
 - Constants for repeated values in the code: a value used across a rig -- a
   rod's length by its line, its circle and its weight -- written once, as a
   named constant the rest refer to. Naming them is most of the problem.
-- Snapping to a grid. The pane draws no grid yet, so there is nothing to see a
-  snap against: draw one first, then let a drag snap to it.
 - Snapping to a box's corners and centre, and to the world's origin. Neither
   is a target yet, though the origin is where a top-level frame most often
   goes back to. Karl's call.
@@ -218,3 +217,7 @@ was built while gizmos were in review.
   often is, is written as one: `-Math.PI / 2`, not `-1.5707963267948966`.
   Anything else is written as before, so the code rebuilds the very numbers
   it was written from.
+- **The parent's axes, while dragging** — while a drag is under way, the axes
+  the frame's `position` is read along go through it, each named at its
+  positive end: the world's for a frame at the top, and for one inside
+  another its parent's, not its own.

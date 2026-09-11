@@ -1560,6 +1560,42 @@ function dragScene(
   fireEvent.mouseUp(window, { clientX: endX, clientY: endY });
 }
 
+/**
+ * The parent's axes drawn for a drag under way: each one's middle, which way
+ * it runs, its name, and which way its name sits from the middle.
+ */
+function parentAxes(container: HTMLElement): {
+  middle: readonly number[];
+  direction: readonly number[];
+  name: string | null;
+  named: readonly number[];
+}[] {
+  const round = (value: number): number => Math.round(value * 1e6) / 1e6 || 0;
+
+  return [...container.querySelectorAll('.editor__parent-axis')].map((axis) => {
+    const at = (element: Element, name: string): number =>
+      Number(element.getAttribute(name));
+    const line = axis.querySelector('line')!;
+    const text = axis.querySelector('text')!;
+    const middle = [
+      (at(line, 'x1') + at(line, 'x2')) / 2,
+      (at(line, 'y1') + at(line, 'y2')) / 2,
+    ];
+    const unit = ([x, y]: readonly number[]): number[] =>
+      [x! / Math.hypot(x!, y!), y! / Math.hypot(x!, y!)].map(round);
+
+    return {
+      middle: middle.map(round),
+      direction: unit([
+        at(line, 'x2') - at(line, 'x1'),
+        at(line, 'y2') - at(line, 'y1'),
+      ]),
+      name: text.textContent,
+      named: unit([at(text, 'x') - middle[0]!, at(text, 'y') - middle[1]!]),
+    };
+  });
+}
+
 describe('Editor, dragging', () => {
   // As in picking: the cart's gizmo is at the pane's corner, and this is just
   // above it, clear of the pivot's.
@@ -1611,6 +1647,43 @@ describe('Editor, dragging', () => {
     dragScene(container, [0, -36], [0, -54]);
 
     expect(code()).toContain('position={[3, 0]}');
+  });
+
+  test("while a drag is under way, its parent's axes go through the frame", () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame id="arm" initialState={[Math.PI / 2, 0]}>
+            <RotationalFrame
+              id="tip"
+              position={[2, 0]}
+              initialState={[Math.PI / 2, 0]}
+            />
+          </RotationalFrame>,
+        )}
+      />,
+    );
+    fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
+      clientX: 0,
+      clientY: -36,
+    });
+
+    // Pressed, not yet moved: still a click, with no drag to show.
+    expect(parentAxes(container)).toEqual([]);
+
+    fireEvent.mouseMove(window, { clientX: 0, clientY: -54, buttons: 1 });
+
+    // Through the tip where the drag has taken it, along the arm's axes, each
+    // named at its positive end: x up the screen, y to the left. The tip's
+    // own, turned a quarter further, run left and down.
+    expect(parentAxes(container)).toEqual([
+      { middle: [0, -54], direction: [0, -1], name: 'x', named: [0, -1] },
+      { middle: [0, -54], direction: [-1, 0], name: 'y', named: [-1, 0] },
+    ]);
+
+    fireEvent.mouseUp(window, { clientX: 0, clientY: -54 });
+
+    expect(parentAxes(container)).toEqual([]);
   });
 
   test('a drag goes where the pointer goes, to the nearest hundredth', () => {
