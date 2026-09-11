@@ -6,19 +6,12 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Dragging.** Dragging a node's gizmo writes its `position` prop, in the
-*parent's* frame, which is what the prop means
-([0014 page 7](docs/issues/0014/07-editing.md#dragging-in-the-scene)).
-Snapping -- to the grid, to another frame's origin, to a decal's end --
-matters more here than in a drawing tool: a rig whose frames are *nearly*
-coincident is [0002](docs/issues/0002.md)'s pinned scene waiting to happen.
-Only an authored node drags, since there is nowhere to write the result
-otherwise.
-
-- the drag first, writing `position` as it goes, one undo step per drag
-- then snapping
-- the tree stays the failsafe, so dragging can ship imperfect without blocking
-  anything
+**Snapping.** A drag writes `position` to the nearest hundredth. Snapping -- to
+the grid, to another frame's origin, to a decal's end -- matters more here than
+in a drawing tool, because a rig whose frames are *nearly* coincident is
+[0002](docs/issues/0002.md)'s pinned scene waiting to happen
+([0014 page 7](docs/issues/0014/07-editing.md#dragging-in-the-scene)). The tree
+stays the failsafe, so snapping can ship imperfect without blocking anything.
 
 ## Next — the MVP
 
@@ -179,3 +172,8 @@ was built while gizmos were in review.
   looks the same after a quarter turn. These are the axes the frame's children
   are read along -- and a drag writes along a parent's -- so this came first.
   The pointer is clicked like the cross.
+- **Dragging** — a frame's gizmo drags, writing its `position` along its
+  parent's axes to the nearest hundredth, as one step to undo. The node is
+  selected as the drag begins, and the click that ends it picks nothing. Only a
+  frame the focused body wrote drags: over one inside an instance the pointer
+  says not allowed, and the frame stays put.

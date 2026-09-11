@@ -1,4 +1,6 @@
 import './Editor.css';
+import * as vec3 from './../Vec3';
+import Frame from './../Frame';
 import Gizmos from './Gizmos';
 import PropertiesPane from './PropertiesPane';
 import SceneView from './../react/SceneView';
@@ -7,6 +9,8 @@ import coreComponents from './../react/coreComponents';
 import emitScene from './emitScene';
 import getViewXformMatrix from './../getViewXformMatrix';
 import hitsAt from './hitsAt';
+import movedPosition from './movedPosition';
+import placeGizmos from './placeGizmos';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
 import useSimulation from './useSimulation';
@@ -20,13 +24,13 @@ import {
   nameRefusal,
   nodeAt,
   removeNode,
+  setProp,
 } from './sceneDocument';
 import { historyOf, recorded, redone, undone } from './history';
 import { insertionPoint, newNode, refusalOf } from './insertion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
 import type Decal from './../Decal';
-import type Frame from './../Frame';
 import type { StateMap } from './../Frame';
 import type {
   ComponentRef,
@@ -38,10 +42,12 @@ import type {
 } from './sceneDocument';
 import type { History, Step } from './history';
 import type { InsertionPoint } from './insertion';
+import type { Mat3 } from './../Mat3';
 import type { MouseEvent, ReactElement } from 'react';
 import type { ScreenPoint } from './placeGizmos';
 import type { Selection } from './PropertiesPane';
 import type { Trail } from './../react/buildScene';
+import type { Vec3 } from './../Vec3';
 
 /** Pixels per scene unit. */
 const VIEW_SCALE = 18;
@@ -405,6 +411,9 @@ interface Built {
 
   /** The focused body's node nearest to what built a frame or decal. */
   readonly authoredPathOf: (built: Frame | Decal) => NodePath | null;
+
+  /** The focused body's node that built a frame or decal itself, if one did. */
+  readonly ownPathOf: (built: Frame | Decal) => NodePath | null;
 }
 
 /**
@@ -422,6 +431,41 @@ function authoredPathOf(
     .filter((origin) => origin?.definition === focus);
 
   return authored[authored.length - 1]?.path ?? null;
+}
+
+/**
+ * The focused body's node that built something itself: the last element on its
+ * trail, if the focused body wrote it. `null` for what a component's instance
+ * built, which has no node here to write to.
+ */
+function ownPathOf(
+  trail: Trail,
+  origins: WeakMap<object, ElementOrigin>,
+  focus: string,
+): NodePath | null {
+  const origin = origins.get(trail[trail.length - 1] ?? {});
+
+  return origin?.definition === focus ? origin.path : null;
+}
+
+/** A drag under way in the scene pane. */
+interface Drag {
+  readonly path: NodePath;
+
+  /** The document and tab the drag began in, which every move rewrites. */
+  readonly doc: SceneDocument;
+  readonly definition: string;
+
+  /** The node's `position` when the drag began, and the transform it is read in. */
+  readonly position: Vec3;
+  readonly parentXform: Mat3;
+
+  /** Where the drag began, in the pane's own coordinates. */
+  readonly from: ScreenPoint;
+
+  /** Names the drag to the history, so all of it is one step. */
+  readonly field: string;
+  moved: boolean;
 }
 
 /**
@@ -467,6 +511,8 @@ function useBuiltScene(
         initial: scene.getInitialStateMap(),
         authoredPathOf: (built) =>
           authoredPathOf(trails.get(built) ?? [], origins, focus),
+        ownPathOf: (built) =>
+          ownPathOf(trails.get(built) ?? [], origins, focus),
       };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
@@ -487,6 +533,10 @@ function useBuiltScene(
  * so a click on a component's instance selects the instance. Clicking the same
  * place again goes one deeper, through everything under the click.
  *
+ * A frame's gizmo drags, writing the `position` of the node that built it --
+ * when the focused body wrote that node, since otherwise there is nowhere to
+ * write to. The pointer says which, before the press.
+ *
  * A scene that fails to build shows why instead of taking the editor down with
  * it: a half-made rig is the normal state of a document being edited, and the
  * message is the thing the person needs to see.
@@ -497,6 +547,7 @@ function ScenePane({
   structure,
   selectedPath,
   onPick,
+  onEdit,
 }: {
   doc: SceneDocument;
   focus: string;
@@ -508,6 +559,9 @@ function ScenePane({
 
   /** A click in the scene, as the node it selects: `null` when it hit nothing. */
   onPick: (path: NodePath | null) => void;
+
+  /** A document a drag has made, the field naming the drag, and the node it moves. */
+  onEdit: (next: SceneDocument, field: string, path: NodePath) => void;
 }): ReactElement {
   const svgRef = useRef<SVGSVGElement>(null);
   const size = useElementSize(svgRef);
@@ -531,16 +585,132 @@ function ScenePane({
   // selection, when the selection is among what it hits.
   const lastPick = useRef<ScreenPoint | null>(null);
 
+  // The drag under way, how many there have been, and whether the last one
+  // ended in a move -- whose release is a click that should pick nothing.
+  const drag = useRef<Drag | null>(null);
+  const drags = useRef(0);
+  const dragged = useRef(false);
+  const [cursor, setCursor] = useState('');
+
+  /** Where a mouse event lands, in the pane's own coordinates. */
+  const pointOf = (event: {
+    clientX: number;
+    clientY: number;
+  }): ScreenPoint => {
+    const bounds = svgRef.current!.getBoundingClientRect();
+
+    return [event.clientX - bounds.left, event.clientY - bounds.top];
+  };
+
+  /** The frames whose gizmos are under `point`, topmost first, and the node each can be dragged by. */
+  const gizmosAt = (
+    point: ScreenPoint,
+  ): { frame: Frame; path: NodePath | null }[] =>
+    'scene' in built && drawn
+      ? hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point)
+          .filter((hit): hit is Frame => hit instanceof Frame)
+          .map((frame) => ({ frame, path: built.ownPathOf(frame) }))
+      : [];
+
+  const hover = (event: MouseEvent<SVGSVGElement>): void => {
+    if (drag.current) {
+      return;
+    }
+
+    const gizmos = gizmosAt(pointOf(event));
+    setCursor(
+      gizmos.length === 0
+        ? ''
+        : gizmos.some(({ path }) => path)
+          ? 'grab'
+          : 'not-allowed',
+    );
+  };
+
+  const startDrag = (event: MouseEvent<SVGSVGElement>): void => {
+    dragged.current = false;
+    const from = pointOf(event);
+    const target = gizmosAt(from).find(({ path }) => path !== null);
+    const placement =
+      target && drawn
+        ? placeGizmos(drawn.scene, drawn.stateMap, xformMatrix).find(
+            ({ frame }) => frame === target.frame,
+          )
+        : undefined;
+    if (!target?.path || !placement) {
+      return;
+    }
+
+    event.preventDefault();
+    drags.current += 1;
+    drag.current = {
+      path: target.path,
+      doc,
+      definition: focus,
+      position: vec3.coerce(
+        (nodeAt(doc, focus, target.path).props.position ?? [0, 0]) as
+          number | readonly number[],
+      ),
+      parentXform: placement.parentXform,
+      from,
+      field: `drag ${drags.current}`,
+      moved: false,
+    };
+    setCursor('grabbing');
+
+    const move = (moveEvent: globalThis.MouseEvent): void => {
+      const current = drag.current;
+      if (!current) {
+        return;
+      }
+
+      if (!current.moved) {
+        current.moved = true;
+        onPick(current.path);
+      }
+
+      const position = movedPosition(
+        current.position,
+        current.parentXform,
+        current.from,
+        pointOf(moveEvent),
+      );
+      onEdit(
+        setProp(
+          current.doc,
+          current.definition,
+          current.path,
+          'position',
+          position,
+        ),
+        current.field,
+        current.path,
+      );
+    };
+
+    const end = (): void => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', end);
+      dragged.current = drag.current?.moved ?? false;
+      drag.current = null;
+      setCursor('');
+    };
+
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+  };
+
   const pick = (event: MouseEvent<SVGSVGElement>): void => {
+    if (dragged.current) {
+      dragged.current = false;
+      return;
+    }
+
     if (!('scene' in built) || !drawn) {
       return;
     }
 
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const point: ScreenPoint = [
-      event.clientX - bounds.left,
-      event.clientY - bounds.top,
-    ];
+    const point = pointOf(event);
     const paths = distinctPaths(
       hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point).map(
         built.authoredPathOf,
@@ -560,7 +730,13 @@ function ScenePane({
 
   return (
     <section className="editor__scene" aria-label="Scene">
-      <svg ref={svgRef} onClick={pick}>
+      <svg
+        ref={svgRef}
+        onClick={pick}
+        onMouseDown={startDrag}
+        onMouseMove={hover}
+        style={cursor ? { cursor } : undefined}
+      >
         {drawn ? (
           <>
             <SceneView {...drawn} xformMatrix={xformMatrix} />
@@ -946,6 +1122,9 @@ export default function Editor({
             selectedPath={selectedPath}
             onPick={(path) =>
               path ? actions.onSelect(path) : actions.onDeselect()
+            }
+            onEdit={(next, field, path) =>
+              record(next, { structural: false, field, after: path })
             }
           />
         </div>
