@@ -853,6 +853,9 @@ interface Built {
 
   /** The focused body's node that built a frame or decal itself, if one did. */
   readonly ownPathOf: (built: Frame | Decal) => NodePath | null;
+
+  /** The node that built something, in whatever body wrote it. */
+  readonly expandedOf: (built: Frame | Decal) => Selection | null;
 }
 
 /**
@@ -873,6 +876,18 @@ function authoredPathOf(
 }
 
 /**
+ * The node that built something, in whatever body wrote it: the last element
+ * on its trail. What a component's instance built is a node in the component,
+ * which is the node to inspect rather than the instance standing for it here.
+ */
+function expandedOf(
+  trail: Trail,
+  origins: WeakMap<object, ElementOrigin>,
+): Selection | null {
+  return origins.get(trail[trail.length - 1] ?? {}) ?? null;
+}
+
+/**
  * The focused body's node that built something itself: the last element on its
  * trail, if the focused body wrote it. `null` for what a component's instance
  * built, which has no node here to write to.
@@ -882,7 +897,7 @@ function ownPathOf(
   origins: WeakMap<object, ElementOrigin>,
   focus: string,
 ): NodePath | null {
-  const origin = origins.get(trail[trail.length - 1] ?? {});
+  const origin = expandedOf(trail, origins);
 
   return origin?.definition === focus ? origin.path : null;
 }
@@ -928,12 +943,33 @@ interface Drag {
  */
 const SAME_PLACE = 3;
 
-/** The nodes a click's hits lead back to, each once, in the order hit. */
-function distinctPaths(paths: readonly (NodePath | null)[]): NodePath[] {
-  const byKey = new Map<string, NodePath>();
-  for (const path of paths) {
-    if (path && !byKey.has(path.join('.'))) {
-      byKey.set(path.join('.'), path);
+/** What one of a click's hits leads to, and what to select it by. */
+interface Picked {
+  readonly selection: Selection;
+
+  /**
+   * The node in the focused body that produced it, for a selection another
+   * body holds; `null` when the focused body wrote it itself.
+   */
+  readonly producer: NodePath | null;
+}
+
+/** The selection's path, if the body it names is the one being shown. */
+function pathIn(selection: Selection | null, focus: string): NodePath | null {
+  return selection?.definition === focus ? selection.path : null;
+}
+
+/** A selection as one string, to tell two of them apart. */
+function keyOf(selection: Selection): string {
+  return `${selection.definition}/${selection.path.join('.')}`;
+}
+
+/** The nodes a click's hits lead to, each once, in the order hit. */
+function distinctPicks(picks: readonly (Picked | null)[]): Picked[] {
+  const byKey = new Map<string, Picked>();
+  for (const pick of picks) {
+    if (pick && !byKey.has(keyOf(pick.selection))) {
+      byKey.set(keyOf(pick.selection), pick);
     }
   }
 
@@ -967,6 +1003,7 @@ function useBuiltScene(
           authoredPathOf(trails.get(built) ?? [], origins, focus),
         ownPathOf: (built) =>
           ownPathOf(trails.get(built) ?? [], origins, focus),
+        expandedOf: (built) => expandedOf(trails.get(built) ?? [], origins),
       };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
@@ -1009,7 +1046,7 @@ function ScenePane({
   doc,
   focus,
   structure,
-  selectedPath,
+  selection,
   onPick,
   onEdit,
 }: {
@@ -1018,15 +1055,18 @@ function ScenePane({
   /** How many structural edits there have been -- see `useSimulation`. */
   structure: number;
 
-  /** The selected node, if the focused body holds it. */
-  selectedPath: NodePath | null;
+  /** What is selected, in whichever body holds it. */
+  selection: Selection | null;
 
-  /** A click in the scene, as the node it selects: `null` when it hit nothing. */
-  onPick: (path: NodePath | null) => void;
+  /** A click in the scene, as what it picked: `null` when it hit nothing. */
+  onPick: (picked: Picked | null) => void;
 
   /** A document a drag has made, the field naming the drag, and the node it moves. */
   onEdit: (next: SceneDocument, field: string, path: NodePath) => void;
 }): ReactElement {
+  // Only a node this tab wrote can be dragged or marked here; one an instance
+  // expanded is selected for inspection, and the pane draws nothing for it.
+  const selectedPath = pathIn(selection, focus);
   const svgRef = useRef<SVGSVGElement>(null);
   const size = useElementSize(svgRef);
   const built = useBuiltScene(doc, focus);
@@ -1238,7 +1278,10 @@ function ScenePane({
 
       if (!current.moved) {
         current.moved = true;
-        onPick(current.path);
+        onPick({
+          selection: { definition: current.definition, path: current.path },
+          producer: null,
+        });
         setDragging({ definition: current.definition, path: current.path });
         setDragGrid(current.grid);
       }
@@ -1302,21 +1345,42 @@ function ScenePane({
     }
 
     const point = pointOf(event);
-    const paths = distinctPaths(
+
+    // With Shift, the node that built each hit, wherever it is written -- the
+    // one to inspect. Without, the node here that stands for it, which is the
+    // instance for anything a component built, since that is what this tab can
+    // act on.
+    const candidates = distinctPicks(
       hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point).map(
-        built.authoredPathOf,
+        (hit): Picked | null => {
+          const produced = built.authoredPathOf(hit);
+          if (event.shiftKey) {
+            const written = built.expandedOf(hit);
+
+            return written ? { selection: written, producer: produced } : null;
+          }
+
+          return produced
+            ? {
+                selection: { definition: focus, path: produced },
+                producer: null,
+              }
+            : null;
+        },
       ),
     );
     const last = lastPick.current;
     const again =
       last !== null &&
       Math.hypot(point[0] - last[0], point[1] - last[1]) <= SAME_PLACE;
-    const selected =
-      again && selectedPath
-        ? paths.findIndex((path) => path.join('.') === selectedPath.join('.'))
+    const at =
+      again && selection
+        ? candidates.findIndex(
+            (pick) => keyOf(pick.selection) === keyOf(selection),
+          )
         : -1;
     lastPick.current = point;
-    onPick(paths[(selected + 1) % paths.length] ?? null);
+    onPick(candidates[(at + 1) % candidates.length] ?? null);
   };
 
   // The dragged frame's gizmo as the scene is drawn now -- where the drag has
@@ -1571,7 +1635,18 @@ export default function Editor({
   const doc = history.present.doc;
   const [tabs, setTabs] = useState<readonly string[]>(() => [doc.root]);
   const [focus, setFocus] = useState(doc.root);
-  const [selection, setSelection] = useState<Selection | null>(null);
+  // What is selected, and -- for a node an instance expanded -- the node here
+  // that produced it: the way back from what was inspected to what can be
+  // edited. One state, so a producer cannot outlive the selection it belongs
+  // to; only a click in the scene has one, and every other way of selecting
+  // is a pick that produced nothing.
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const selection = picked?.selection ?? null;
+  const producer = picked?.producer ?? null;
+
+  /** Select a node in the focused body, or nothing. */
+  const select = (next: Selection | null): void =>
+    setPicked(next ? { selection: next, producer: null } : null);
 
   // Counts structural edits, which restart a run where a prop edit carries it
   // over. Each call has to come with a new document: a count that moves with no
@@ -1579,7 +1654,7 @@ export default function Editor({
   // the run over.
   const [structure, setStructure] = useState(0);
   const restructure = (): void => setStructure((count) => count + 1);
-  const selectedPath = selection?.definition === focus ? selection.path : null;
+  const selectedPath = pathIn(selection, focus);
   const point = insertionPoint(doc, focus, selectedPath);
 
   /**
@@ -1613,14 +1688,14 @@ export default function Editor({
   const change = (next: SceneDocument, path: NodePath | null): void => {
     record(next, { structural: true, after: path });
     restructure();
-    setSelection(path ? { definition: focus, path } : null);
+    select(path ? { definition: focus, path } : null);
   };
 
   /** Focus a component, opening a tab for it if it has none. */
   const open = (name: string): void => {
     setTabs((open) => (open.includes(name) ? open : [...open, name]));
     setFocus(name);
-    setSelection(null);
+    select(null);
   };
 
   /** Close a tab; the scene's own tab stays. */
@@ -1629,7 +1704,7 @@ export default function Editor({
     setTabs(tabs.filter((tab) => tab !== name));
     if (focus === name) {
       setFocus(tabs[at - 1] ?? doc.root);
-      setSelection(null);
+      select(null);
     }
   };
 
@@ -1653,7 +1728,7 @@ export default function Editor({
       return kept.includes(to) ? kept : [...kept, to];
     });
     setFocus(to);
-    setSelection(path ? { definition: to, path } : null);
+    select(path ? { definition: to, path } : null);
     if (edit.structural) {
       restructure();
     }
@@ -1708,8 +1783,8 @@ export default function Editor({
   }, []);
 
   const actions: TreeActions = {
-    onSelect: (path) => setSelection({ definition: focus, path }),
-    onDeselect: () => setSelection(null),
+    onSelect: (path) => select({ definition: focus, path }),
+    onDeselect: () => select(null),
     onOpen: open,
     // Nothing is selected afterwards: the node is gone, and jumping to a
     // neighbour would move the selection somewhere nobody asked for.
@@ -1761,7 +1836,7 @@ export default function Editor({
                 aria-selected={name === focus}
                 onClick={() => {
                   setFocus(name);
-                  setSelection(null);
+                  select(null);
                 }}
               >
                 {name}
@@ -1816,10 +1891,8 @@ export default function Editor({
             doc={doc}
             focus={focus}
             structure={structure}
-            selectedPath={selectedPath}
-            onPick={(path) =>
-              path ? actions.onSelect(path) : actions.onDeselect()
-            }
+            selection={selection}
+            onPick={setPicked}
             onEdit={(next, field, path) =>
               record(next, { structural: false, field, after: path })
             }
@@ -1840,8 +1913,11 @@ export default function Editor({
       </div>
       <PropertiesPane
         doc={doc}
+        focus={focus}
         selection={selection}
+        producer={producer}
         onChange={(next, field) => record(next, { structural: false, field })}
+        onProduce={(path) => select({ definition: focus, path })}
         onOpen={open}
       />
     </div>

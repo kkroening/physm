@@ -3,6 +3,7 @@ import {
   definitionOf,
   insertNode,
   nodeAt,
+  nodeName,
   placeholderPath,
 } from './sceneDocument';
 import type {
@@ -192,15 +193,6 @@ function endsOutside(doc: SceneDocument, name: string): string[] {
     .filter((end) => !own.has(end));
 }
 
-/** A node's name, as the refusals say it. */
-function nameOf(ref: ComponentRef): string {
-  return ref.kind === 'core'
-    ? ref.component.meta.name
-    : ref.kind === 'children'
-      ? 'Children'
-      : ref.name;
-}
-
 /**
  * Why a node of `ref`'s kind cannot sit where `point` is, by its slot alone,
  * or `null` when it can. Everything but a building block goes where a frame
@@ -211,7 +203,7 @@ function slotRefusal(ref: ComponentRef, point: InsertionPoint): string | null {
 
   return point.holder === null || canContain(point.holder, slot)
     ? null
-    : `${nameOf(ref)} has to go inside a frame.`;
+    : `${nodeName(ref)} has to go inside a frame.`;
 }
 
 /**
@@ -291,7 +283,7 @@ export function refusalOf(
 
   return slotRefusal(ref, point) === null
     ? null
-    : `${nameOf(ref)} has to go inside a frame. Select one to add it there.`;
+    : `${nodeName(ref)} has to go inside a frame. Select one to add it there.`;
 }
 
 /**
@@ -328,7 +320,7 @@ function placeRefusal(
       if (slotRefusal(child.type, point)) {
         return (
           `An instance of ${definition} in ${name} holds a ` +
-          `${nameOf(child.type)}, which could not stay where its children ` +
+          `${nodeName(child.type)}, which could not stay where its children ` +
           'would go.'
         );
       }
@@ -406,7 +398,7 @@ export function indentRefusal(
 
   return index === 0
     ? 'There is nothing above it to move it into.'
-    : `A ${nameOf(nodeAt(doc, definition, [...path.slice(0, -1), index - 1]).type)} above it takes no children.`;
+    : `A ${nodeName(nodeAt(doc, definition, [...path.slice(0, -1), index - 1]).type)} above it takes no children.`;
 }
 
 /**
