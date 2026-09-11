@@ -2,6 +2,7 @@ import './Editor.css';
 import * as vec3 from './../Vec3';
 import Frame from './../Frame';
 import Gizmos from './Gizmos';
+import Grid from './Grid';
 import ParentAxes from './ParentAxes';
 import PropertiesPane from './PropertiesPane';
 import SceneView from './../react/SceneView';
@@ -740,6 +741,8 @@ function useBuiltScene(
  * would do with no world around it is a question it leaves open. So a
  * component's tab draws it as authored, and the scene's run waits for its tab.
  *
+ * Under the scene, a faint grid marks every whole unit of the world.
+ *
  * A click selects what it hit, as the node in the focused body nearest to it --
  * so a click on a component's instance selects the instance. Clicking the same
  * place again goes one deeper, through everything under the click.
@@ -1070,6 +1073,7 @@ function ScenePane({
         onMouseMove={hover}
         style={cursor ? { cursor } : undefined}
       >
+        <Grid xformMatrix={xformMatrix} size={size} />
         {drawn ? (
           <>
             <SceneView {...drawn} xformMatrix={xformMatrix} />
