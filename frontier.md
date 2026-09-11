@@ -31,8 +31,8 @@ Roughly one PR each.
 6. **Editor shell** — tab bar, code, tree, scene, properties, library; read-only
 7. **Selection and prop editing**
 8. **Insert, delete, reorder** from the library
-9. **Extract to component, and tabs** — anchor ids are scene-wide and
-   duplicates are refused, so extraction has to deal with an id it captures:
+9. **Extract to component, and tabs** — ids, a frame's or an anchor's, are
+   scene-wide and a repeat is refused, so extraction has to deal with an id it captures:
    refuse the subtree, promote the id to a prop, or scope ids per instance
 10. **Play**
 11. **Gizmos**
@@ -83,5 +83,6 @@ the same scene. Play is cheap once the shell exists and may come forward.
   missing one is a compile error, `coreComponents` lists the nine, and
   `canContain` says where each may go. Every default is checked by building
   with the prop omitted and with it stated.
-- **Unique frame ids** — the core `Scene` refuses two frames sharing an id,
-  rather than letting its toposort keep one and drop the other's coordinate.
+- **Unique frame ids** — the core `Scene` refuses a frame the tree reaches
+  twice, and two frames sharing an id, rather than posing one under the wrong
+  parent or letting the toposort drop the other's coordinate.

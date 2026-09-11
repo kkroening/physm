@@ -110,6 +110,37 @@ export interface StabilizationOptions {
   maxIterations?: number;
 }
 
+/**
+ * Refuse a frame the tree reaches twice, and two frames sharing an id.
+ *
+ * Both break what every other part of `Scene` assumes: a frame has one place
+ * in the tree, and is found by its id -- by a state map, a constraint, the
+ * controls. Two frames with one id would be one frame to all of those, and the
+ * toposort keeps whichever it meets first. One frame in two places is posed
+ * under one of them and drawn in both. Refusing every revisit also ends the
+ * walk on a cycle, before it recurses.
+ */
+function refuseRepeatedFrames(
+  frames: readonly Frame[],
+  seen: Map<FrameId, Frame> = new Map(),
+): void {
+  for (const frame of frames) {
+    const earlier = seen.get(frame.id);
+    if (earlier) {
+      throw new Error(
+        earlier === frame
+          ? `The frame '${frame.id}' appears twice in the scene. A frame has ` +
+              'one place in the tree.'
+          : `Two frames share the id '${frame.id}'. A frame is found by its ` +
+              'id, so each one needs its own.',
+      );
+    }
+
+    seen.set(frame.id, frame);
+    refuseRepeatedFrames(frame.frames, seen);
+  }
+}
+
 export default class Scene {
   readonly decals: Decal[];
   readonly frames: Frame[];
@@ -138,27 +169,7 @@ export default class Scene {
     this.constraints = [];
     this.gravity = gravity;
 
-    // Two frames with one id would be one frame to everything that finds a
-    // frame by id -- a state map, a constraint, the controls -- and the
-    // toposort keeps whichever it meets first, so the other would lose its
-    // coordinate without a word. The same frame reached twice is a different
-    // mistake, refused below with its own message.
-    const byId = new Map<FrameId, Frame>();
-    const visit = (frame: Frame): void => {
-      const seen = byId.get(frame.id);
-      if (seen && seen !== frame) {
-        throw new Error(
-          `Two frames share the id '${frame.id}'. A frame is found by its id, ` +
-            'so each one needs its own.',
-        );
-      }
-
-      if (!seen) {
-        byId.set(frame.id, frame);
-        frame.frames.forEach(visit);
-      }
-    };
-    this.frames.forEach(visit);
+    refuseRepeatedFrames(this.frames);
 
     const getFrameChildren = (frame: Frame): Frame[] => frame.frames;
     const getFrameId = (frame: Frame): FrameId => frame.id;
@@ -175,9 +186,6 @@ export default class Scene {
       getNodeParents: getFrameChildren,
       getNodeKey: getFrameId,
     });
-    if ([...frameIdParentsMap.values()].some((parents) => parents.size > 1)) {
-      throw new Error('Frames should only have one parent'); // TODO: use AssertionError?
-    }
     this.frameIdParentMap = new Map(
       [...frameIdParentsMap].map(
         ([frameId, parents]): [FrameId, FrameId | null] => [
