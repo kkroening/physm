@@ -44,8 +44,10 @@ const PI_DENOMINATORS = [1, 2, 3, 4, 6, 8, 12];
  * `-1.5707963267948966` -- or `null` for a number that is not one exactly.
  *
  * Exactly: the expression has to evaluate to the very number, so the code
- * rebuilds what it was written from. `k * Math.PI / d` evaluates left to
- * right, as `(k * Math.PI) / d`, and that is what is compared. And only within
+ * rebuilds what it was written from. It is compared as `(k * Math.PI) / d`,
+ * and written so, since `k * (Math.PI / d)` is another double for some
+ * fractions. Nor is it always in lowest terms: 495° is the double
+ * `(33 * Math.PI) / 12`, which `(11 * Math.PI) / 4` is not. And only within
  * two turns either way: a large enough number lands on some multiple of π by
  * chance -- nearly any past 1e15 does -- and is no angle.
  */
@@ -54,8 +56,13 @@ function piLiteral(value: number): string | null {
     const k = Math.round((value * d) / Math.PI);
     if (k !== 0 && Math.abs(k) <= 4 * d && (k * Math.PI) / d === value) {
       const times = Math.abs(k) === 1 ? '' : `${Math.abs(k)} * `;
+      const multiple = `${k < 0 ? '-' : ''}${times}Math.PI`;
 
-      return `${k < 0 ? '-' : ''}${times}Math.PI${d === 1 ? '' : ` / ${d}`}`;
+      return d === 1
+        ? multiple
+        : times
+          ? `(${multiple}) / ${d}`
+          : `${multiple} / ${d}`;
     }
   }
 
