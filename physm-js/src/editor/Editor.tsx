@@ -35,7 +35,15 @@ import {
   setProp,
 } from './sceneDocument';
 import { historyOf, recorded, redone, undone } from './history';
-import { insertionPoint, newNode, refusalOf } from './insertion';
+import {
+  indentPoint,
+  indentRefusal,
+  insertionPoint,
+  newNode,
+  outdentPoint,
+  outdentRefusal,
+  refusalOf,
+} from './insertion';
 import { scrollPaneTo } from './scrollTopFor';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
@@ -111,6 +119,10 @@ interface TreeActions {
   readonly onOpen: (name: string) => void;
   readonly onDelete: (path: NodePath) => void;
   readonly onMove: (path: NodePath, by: -1 | 1) => void;
+
+  /** Move a node into the one above it, or out of its parent. */
+  readonly onIndent: (path: NodePath) => void;
+  readonly onOutdent: (path: NodePath) => void;
 }
 
 /**
@@ -350,6 +362,17 @@ function TreeRow({
         ) {
           event.preventDefault();
           actions.onMove(path, event.key === 'ArrowUp' ? -1 : 1);
+        } else if (
+          event.altKey &&
+          event.shiftKey &&
+          (event.key === 'ArrowRight' || event.key === 'ArrowLeft')
+        ) {
+          event.preventDefault();
+          if (event.key === 'ArrowRight') {
+            actions.onIndent(path);
+          } else {
+            actions.onOutdent(path);
+          }
         } else if (plainKey(event) && NAVIGATION.has(event.key)) {
           event.preventDefault();
           rowAfter(event.currentTarget, event.key)?.focus();
@@ -511,8 +534,33 @@ function TreePane({
   const deleteRefusal = selectedPath
     ? deletionRefusal(doc, focus, selectedPath)
     : null;
+  const indentTitle = selectedPath
+    ? indentRefusal(doc, focus, selectedPath)
+    : null;
+  const outdentTitle = selectedPath
+    ? outdentRefusal(doc, focus, selectedPath)
+    : null;
+  // A move to another list makes a new row, so the focus the keys had goes
+  // with the old one: it follows the node to where it went. Only from the
+  // keys -- the toolbar's buttons keep the focus a run of clicks needs.
+  const [moved, setMoved] = useState(0);
+  useEffect(() => {
+    if (moved) {
+      listRef.current
+        ?.querySelector<HTMLElement>('[aria-selected="true"]')
+        ?.focus();
+    }
+  }, [moved]);
   const rowActions: TreeActions = {
     ...actions,
+    onIndent: (path) => {
+      setMoved((count) => count + 1);
+      actions.onIndent(path);
+    },
+    onOutdent: (path) => {
+      setMoved((count) => count + 1);
+      actions.onOutdent(path);
+    },
     onSelect: (path) => {
       setNaming(null);
       actions.onSelect(path);
@@ -626,6 +674,24 @@ function TreePane({
             onClick={onSelected((path) => actions.onMove(path, 1))}
           >
             ↓
+          </button>
+          <button
+            type="button"
+            aria-label="Move into the node above"
+            title={indentTitle ?? 'Move into the node above (Alt+Shift+→)'}
+            disabled={!selectedPath || indentTitle !== null}
+            onClick={onSelected(actions.onIndent)}
+          >
+            →
+          </button>
+          <button
+            type="button"
+            aria-label="Move out of its parent"
+            title={outdentTitle ?? 'Move out of its parent (Alt+Shift+←)'}
+            disabled={!selectedPath || outdentTitle !== null}
+            onClick={onSelected(actions.onOutdent)}
+          >
+            ←
           </button>
           <button
             type="button"
@@ -1643,6 +1709,24 @@ export default function Editor({
       const index = path[path.length - 1]! + by;
       if (index >= 0 && index < siblingCount(doc, focus, parent)) {
         change(moveNode(doc, focus, path, parent, index), [...parent, index]);
+      }
+    },
+    onIndent: (path) => {
+      const point = indentPoint(doc, focus, path);
+      if (point && !indentRefusal(doc, focus, path)) {
+        change(moveNode(doc, focus, path, point.parent, point.index), [
+          ...point.parent,
+          point.index,
+        ]);
+      }
+    },
+    onOutdent: (path) => {
+      const point = outdentPoint(doc, focus, path);
+      if (point && !outdentRefusal(doc, focus, path)) {
+        change(moveNode(doc, focus, path, point.parent, point.index), [
+          ...point.parent,
+          point.index,
+        ]);
       }
     },
   };

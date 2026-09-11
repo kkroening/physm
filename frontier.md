@@ -6,12 +6,12 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Moving a node into another.** The tree moves a node only among its
-siblings, so putting an existing node inside a frame -- a component's place
-for children into a `FixedFrame`, a frame under another -- means deleting it
-and adding it again, props and all. Dragging a row onto another would move it
-inside, held to the same rules as adding there, and a row dropped between two
-would go among them.
+**Inspect an expanded node.** A click in the scene selects the node in the
+focused body nearest to what it hit, so what a component's instance built can
+only be looked at by opening the component.
+[0014 page 7](docs/issues/0014/07-editing.md) has a modifier on the click
+select the expanded node itself, and the properties pane show its props
+read-only, with a way to select what produced it.
 
 ## Next — the MVP
 
@@ -80,12 +80,9 @@ was built while gizmos were in review.
   sets a count -- page 8's `segmentCount` -- changes the structure but arrives
   as a prop edit, which carries the run over; whether it resets instead, and
   how the editor tells, is part of the same call.
-- Inspect an expanded node. A click in the scene selects the node in the
-  focused body nearest to what it hit, so what a component's instance built
-  can only be looked at by opening the component.
-  [0014 page 7](docs/issues/0014/07-editing.md) has a modifier on the click
-  select the expanded node itself, and the properties pane show its props
-  read-only, with a way to select what produced it.
+- Drag a row onto another to move it inside, or between two to move it
+  among them. The keys and the toolbar move a node in and out a level at a
+  time; a drag would move it anywhere in one gesture, held to the same rules.
 - The focused component's definition marked in the code on a change of tab,
   as [0014 page 3](docs/issues/0014/03-focus.md#what-is-global-and-what-belongs-to-a-tab)
   has it. A tab change clears the selection, so after one nothing is marked
@@ -253,3 +250,9 @@ was built while gizmos were in review.
   instance of a component that keeps one; or beside the node. The starter's
   pendulum keeps its place in a `FixedFrame` at its bob, so adding a pendulum
   to its instance makes a double pendulum.
+- **Moving a node into another** — Alt+Shift+Right moves the selected node
+  into the node above it, after its last child, and Alt+Shift+Left moves it
+  out of its parent, just after it. Plain Alt with an arrow stays the
+  browser's. The tree's toolbar has both, and says why when it cannot. Each
+  is held to the rules of adding there, keeps the focus on the row, and is
+  one step to undo.

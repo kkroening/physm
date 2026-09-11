@@ -267,17 +267,115 @@ export function refusalOf(
     }
   }
 
+  return slotRefusal(ref, point) === null
+    ? null
+    : `${nameOf(ref)} has to go inside a frame. Select one to add it there.`;
+}
+
+/** A node's name, as the refusals say it. */
+function nameOf(ref: ComponentRef): string {
+  return ref.kind === 'core'
+    ? ref.component.meta.name
+    : ref.kind === 'children'
+      ? 'Children'
+      : ref.name;
+}
+
+/**
+ * Why a node of `ref`'s kind cannot sit where `point` is, by its slot alone,
+ * or `null` when it can. Everything but a building block goes where a frame
+ * can.
+ */
+function slotRefusal(ref: ComponentRef, point: InsertionPoint): string | null {
   const slot = ref.kind === 'core' ? ref.component.meta.slot : 'frame';
-  const name =
-    ref.kind === 'core'
-      ? ref.component.meta.name
-      : ref.kind === 'children'
-        ? 'Children'
-        : ref.name;
 
   return point.holder === null || canContain(point.holder, slot)
     ? null
-    : `${name} has to go inside a frame. Select one to add it there.`;
+    : `${nameOf(ref)} has to go inside a frame.`;
+}
+
+/**
+ * Where moving the node at `path` into the node above it puts it: after that
+ * node's last child. `null` for the first of its siblings, or when the node
+ * above takes no children.
+ */
+export function indentPoint(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+): InsertionPoint | null {
+  const index = path[path.length - 1]!;
+  if (index === 0) {
+    return null;
+  }
+
+  const above = [...path.slice(0, -1), index - 1];
+  const node = nodeAt(doc, definition, above);
+  const holder = holderOf(doc, node);
+
+  return holder ? { parent: above, index: node.children.length, holder } : null;
+}
+
+/**
+ * Where moving the node at `path` out of its parent puts it: just after the
+ * parent, among its siblings. `null` at the top of the body.
+ */
+export function outdentPoint(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+): InsertionPoint | null {
+  if (path.length < 2) {
+    return null;
+  }
+
+  const parent = path.slice(0, -1);
+  const grandparent = parent.slice(0, -1);
+
+  return {
+    parent: grandparent,
+    index: parent[parent.length - 1]! + 1,
+    holder: grandparent.length
+      ? holderOf(doc, nodeAt(doc, definition, grandparent))
+      : 'root',
+  };
+}
+
+/**
+ * Why the node at `path` cannot move into the node above it, or `null` when
+ * it can -- held to the rules of adding it there.
+ */
+export function indentRefusal(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+): string | null {
+  const point = indentPoint(doc, definition, path);
+  if (point) {
+    return slotRefusal(nodeAt(doc, definition, path).type, point);
+  }
+
+  const index = path[path.length - 1]!;
+
+  return index === 0
+    ? 'There is nothing above it to move it into.'
+    : `A ${nameOf(nodeAt(doc, definition, [...path.slice(0, -1), index - 1]).type)} above it takes no children.`;
+}
+
+/**
+ * Why the node at `path` cannot move out of its parent, or `null` when it
+ * can -- held to the rules of adding it there.
+ */
+export function outdentRefusal(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+): string | null {
+  const point = outdentPoint(doc, definition, path);
+
+  return point
+    ? slotRefusal(nodeAt(doc, definition, path).type, point)
+    : 'It is at the top of the body already.';
 }
 
 /**

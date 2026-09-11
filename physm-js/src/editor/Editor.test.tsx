@@ -3070,3 +3070,111 @@ describe('Editor, children on a fixed frame', () => {
     expect(Math.min(...starts)).toBeLessThan(1e-6);
   });
 });
+
+describe('Editor, moving a node into another', () => {
+  /** A cart holding a box, and an arm beside it. */
+  const doc = (): SceneDocument =>
+    documentFrom(
+      <>
+        <TrackFrame id="cart">
+          <Box width={2} height={1} />
+        </TrackFrame>
+        <RotationalFrame id="arm" />
+      </>,
+    );
+
+  test('Alt+Shift+Right moves a node into the one above, and Left back out', () => {
+    render(<Editor initialDocument={doc()} />);
+    const arm = (): HTMLElement =>
+      screen.getByRole('treeitem', { name: 'RotationalFrame id="arm"' });
+    act(() => arm().focus());
+    fireEvent.click(arm().firstElementChild!);
+    pressKey('Enter');
+    fireEvent.keyDown(arm(), {
+      key: 'ArrowRight',
+      altKey: true,
+      shiftKey: true,
+    });
+
+    // Inside the cart, after the box -- and still selected, with the focus.
+    expect(code()).toMatch(
+      /<TrackFrame id="cart">\s*<Box width=\{2\} \/>\s*<RotationalFrame id="arm" \/>\s*<\/TrackFrame>/,
+    );
+    expect(shown()).toBe('RotationalFrame');
+    expect(document.activeElement).toBe(arm());
+
+    fireEvent.keyDown(arm(), {
+      key: 'ArrowLeft',
+      altKey: true,
+      shiftKey: true,
+    });
+
+    expect(code()).toMatch(/<\/TrackFrame>\s*<RotationalFrame id="arm" \/>/);
+
+    // One step each, to undo.
+    fireEvent.click(undoButton());
+
+    expect(code()).toMatch(/<RotationalFrame id="arm" \/>\s*<\/TrackFrame>/);
+  });
+
+  test('the toolbar moves too, and says why it cannot', () => {
+    render(<Editor initialDocument={doc()} />);
+    const into = (): HTMLElement =>
+      screen.getByRole('button', { name: 'Move into the node above' });
+    const out = (): HTMLElement =>
+      screen.getByRole('button', { name: 'Move out of its parent' });
+
+    // Nothing selected, nothing to move.
+    expect(into()).toBeDisabled();
+    expect(out()).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole('treeitem', { name: 'TrackFrame id="cart"' })
+        .firstElementChild!,
+    );
+
+    expect(into()).toBeDisabled();
+    expect(into()).toHaveAttribute(
+      'title',
+      'There is nothing above it to move it into.',
+    );
+    expect(out()).toBeDisabled();
+    expect(out()).toHaveAttribute(
+      'title',
+      'It is at the top of the body already.',
+    );
+
+    fireEvent.click(
+      screen.getByRole('treeitem', { name: 'RotationalFrame id="arm"' })
+        .firstElementChild!,
+    );
+    fireEvent.click(into());
+
+    expect(code()).toMatch(/<RotationalFrame id="arm" \/>\s*<\/TrackFrame>/);
+
+    fireEvent.click(out());
+
+    expect(code()).toMatch(/<\/TrackFrame>\s*<RotationalFrame id="arm" \/>/);
+  });
+
+  test('a move the rules refuse does nothing, from the keyboard either', () => {
+    render(<Editor />);
+    const weight = screen.getByRole('treeitem', { name: 'Weight mass=50' });
+    fireEvent.click(weight.firstElementChild!);
+    const before = code();
+
+    // Out of the cart would put a weight at the top of the scene.
+    const out = screen.getByRole('button', { name: 'Move out of its parent' });
+
+    expect(out).toBeDisabled();
+    expect(out).toHaveAttribute('title', 'Weight has to go inside a frame.');
+
+    fireEvent.keyDown(weight, {
+      key: 'ArrowLeft',
+      altKey: true,
+      shiftKey: true,
+    });
+
+    expect(code()).toBe(before);
+  });
+});
