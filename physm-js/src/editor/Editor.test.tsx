@@ -128,6 +128,97 @@ describe('Editor', () => {
     }
   });
 
+  test('while an edit does not build, the last scene that built stays, dimmed', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <RotationalFrame id="pole">
+              <Circle position={[4, 0]} radius={0.5} />
+              <Weight mass={10} position={[4, 0]} />
+            </RotationalFrame>
+            <TrackFrame id="cart">
+              <Weight mass={50} />
+            </TrackFrame>
+          </>,
+        )}
+      />,
+    );
+    const id = (): HTMLElement =>
+      within(select('TrackFrame')).getByLabelText('Id');
+
+    // Two frames named `pole` do not build.
+    fireEvent.change(id(), { target: { value: 'pole' } });
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(
+      container.querySelector('.editor__scene .editor__stale circle'),
+    ).not.toBeNull();
+
+    // Only the scene: no gizmo, which would make it look grabbable.
+    expect(container.querySelector('.editor__gizmo')).toBeNull();
+
+    fireEvent.change(id(), { target: { value: 'pole2' } });
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(container.querySelector('.editor__stale')).toBeNull();
+    expect(container.querySelector('.editor__scene circle')).not.toBeNull();
+  });
+
+  test('the kept scene goes with its component, not to a later one of the name', () => {
+    const { container } = render(<Editor />);
+    const tree = (): HTMLElement => screen.getByRole('tree', { name: 'Scene' });
+    const add = (name: string): void => {
+      fireEvent.click(
+        within(screen.getByRole('region', { name: 'Library' })).getByRole(
+          'button',
+          { name },
+        ),
+      );
+    };
+
+    // A frame holding a constraint with no ends: the scene stops building.
+    add('TrackFrame');
+    add('Coincidence');
+
+    // The box alone builds, as `Foo`, and is drawn in its tab...
+    select('Box');
+    extract('Foo');
+
+    // ...and undone, `Foo` is gone. A failing subtree then takes the name.
+    fireEvent.click(undoButton());
+    fireEvent.click(within(tree()).getAllByText('TrackFrame')[1]!);
+    extract('Foo');
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(container.querySelector('.editor__stale')).toBeNull();
+  });
+
+  test("under an error, another tab's last scene is not shown", () => {
+    const { container } = render(<Editor />);
+    const svg = container.querySelector('.editor__scene svg')!;
+
+    // A constraint with no ends does not build.
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'Library' })).getByRole(
+        'button',
+        { name: 'Coincidence' },
+      ),
+    );
+
+    expect(svg.querySelector('.editor__stale')).not.toBeNull();
+
+    // The pendulum's tab builds, so it is the last scene drawn; back on the
+    // scene's tab, it is not the one to show.
+    fireEvent.doubleClick(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText('Pendulum'),
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(svg.childElementCount).toBe(0);
+  });
+
   test('a scene that does not build says why, and the editor stays up', () => {
     // A weight at the root has nowhere to go -- a half-made rig like this is
     // the normal state of a document being edited.
@@ -950,6 +1041,11 @@ describe('Editor, playing', () => {
     fireEvent.change(id(), { target: { value: 'pole' } });
 
     expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    // Under the error, the kept scene is where the run paused, and Reset --
+    // which would move a run nobody can see -- waits for a scene that builds.
+    expect(bob(container)).toBe(moved);
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
 
     fireEvent.change(id(), { target: { value: 'pole2' } });
 

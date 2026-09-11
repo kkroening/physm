@@ -6,11 +6,10 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**The last scene that built, under a build error.** With every keystroke a
-new document, an edit can pass through states that do not build -- retyping a
-position under a stated length, say -- and the scene pane goes blank, hiding
-what the edit is doing to the rig. Keep the last scene that built drawn,
-dimmed, under the error, and let a change of focus clear it.
+**Type-ahead in the tree.** A typed letter moves the focus to the next row
+whose name starts with it, as the ARIA tree pattern recommends for a tree of
+more than a handful of rows. The starter's five rows need none, but a rig of a
+few dozen nodes is a long walk with the arrows.
 
 ## Next — the MVP
 
@@ -40,9 +39,11 @@ was built while gizmos were in review.
 
 ## Further out
 
-- Type-ahead in the tree: a typed letter moves to the next row whose name
-  starts with it, as the ARIA tree pattern recommends for a long tree. The
-  starter's five rows need none; a rig of a few dozen would.
+- Draw a pose that does not build. Retyping a position under a stated length
+  fails at nearly every keystroke, so the kept scene shows the pose from
+  before the edit, not what the edit is doing. Drawing the failing pose, with
+  the violation marked rather than refused, would lean on
+  `allowInitialViolation` -- Karl's call.
 - Watch the running scene from a component's tab. Page 8 wants a `Pendulum`
   tab to show that pendulum's frames moving as part of the rig; which instance
   a tab shows, when the scene has several, is open. Until then Play runs from
@@ -192,3 +193,8 @@ was built while gizmos were in review.
   a ring on what it snaps to; Alt places it freely. Nothing that moves with
   the dragged frame is a target, and it snaps only in the pose the code
   builds: in a run's pose a drag is free.
+- **The last scene that built, under a build error** — while an edit passes
+  through a state that does not build, the scene pane keeps the last scene
+  that built drawn, dimmed, under the error, so it does not go blank on what
+  the edit is doing to the rig. It stays until a scene builds, in its tab or
+  another, or its component goes.
