@@ -118,7 +118,12 @@ describe('hitsAt', () => {
 
     // The cross reaches six pixels, and a click three more.
     expectHits(hits(scene, at(-2.2, -3)), [pivot]);
-    expectHits(hits(scene, at(-1.9, -3)), []);
+    expectHits(hits(scene, at(-4.1, -3)), []);
+
+    // Along +x, the pointer reaches twelve.
+    expectHits(hits(scene, at(-1.9, -3)), [pivot]);
+    expectHits(hits(scene, at(-1.6, -3)), [pivot]);
+    expectHits(hits(scene, at(-1.4, -3)), []);
   });
 
   test('hits come topmost first: gizmos over shapes, and later over earlier', () => {

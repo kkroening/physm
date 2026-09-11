@@ -65,6 +65,9 @@ was built while gizmos were in review.
   `Scene.getPosMatrixMap` each compose a frame's pose from the state map, and
   agree because tests hold them to it. Reading the core's map everywhere,
   composed with the view, would make the agreement structural.
+- While a drag is under way, show the parent's axes at the grabbed node. A
+  drag writes `position` along them, but the grabbed gizmo shows the node's
+  own +x, which for a rotational node is turned by its angle.
 - Take an imported component's tag from the module lookup
   [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
   `Function.name`, which a production build minifies. Dev builds and the tests
@@ -173,5 +176,6 @@ was built while gizmos were in review.
   one it made. Only a structural step restarts the run.
 - **+x on every gizmo** — a gizmo's +x arm runs on as far again, so which way
   a frame's x axis points can be read off the picture, where a plain cross
-  looks the same after a quarter turn. A drag writes along the parent's axes,
-  so this came first.
+  looks the same after a quarter turn. These are the axes the frame's children
+  are read along -- and a drag writes along a parent's -- so this came first.
+  The pointer is clicked like the cross.

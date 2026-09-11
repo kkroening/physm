@@ -135,7 +135,7 @@ function drawnUnder(
  *
  * Decals are hit on their own geometry -- boxes, circles and line segments, as
  * `DecalView` draws them, with a few pixels' reach -- and frames on their
- * gizmo, which the editor draws over everything. Screen space throughout,
+ * gizmo, the cross and its +x pointer, which the editor draws over everything. Screen space throughout,
  * because a gizmo is a fixed size on screen and a shape's reach should be too.
  */
 export default function hitsAt(
@@ -146,7 +146,10 @@ export default function hitsAt(
 ): (Frame | Decal)[] {
   const frames = placeGizmos(scene, stateMap, xformMatrix)
     .filter(
-      (placement) => distance(point, placement.origin) <= ARM_LENGTH + REACH,
+      (placement) =>
+        distance(point, placement.origin) <= ARM_LENGTH + REACH ||
+        distanceToSegment(point, placement.origin, placement.pointerEnd) <=
+          REACH,
     )
     .map((placement) => placement.frame);
   const decals = [

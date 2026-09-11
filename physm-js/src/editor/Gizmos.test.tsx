@@ -181,8 +181,9 @@ describe('Gizmos', () => {
 
   test('the +x arm runs on as far again, so a quarter turn shows', () => {
     const turn = 0.5;
+    // Away from its parent's origin, so a pointer drawn from there would miss.
     const scene = buildScene(
-      <RotationalFrame id="arm" initialState={[turn, 0]} />,
+      <RotationalFrame id="arm" position={[1, 2]} initialState={[turn, 0]} />,
     );
     const container = draw(scene, scene.getInitialStateMap(), view(18));
     const [x] = [
