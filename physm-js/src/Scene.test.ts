@@ -147,6 +147,55 @@ describe('Scene queries', () => {
 });
 
 describe('Scene class', () => {
+  test('a frame has one place in the tree, and an id of its own', () => {
+    // Built fresh for each shape, so no frame carries over between them.
+    const x = (): RotationalFrame => new RotationalFrame({ id: 'x' });
+    const reachedTwice: Record<string, () => Frame[]> = {
+      'twice at the root': () => {
+        const frame = x();
+        return [frame, frame];
+      },
+      'at the root and under a parent': () => {
+        const frame = x();
+        return [frame, new TrackFrame({ id: 'p', frames: [frame] })];
+      },
+      'twice under one parent': () => {
+        const frame = x();
+        return [new TrackFrame({ id: 'p', frames: [frame, frame] })];
+      },
+      'under two parents': () => {
+        const frame = x();
+        return [
+          new TrackFrame({ id: 'p', frames: [frame] }),
+          new TrackFrame({ id: 'q', frames: [frame] }),
+        ];
+      },
+    };
+    for (const [shape, frames] of Object.entries(reachedTwice)) {
+      expect(() => new Scene({ frames: frames() }), shape).toThrow(
+        /The frame 'x' appears twice/,
+      );
+    }
+
+    const a = (): RotationalFrame => new RotationalFrame({ id: 'a' });
+    const sharingAnId: Record<string, () => Frame[]> = {
+      'at the root': () => [a(), a()],
+      // The shape that used to be posed under `p` while drawn at the origin.
+      'at the root and in another branch': () => [
+        a(),
+        new TrackFrame({ id: 'p', position: [10, 0], frames: [a()] }),
+      ],
+      'as siblings under one parent': () => [
+        new TrackFrame({ id: 'p', frames: [a(), a()] }),
+      ],
+    };
+    for (const [shape, frames] of Object.entries(sharingAnId)) {
+      expect(() => new Scene({ frames: frames() }), shape).toThrow(
+        /Two frames share the id 'a'/,
+      );
+    }
+  });
+
   test('constructor with default arguments', () => {
     const scene = new Scene();
     expect(scene.decals).toEqual([]);

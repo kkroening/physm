@@ -437,6 +437,18 @@ describe('buildScene', () => {
     ).toThrow(/takes what goes inside a <Scene>/);
   });
 
+  test('refuses two frames sharing an id, as the mounted binding does', () => {
+    // The core scene refuses it, so both routes do.
+    expect(() =>
+      buildScene(
+        <>
+          <RotationalFrame id="x" />
+          <RotationalFrame id="x" />
+        </>,
+      ),
+    ).toThrow(/Two frames share the id 'x'/);
+  });
+
   test('refuses a DOM element, naming it', () => {
     expect(() =>
       buildScene(
