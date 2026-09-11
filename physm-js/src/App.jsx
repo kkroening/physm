@@ -7,10 +7,10 @@ import { CART_FRAME_ID } from './CartAndRope';
 import RsSolver from './RsSolver';
 import Scene from './react/Scene';
 import getViewXformMatrix from './getViewXformMatrix';
+import useElementSize from './useElementSize';
 import { required } from './utils';
 import { useEffect } from 'react';
 import { useRef } from 'react';
-import { useLayoutEffect } from 'react';
 import { useState } from 'react';
 import { InvalidStateMapError } from './Solver';
 
@@ -272,57 +272,6 @@ function simulate(
     }
   }
   return solver.getStateMap();
-}
-
-/**
- * Track an element's rendered size.
- *
- * The plot is `width: 100%; height: 100%` of a flex item, so its size is the
- * window's, not a constant -- and the view transform has to centre on it. A
- * `ResizeObserver` rather than a `resize` listener because the element also
- * changes size when the surrounding layout does, with no window event to hear.
- *
- * `useLayoutEffect`, not `useEffect`, and the first measurement is taken
- * synchronously rather than waited for. An effect runs *after* the browser
- * paints, so an observer started there cannot report until the second frame --
- * which would make the first painted frame a view centred on `(0, 0)`, the
- * element's own corner, with half the scene clipped away. A layout effect runs
- * before paint and its `setSize` is flushed before paint, so that frame never
- * reaches the screen.
- *
- * No guard on a null ref: `useMouse` and `useTouch` take this same ref and
- * dereference it bare, so an unmounted element already fails loudly here. A
- * guard would turn "not mounted yet" into a permanent zero -- the effect runs
- * once, since a ref's identity never changes -- which renders as a corner-
- * centred view rather than as an error.
- */
-function useElementSize(ref) {
-  const [size, setSize] = useState([0, 0]);
-
-  useLayoutEffect(() => {
-    const element = ref.current;
-    const update = (width, height) =>
-      setSize((current) =>
-        // The *same array* when nothing moved, not an equal one: React skips a
-        // re-render only on `Object.is`, so returning a fresh pair here would
-        // re-render the whole scene on every observer delivery.
-        width === current[0] && height === current[1]
-          ? current
-          : [width, height],
-      );
-
-    update(element.clientWidth, element.clientHeight);
-
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      update(width, height);
-    });
-    observer.observe(element);
-
-    return () => observer.disconnect();
-  }, [ref]);
-
-  return size;
 }
 
 function createSolver(

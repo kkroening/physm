@@ -6,18 +6,17 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Editor shell.** One document, shown five ways and read-only: the tab bar,
-code pane and library are global, and the tree, scene and properties panes
-follow the focused tab.
+**Selection and prop editing.** A tree row selects its node, and the
+properties pane edits its props, with the widget each prop gets chosen by its
+metadata rather than by the value it holds.
 
-- the scene is built from the document with `buildScene` and drawn at its
-  authored pose; a rig that fails to build, or has no consistent start, shows
-  why in the pane rather than taking the editor down
-- the code pane holds the whole module `emitScene` writes
-- the library lists the building blocks by category, and the document's own
-  components
-- a starter document with a component it defines, so every kind of node is
-  present
+- every accepted keystroke is a new document, so the scene and code follow as
+  it is typed
+- a length refuses a negative; an angle, and a rotational frame's state, are
+  shown in degrees
+- emptying a field returns the prop to its default, and a required prop
+  refuses to be emptied
+- a half-typed number survives while its field has focus
 
 ## Next — the MVP
 
@@ -28,8 +27,8 @@ Roughly one PR each.
 3. ~~**Core metadata**~~ — done
 4. ~~**Document model**~~ — done
 5. ~~**Codegen**~~ — done
-6. **Editor shell** — *in view*
-7. **Selection and prop editing**
+6. ~~**Editor shell**~~ — done
+7. **Selection and prop editing** — *in view*
 8. **Insert, delete, reorder** from the library
 9. **Extract to component, and tabs** — ids, a frame's or an anchor's, are
    scene-wide and a repeat is refused, so extraction has to deal with an id it captures:
@@ -43,6 +42,10 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Further out
 
+- Keep the last scene that built drawn, dimmed, under a build error, reset on
+  a change of focus. With every keystroke a new document, an edit can pass
+  through states that do not build -- retyping a position under a stated
+  length, say -- and a blank pane hides what the edit is doing to the rig.
 - Take an imported component's tag from the module lookup
   [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
   `Function.name`, which a production build minifies. Dev builds and the tests
@@ -101,3 +104,8 @@ the same scene. Play is cheap once the shell exists and may come forward.
   defaults omitted, a cycle or a prop that is not plain data refused, and each
   node's place in the source recorded. Held to the document by compiling the
   output and rebuilding it.
+- **Editor shell** — one document shown five ways at `#editor`, read-only: the
+  tab bar, code pane and library global, and the tree, scene and properties
+  following the focused tab. A rig that fails to build, or has no consistent
+  starting state, says why in the scene pane rather than taking the editor
+  down.
