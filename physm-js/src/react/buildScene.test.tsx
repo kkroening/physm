@@ -217,4 +217,17 @@ describe('buildScene', () => {
       ),
     ).toThrow(/share the id 'tip'/);
   });
+
+  test('refuses a name meaning both an anchor and a frame, as the mounted binding does', () => {
+    expect(() =>
+      buildScene(
+        <>
+          <RotationalFrame id="post" />
+          <RotationalFrame id="arm">
+            <Anchor id="post" />
+          </RotationalFrame>
+        </>,
+      ),
+    ).toThrow(/'post' names both an <Anchor> and a frame/);
+  });
 });

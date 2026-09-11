@@ -24,9 +24,6 @@ to draw a circle lives in the renderer rather than on `CircleDecal`.
 
 ```jsx
 function Rig() {
-  const leftTip = useRef(null);
-  const rightTip = useRef(null);
-
   return (
     <Scene gravity={10}>
       <TrackFrame id="cart" resistance={5}>
@@ -34,14 +31,14 @@ function Rig() {
         <Weight mass={250} />
 
         <RopeChain segments={5}>
-          <Anchor ref={leftTip} position={[1.4, 0]} />
+          <Anchor id="left-tip" position={[1.4, 0]} />
         </RopeChain>
         <RopeChain segments={5} mirror>
-          <Anchor ref={rightTip} position={[1.4, 0]} />
+          <Anchor id="right-tip" position={[1.4, 0]} />
         </RopeChain>
       </TrackFrame>
 
-      <Coincidence frame1={leftTip} frame2={rightTip} />
+      <Coincidence frame1="left-tip" frame2="right-tip" />
     </Scene>
   );
 }
@@ -54,6 +51,13 @@ then an ordinary React component — `RopeChain` built from `RopeSegment`s —
 rather than a loop that appends to an array. Assembly takes two renders, because
 a `Frame` takes its children as constructor arguments, so `Scene` reports the
 built scene through `onSceneChange` rather than returning it.
+
+[`buildScene`](src/react/buildScene.ts) builds the same scene from what goes
+inside `<Scene>` without rendering anything: `buildScene(<Rig />, { gravity })`
+walks the element tree, calls each composite with its props, and returns the
+`Scene` synchronously. It cannot resolve an `<Anchor>` named by ref — a ref is
+filled in by an effect, and the walk runs none — so name anchors by `id`, as
+above.
 
 [`CartAndRope.tsx`](src/CartAndRope.tsx) is the demo rig, written this way —
 worth reading as the worked example. `App.jsx` and `index.jsx` are the app shell

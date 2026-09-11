@@ -6,29 +6,25 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Tree-walk builder.** `buildScene(element)`: walk an element tree, call each
-composite with its props, and build a `Scene` from the core components it bottoms
-out in — with no renderer, no effects and no second render.
+**Core metadata.** A static `meta` on each of the nine core components: its
+name, category, the slot it fills, and a spec for every prop — kind, label,
+default, whether it is required.
 
-- each core binding component exposes how it builds, as data both the walker
-  and the mounted component use, so the two cannot drift
-- composites are called; the binding's own components are not
-- sibling order is JSX order by construction, which is what
-  [0005](docs/issues/0005.md) asks for
-- the assembly pass is shared too, not only the per-component builds:
-  anchors are collected, a name meaning both an anchor and a frame is refused,
-  and only then are constraints built -- one rule, whichever route runs it
-- checked against the mounted route: `buildScene(<CartAndRope />)` must equal
-  what `<Scene>` assembles — same frames, decals, weights and constraints, in
-  the same order
+- a prop with no spec is a compile error, not a gap found at runtime
+- `meta.name` is stated rather than read off the function, because production
+  builds minify `Function.name`
+- a default is only a default if omitting the prop and stating it build the
+  same scene — one test per default
+- what may contain what is answered once, and agrees with the builder at the
+  root
 
 ## Next — the MVP
 
 Roughly one PR each.
 
 1. ~~**De-ref the demo**~~ — done
-2. **Tree-walk builder** — *in view*
-3. **Core metadata** — prop schemas for the nine core components
+2. ~~**Tree-walk builder**~~ — done
+3. **Core metadata** — *in view*
 4. **Document model** — a module of definitions, immutable edits, element ↔
    document conversion
 5. **Codegen** — document → TSX, with a compile-and-rebuild round trip
@@ -61,6 +57,12 @@ the same scene. Play is cheap once the shell exists and may come forward.
 
 ## Done
 
-- **De-ref the demo** — `<Anchor id>` names a point, a constraint end resolves
-  an anchor id before a frame id, and `CartAndRope` calls no hooks. A test walks
-  every composite in the rig outside a render.
+- **De-ref the demo** — `<Anchor id>` names a point, a constraint end names it
+  by that id, and `CartAndRope` calls no hooks. A test walks every composite in
+  the rig outside a render.
+- **Tree-walk builder** — `buildScene(element)` builds a `Scene` from JSX with
+  no renderer: composites are called, each core component states how it builds
+  as data the mounted binding shares, and siblings take JSX order. Both routes
+  refuse two anchors sharing an id, and a name meaning both an anchor and a
+  frame, through the same helpers. Checked against the mounted route on the
+  demo rig and on every prop. Resolves [0006](docs/issues/0006.md).

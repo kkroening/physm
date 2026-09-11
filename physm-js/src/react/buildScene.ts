@@ -1,4 +1,5 @@
 import CoreScene from './../Scene';
+import { addAnchor, refuseAnchorFrameCollisions } from './resolveAnchor';
 import { Fragment, isValidElement } from 'react';
 import type {
   AnchorPoint,
@@ -80,14 +81,7 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
       return;
     case 'anchor':
       if (node.id !== undefined) {
-        if (walk.anchors.has(node.id)) {
-          throw new Error(
-            `Two <Anchor>s share the id '${node.id}'. A constraint naming it ` +
-              'would be welded to whichever came first; give each its own.',
-          );
-        }
-
-        walk.anchors.set(node.id, node.build());
+        addAnchor(walk.anchors, node.id, node.build());
       }
       return;
     case 'constraint':
@@ -234,6 +228,7 @@ export default function buildScene(
   // are actually in. A constraint naming a frame that does not exist throws
   // from `addConstraint` -- which `<Scene>` avoids, because a mounted tree is
   // transiently inconsistent while it registers, and this one never is.
+  refuseAnchorFrameCollisions(anchors, scene.frameMap);
   for (const node of constraints) {
     const constraint = node.build(anchors);
     if (!constraint) {

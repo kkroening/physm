@@ -1,7 +1,7 @@
 import * as mat3 from './../Mat3';
 import CoreScene from './../Scene';
 import SceneView from './SceneView';
-import { refuseAnchorFrameCollisions } from './resolveAnchor';
+import { addAnchor, refuseAnchorFrameCollisions } from './resolveAnchor';
 import {
   ParentKeyContext,
   RegistryContext,
@@ -33,10 +33,8 @@ export interface SceneProps {
  * has not registered yet takes the name for a frame id, is set aside as
  * unresolved, and is retried on the next assembly -- see `resolveAnchor`.
  *
- * Two anchors sharing an id are refused rather than resolved either way. Picking
- * one would weld a constraint to whichever happened to register first, which
- * changes the answer rather than the picture -- the same reason a root
- * `<Weight>` is refused below.
+ * Two anchors sharing an id are refused, by `addAnchor` -- the same reason a
+ * root `<Weight>` is refused below.
  */
 function collectAnchors(entries: SceneRegistry['entries']): AnchorLookup {
   const anchors = new Map<string, AnchorPoint>();
@@ -45,14 +43,7 @@ function collectAnchors(entries: SceneRegistry['entries']): AnchorLookup {
       continue;
     }
 
-    if (anchors.has(node.id)) {
-      throw new Error(
-        `Two <Anchor>s share the id '${node.id}'. A constraint naming it ` +
-          'would be welded to whichever registered first; give each its own.',
-      );
-    }
-
-    anchors.set(node.id, node.build());
+    addAnchor(anchors, node.id, node.build());
   }
 
   return anchors;
