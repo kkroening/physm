@@ -272,7 +272,7 @@ describe('insertion, a component that keeps a place for children', () => {
    * or, with `atTop`, at the top of its body.
    */
   function withPlace(atTop = false): SceneDocument {
-    const doc = starterDocument();
+    const doc = bare();
 
     return {
       ...doc,
@@ -292,7 +292,32 @@ describe('insertion, a component that keeps a place for children', () => {
     };
   }
 
+  /** The starter scene with every place for children taken out. */
+  function bare(): SceneDocument {
+    const strip = (nodes: readonly DocNode[]): DocNode[] =>
+      nodes
+        .filter(({ type }) => type.kind !== 'children')
+        .map((node) => ({ ...node, children: strip(node.children) }));
+    const doc = starterDocument();
+
+    return {
+      ...doc,
+      definitions: doc.definitions.map((definition) => ({
+        ...definition,
+        body: strip(definition.body),
+      })),
+    };
+  }
+
   // Scene: [Line, TrackFrame [Box, Weight, Pendulum]].
+  test("the starter's pendulum takes children, in the fixed frame at its bob", () => {
+    expect(insertionPoint(starterDocument(), 'Scene', [1, 2])).toEqual({
+      parent: [1, 2],
+      index: 0,
+      holder: 'frame',
+    });
+  });
+
   test("an instance takes children, held to the rules of its place's frame", () => {
     expect(insertionPoint(withPlace(), 'Scene', [1, 2])).toEqual({
       parent: [1, 2],
@@ -313,7 +338,7 @@ describe('insertion, a component that keeps a place for children', () => {
 
   test('an instance of a component with no place takes none', () => {
     // So an addition goes after it, among the cart's children.
-    expect(insertionPoint(starterDocument(), 'Scene', [1, 2])).toEqual({
+    expect(insertionPoint(bare(), 'Scene', [1, 2])).toEqual({
       parent: [1],
       index: 3,
       holder: 'frame',
@@ -380,7 +405,7 @@ describe('insertion, a component that keeps a place for children', () => {
 
   test("a place for children goes in a component's body, and only once", () => {
     const children: ComponentRef = { kind: 'children' };
-    const doc = starterDocument();
+    const doc = bare();
 
     expect(
       refusalOf(doc, 'Scene', insertionPoint(doc, 'Scene', null), children),
