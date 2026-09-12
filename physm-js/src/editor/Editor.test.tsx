@@ -3922,3 +3922,124 @@ describe('Editor, dragging a row', () => {
     ).toHaveAttribute('aria-selected', 'true');
   });
 });
+
+describe('Editor, hiding the marks and the grid', () => {
+  /** One of the scene pane's two view controls. */
+  const control = (name: string): HTMLElement =>
+    screen.getByRole('button', { name });
+
+  /** Whether a control is showing what it stands for. */
+  const pressed = (name: string): string | null =>
+    control(name).getAttribute('aria-pressed');
+
+  test('each control says whether what it stands for is drawn', () => {
+    const { container } = render(<Editor />);
+
+    expect([pressed('Marks'), pressed('Grid')]).toEqual(['true', 'true']);
+    expect(container.querySelector('.editor__gizmo')).not.toBeNull();
+    expect(container.querySelector('.editor__grid')).not.toBeNull();
+
+    fireEvent.click(control('Marks'));
+    fireEvent.click(control('Grid'));
+
+    expect([pressed('Marks'), pressed('Grid')]).toEqual(['false', 'false']);
+    expect(container.querySelector('.editor__gizmo')).toBeNull();
+    expect(container.querySelector('.editor__grid')).toBeNull();
+
+    fireEvent.click(control('Marks'));
+    fireEvent.click(control('Grid'));
+
+    expect(container.querySelector('.editor__gizmo')).not.toBeNull();
+    expect(container.querySelector('.editor__grid')).not.toBeNull();
+  });
+
+  test("a shape's handles go with the marks, and the selection stays", () => {
+    const { container } = render(<Editor />);
+    select('Box');
+
+    expect(container.querySelectorAll('.editor__handle')).toHaveLength(1);
+
+    fireEvent.click(control('Marks'));
+
+    expect(container.querySelectorAll('.editor__handle')).toHaveLength(0);
+    expect(shown()).toBe('Box');
+  });
+
+  test('with the marks off, a press falls to the frame above what it points at', () => {
+    const { container } = render(<Editor />);
+
+    // The box's handle sits on the cart's origin, so it takes the press.
+    select('Box');
+    dragScene(container, [0, 0], [18, 0]);
+
+    expect(code()).toMatch(/<Box width=\{2\}[^/]*position=\{\[1, 0\]\}/);
+
+    fireEvent.click(undoButton());
+    fireEvent.click(control('Marks'));
+    dragScene(container, [0, 0], [18, 0]);
+
+    // No handle to catch it and no gizmo to drag by: the press leads back
+    // through the box -- which the scene itself paints -- to the cart.
+    expect(code()).toMatch(/<Box width=\{2\} \/>/);
+    expect(code()).toMatch(/<TrackFrame id="cart"[^>]*position=\{\[1, 0\]\}/);
+  });
+
+  test('with the marks off, a click reaches the shape under the gizmo', () => {
+    const { container } = render(<Editor />);
+    clickScene(container, [0, -3]);
+
+    // The cart's gizmo is drawn over its box, and takes the click.
+    expect(shown()).toBe('TrackFrame');
+
+    fireEvent.click(control('Marks'));
+    clickScene(container, [0, -3]);
+
+    expect(shown()).toBe('Box');
+  });
+
+  test('with the grid off, a drag no longer snaps to whole units', () => {
+    const { container } = render(<Editor />);
+
+    // Three pixels short of two units across, and seven short of one up.
+    dragScene(container, [0, -3], [33, -14]);
+
+    expect(code()).toContain('position={[2, 0.61]}');
+
+    fireEvent.click(undoButton());
+    fireEvent.click(control('Grid'));
+    dragScene(container, [0, -3], [33, -14]);
+
+    expect(code()).toContain('position={[1.83, 0.61]}');
+  });
+
+  test('with the marks off, nothing snaps to a point either', () => {
+    const { container } = render(<Editor />);
+
+    // The ground's right end is at (216, 9): this takes the cart's origin to
+    // within four pixels of it.
+    dragScene(container, [0, -3], [213, 4]);
+
+    expect(code()).toContain('position={[12, -0.5]}');
+
+    fireEvent.click(undoButton());
+    fireEvent.click(control('Marks'));
+    dragScene(container, [0, -3], [213, 4]);
+
+    // The grid is still on, so the drag lands on a whole unit across rather
+    // than exactly on the end it can no longer show.
+    expect(code()).toContain('position={[12, -0.39]}');
+  });
+
+  test('with the marks off, a drag under way draws nothing of its own', () => {
+    const { container } = render(<Editor />);
+    fireEvent.click(control('Marks'));
+    const svg = container.querySelector('.editor__scene svg')!;
+    fireEvent.mouseDown(svg, { clientX: 0, clientY: -3 });
+    fireEvent.mouseMove(window, { clientX: 213, clientY: 4, buttons: 1 });
+
+    expect(container.querySelector('.editor__snap')).toBeNull();
+    expect(container.querySelector('.editor__parent-axis')).toBeNull();
+
+    fireEvent.mouseUp(window, { clientX: 213, clientY: 4 });
+  });
+});

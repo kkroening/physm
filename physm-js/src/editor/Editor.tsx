@@ -1219,6 +1219,15 @@ function useBuiltScene(
  * pixels of a whole unit snaps to it; Alt places it freely instead. While it moves,
  * its parent's axes -- the ones `position` is read along -- go through it.
  *
+ * Two controls turn off what the editor draws: the marks over the scene --
+ * gizmos, handles, the snap ring, a dragged frame's parent axes -- and the
+ * grid under it. Each takes with it the rule its marks stood for, so nothing
+ * decides a press invisibly: a gizmo's reach and a handle's are rings around
+ * points that would no longer be drawn, and a grid nobody can see is not one
+ * to snap to. With the marks off a press falls to the rule that needs nothing
+ * drawn -- the nearest frame above whatever it points at -- because that one
+ * starts from the shapes the scene itself paints.
+ *
  * A scene that fails to build shows why instead of taking the editor down with
  * it: a half-made rig is the normal state of a document being edited, and the
  * message is the thing the person needs to see. Under it, the last scene this
@@ -1314,6 +1323,11 @@ function ScenePane({
   // ends.
   const [dragGrid, setDragGrid] = useState<Mat3 | null>(null);
 
+  // What the editor draws, and so which rules are in force -- see above. Both
+  // on at rest: a gizmo is how a frame that draws nothing says where it is.
+  const [showMarks, setShowMarks] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+
   /** Where a mouse event lands, in the pane's own coordinates. */
   const pointOf = (event: {
     clientX: number;
@@ -1325,7 +1339,10 @@ function ScenePane({
   };
 
   /**
-   * Everything under `point`, topmost first.
+   * Everything under `point`, topmost first -- the shapes alone while the
+   * marks are off, since a frame is hit by its gizmo, and a gizmo nothing drew
+   * is not something to press or click. What is left is what the scene itself
+   * paints, which is what a press then leads back from.
    *
    * One sweep: `hitsAt` places every frame's gizmo and walks every decal, so
    * asking it twice for one pointer move solves the scene's pose twice over.
@@ -1337,7 +1354,9 @@ function ScenePane({
 
   const hitsAtPoint = (point: ScreenPoint): (Frame | Decal)[] =>
     'scene' in built && drawn && poses
-      ? hitsAt(drawn.scene, poses, xformMatrix, point)
+      ? hitsAt(drawn.scene, poses, xformMatrix, point).filter(
+          (hit) => showMarks || !(hit instanceof Frame),
+        )
       : [];
 
   /** How far apart two points on screen are. */
@@ -1381,9 +1400,18 @@ function ScenePane({
    * moved at all, and what a press takes hold of. A line offers both its ends
    * and so is moved an end at a time; a weight draws nothing whatever, which
    * is why it needs one most.
+   *
+   * None while the marks are off, which takes the handle rule, the selected
+   * shape's own drag and the click guard with them: all three read this list.
    */
   const handles = ((): { prop: string; at: ScreenPoint }[] => {
-    if (!selectedPath || !('scene' in built) || !drawn || !poses) {
+    if (
+      !showMarks ||
+      !selectedPath ||
+      !('scene' in built) ||
+      !drawn ||
+      !poses
+    ) {
       return [];
     }
 
@@ -1623,13 +1651,13 @@ function ScenePane({
       parentXform: target.parentXform,
       from,
       origin: target.origin,
-      // A frame to leave out of its own snapping. A shape at the top of a
-      // body has none, and snaps to the grid alone.
       // What moves with the drag is left out of its own targets: a frame
       // takes its subtree, a shape takes only itself -- and its own point is
       // dropped below, so a short drag does not stick to where it began.
+      // None while the marks are off: the ring saying what the drag caught is
+      // one of them, and an exact landing nothing explains is worse than none.
       targets:
-        authored && drawn
+        showMarks && authored && drawn
           ? snapPoints(
               drawn.scene,
               drawn.stateMap,
@@ -1637,9 +1665,12 @@ function ScenePane({
               target.shape ? null : target.frame,
             ).filter((at) => distance(at, target.origin) > 0.5)
           : [],
-      grid: authored
-        ? positionGrid(position, target.parentXform, target.origin)
-        : null,
+      // And none while the grid is hidden: a coordinate pulled to a whole unit
+      // nothing drew would land where the picture does not account for it.
+      grid:
+        showGrid && authored
+          ? positionGrid(position, target.parentXform, target.origin)
+          : null,
       field: `drag ${drags.current}`,
       moved: false,
     };
@@ -1833,13 +1864,13 @@ function ScenePane({
         onMouseMove={hover}
         style={cursor ? { cursor } : undefined}
       >
-        <Grid lattice={lattice} size={size} />
+        {showGrid ? <Grid lattice={lattice} size={size} /> : null}
         {drawn ? (
           <>
             <SceneView {...drawn} xformMatrix={xformMatrix} />
-            <Gizmos {...drawn} xformMatrix={xformMatrix} />
+            {showMarks ? <Gizmos {...drawn} xformMatrix={xformMatrix} /> : null}
             <Handles handles={handles} />
-            {draggedPlacement ? (
+            {showMarks && draggedPlacement ? (
               <ParentAxes placement={draggedPlacement} />
             ) : null}
             {snapMark ? (
@@ -1858,6 +1889,22 @@ function ScenePane({
           </g>
         ) : null}
       </svg>
+      <div className="editor__overlays">
+        <button
+          type="button"
+          aria-pressed={showMarks}
+          onClick={() => setShowMarks(!showMarks)}
+        >
+          Marks
+        </button>
+        <button
+          type="button"
+          aria-pressed={showGrid}
+          onClick={() => setShowGrid(!showGrid)}
+        >
+          Grid
+        </button>
+      </div>
       <div className="editor__playback">
         {playable ? null : (
           <p className="editor__hint">

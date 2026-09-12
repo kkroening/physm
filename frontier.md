@@ -6,19 +6,15 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Editing in the scene.** Most gestures in the scene pane are met with a
-refusal rather than an effect (_Karl, 2026-09-11_). Three parts:
-
-1. ~~**A press drags the nearest thing that can move**~~ — done.
-2. ~~**Shapes can be edited at all**~~ — done.
-3. **The crosshairs and the grid can be hidden**, from a control in the pane.
-   Hiding the marks alone would leave the rules they stand for deciding
-   presses invisibly -- a frame's gizmo is placed from the pose whether or not
-   anything drew it, and a handle's reach is a ring around a point. So the
-   control turns off the *editing overlays as a group*, rules included:
-   hidden, a press takes the nearest frame above whatever it points at, which
-   is the one rule that needs nothing drawn, because it starts from the shapes
-   the scene itself paints.
+Nothing. Editing in the scene, the three parts Karl asked for on 2026-09-11,
+is done and recorded below; what comes next is open, and his standing
+invitation was "anything else you can think of like that". The candidates the
+work turned up, none of them chosen: a shape's own snapping targets (a box's
+corners, a circle's rim), which the *Further out* entry on snapping already
+half-covers; a way to reach a frame inside an instance without opening its
+tab; and zoom and pan, which the scene pane still lacks entirely -- the view
+transform is fixed at 18 pixels to the unit, so a rig larger than the pane
+cannot be edited at all. That last is the one this work kept running into.
 
 ## Next — the MVP
 
@@ -284,6 +280,26 @@ was built while gizmos were in review.
   exp(q^k ζ̂_k)` on its own way down the tree. `poseOf` is gone, and the rule
   that a frame absent from the state map is read at its `initialState` is
   stated once.
+- **A press drags the nearest thing that can move** — a press anywhere in a
+  component's instance drags the frame that puts the instance where it is,
+  rather than refusing with a not-allowed pointer because the frame under it
+  belongs to another body. Each thing under the pointer in turn leads back to
+  the nearest node above it this body can write to, and the first that leads
+  anywhere wins -- so the gesture the picture invites is the one that happens.
+- **Shapes can be edited at all** — the selected shape's point-props are drawn
+  as handles and dragged: a box by its `position`, a line by either end, and a
+  weight, which draws nothing whatever, by the only mark it has. The nearest
+  handle in reach takes the press, and a shape's prop is written in the
+  coordinates of the frame drawing it. Points read in another frame, and those
+  whose absence means the solver finds them, are left unmarked.
+- **The marks and the grid can be hidden** — two controls in the scene pane
+  turn off what the editor draws over the scene and under it, and each takes
+  with it the rule its marks stood for: with the marks off there is no gizmo
+  to drag by, no handle to catch a press, no ring to snap to, and a press
+  falls to the nearest frame above whatever it points at -- the one rule that
+  needs nothing drawn. With the grid off a drag no longer snaps to whole
+  units. Hiding the marks alone would have left those rules deciding presses
+  invisibly.
 - **Constants for repeated values** — a compound value written three times or
   more anywhere in the module is declared once, above the definitions, and
   used by name: the starter's bob becomes `const POSITION = [4, 0]`. The name
