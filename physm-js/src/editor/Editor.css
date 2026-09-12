@@ -222,9 +222,10 @@
   height: 100%;
 }
 
-/* Every whole unit of the world, under the scene: faint enough to read a
-   position against without competing with the rig, and the world's own axes a
-   shade darker, so its origin can be found. */
+/* The world's grid, under the scene, at whatever step keeps its lines legible
+   at the current zoom: faint enough to read a position against without
+   competing with the rig, and the world's own axes a shade darker, so its
+   origin can be found. */
 .editor__grid line {
   stroke: #28506b;
   stroke-width: 1;

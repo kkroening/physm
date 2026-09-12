@@ -72,16 +72,51 @@ describe('griddedPosition', () => {
     ]);
   });
 
-  test('but never so much of a unit that a drag can land only on whole ones', () => {
-    // Four pixels to the unit, the far end of the view's zoom. A four-pixel
-    // reach there is a whole unit wide, and nothing is further than half a
-    // unit from a whole one, so every drag would snap to an integer.
+  test('pulled back, it snaps to the step the grid draws, not to units', () => {
+    // Four pixels to the unit: the grid steps to tens there, so tens are what
+    // a drag lands on, and a unit is no longer a line to be caught by.
     const far = getViewXformMatrix([0, 0], 4, [400, 300]);
 
-    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [2, 0])).toEqual([0.5, 0]);
+    // Two pixels short of ten units across.
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [38, 0])).toEqual([10, 0]);
 
-    // The capped reach is a quarter of a unit, which is still in reach here.
-    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [3.5, 0])).toEqual([1, 0]);
+    // And half way between two of its lines is left where it is.
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [20, 0])).toEqual([5, 0]);
+
+    // The case that tells the two rules apart: all but on a whole unit, and
+    // nowhere near a line the grid is drawing. Snapping to units would pull
+    // this to three; snapping to the step leaves it alone.
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [11.8, 0])).toEqual([
+      2.95, 0,
+    ]);
+  });
+
+  test('the cap follows the step rather than the unit', () => {
+    // 1.3 pixels to the unit is the one regime where both rules are live at
+    // once: the step is ten, its lines are thirteen pixels apart, and the
+    // reach is a quarter of that -- 3.25 pixels rather than the full four.
+    const wide = getViewXformMatrix([0, 0], 1.3, [400, 300]);
+
+    // 8.5 units is 1.95 pixels from the line at ten, so it lands there. A cap
+    // that ignored the step would allow only 0.325 pixels and leave this at
+    // 8.5; a snap to whole units would give 9. One case, both rules out.
+    expect(griddedPosition(vec3.ORIGIN, wide, [0, 0], [11.05, 0])).toEqual([
+      10, 0,
+    ]);
+  });
+
+  test('the reach is capped where the lines are closest, leaving half of each gap', () => {
+    // Thirteen pixels to the unit, where the step is one -- so this pins the
+    // cap in the regime the rule did *not* change: a quarter of the spacing,
+    // 3.25 pixels, rather than the full four. (Twelve is the crowded end.)
+    const close = getViewXformMatrix([0, 0], 13, [400, 300]);
+
+    expect(griddedPosition(vec3.ORIGIN, close, [0, 0], [9.75, 0])).toEqual([
+      1, 0,
+    ]);
+    expect(griddedPosition(vec3.ORIGIN, close, [0, 0], [9.7, 0])).toEqual([
+      0.75, 0,
+    ]);
   });
 
   test('its reach is in pixels, so in units it is finer the nearer the view', () => {
