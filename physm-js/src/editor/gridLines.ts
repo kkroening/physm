@@ -27,20 +27,42 @@ export interface GridLine {
  */
 const MIN_SPACING = 12;
 
+/** The rungs of the ladder within each decade: 1, 2 and 5, then 10 again. */
+const RUNGS = [1, 2, 5] as const;
+
 /**
  * How far apart the grid's lines stand, in the lattice's own units.
  *
- * The smallest power of ten whose lines clear `MIN_SPACING`, so the grid stays
- * legible however far the view pulls back instead of flooding the pane with a
- * line per unit. A drag snaps to this same step -- `griddedPosition` reads it
- * from here -- so the rule a person feels is always the one they can see.
+ * The smallest rung of the 1-2-5 ladder whose lines clear `MIN_SPACING`, so
+ * the grid keeps its shape however far the view pulls back instead of flooding
+ * the pane with a line per unit. A drag snaps to this same step --
+ * `griddedPosition` reads it from here -- so the rule a person feels is always
+ * the one they can see.
+ *
+ * 1-2-5 rather than powers of ten alone, because the snap rides this ladder
+ * too. A decade ladder leaves the spacing to grow tenfold before the next rung
+ * arrives, which as drawing is merely crowded at one end and sparse at the
+ * other -- but as *snapping* it means one wheel notch takes a person from
+ * placing on tens to placing on hundreds, with nothing in between, and that is
+ * what gets written into the code. No two rungs here are further apart than
+ * two and a half.
  *
  * Never finer than a unit, even zoomed well in: positions are written to
  * hundredths, so a step below one would want that rounding to follow it, which
  * is a change to the writing rather than to the grid.
  */
 export function gridStep(pixelsPerUnit: number): number {
-  return 10 ** Math.max(0, Math.ceil(Math.log10(MIN_SPACING / pixelsPerUnit)));
+  const wanted = MIN_SPACING / pixelsPerUnit;
+  if (wanted <= 1) {
+    return 1;
+  }
+
+  const decade = 10 ** Math.floor(Math.log10(wanted));
+
+  return (
+    RUNGS.map((rung) => rung * decade).find((step) => step >= wanted) ??
+    10 * decade
+  );
 }
 
 /** The multiples of `step` from `low` to `high`, both included. */

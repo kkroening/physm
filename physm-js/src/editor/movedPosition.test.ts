@@ -80,8 +80,11 @@ describe('griddedPosition', () => {
     // Two pixels short of ten units across.
     expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [38, 0])).toEqual([10, 0]);
 
-    // And half way between two of its lines is left where it is.
-    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [20, 0])).toEqual([5, 0]);
+    // And half way between two of its lines is left where it is. Five units
+    // is a line of its own now, so the gap's middle sits at 2.5.
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [10, 0])).toEqual([
+      2.5, 0,
+    ]);
 
     // The case that tells the two rules apart: all but on a whole unit, and
     // nowhere near a line the grid is drawing. Snapping to units would pull
