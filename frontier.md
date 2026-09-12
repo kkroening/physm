@@ -6,14 +6,18 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**A grid that steps, and snaps to the step it draws.** The grid puts a line at
-every whole unit and a drag snaps to whole units, which is why the view's
-zoom-out is clamped: further out, the lines either flood the pane or the grid
-has to step, and a stepped grid still snapping to units it no longer draws
-would put the rule out of sight of its mark -- the thing hiding the marks was
-built to stop. Stepping by powers of ten, with the snap following the step, is
-what lets the clamp widen. The snap's reach is already capped in world units as
-well as pixels, which is the same argument met from the other side.
+**The drag helper raises the click a browser would.** `dragScene`, which nearly
+every scene test goes through, fires mouse down, move and up and stops there. A
+browser also raises a `click`, and picking listens to that -- so a test that
+asserts anything about the selection after a drag asserts nothing whatever.
+Three such tests shipped in one PR before mutants caught them, one at a time.
+Folding the click into the helper changes what every drag test in the file
+means, which is why it is a step of its own rather than a tidy-up at the end of
+some other one.
+
+_The MVP below is complete but for promote-to-prop, and most of what is left in
+*Further out* is marked as Karl's call -- so the direction after this wants his
+steer rather than a pick of mine._
 
 ## Next — the MVP
 
@@ -328,6 +332,13 @@ was built while gizmos were in review.
   drag, which caches values derived from the matrix across frames and so
   refuses the wheel while it runs. The zoom-out is clamped by the grid argument
   above; the zoom-in bound is a pick.
+- **A grid that steps** — the grid draws a line at every multiple of a power of
+  ten, the smallest whose lines stay at least twelve pixels apart, so it keeps
+  its shape however far the view pulls back instead of flooding the pane. A
+  drag snaps to that same step rather than to a unit the grid may have stopped
+  drawing, and the snap's reach is a quarter of a step at its widest, so half
+  of every gap stays free at any zoom. That is what let the view's zoom-out
+  widen from four pixels to the unit down to one.
 - **Constants for repeated values** — a compound value written three times or
   more anywhere in the module is declared once, above the definitions, and
   used by name: the starter's bob becomes `const POSITION = [4, 0]`. The name

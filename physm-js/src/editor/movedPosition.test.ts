@@ -72,16 +72,37 @@ describe('griddedPosition', () => {
     ]);
   });
 
-  test('but never so much of a unit that a drag can land only on whole ones', () => {
-    // Four pixels to the unit, the far end of the view's zoom. A four-pixel
-    // reach there is a whole unit wide, and nothing is further than half a
-    // unit from a whole one, so every drag would snap to an integer.
+  test('pulled back, it snaps to the step the grid draws, not to units', () => {
+    // Four pixels to the unit: the grid steps to tens there, so tens are what
+    // a drag lands on, and a unit is no longer a line to be caught by.
     const far = getViewXformMatrix([0, 0], 4, [400, 300]);
 
-    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [2, 0])).toEqual([0.5, 0]);
+    // Two pixels short of ten units across.
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [38, 0])).toEqual([10, 0]);
 
-    // The capped reach is a quarter of a unit, which is still in reach here.
-    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [3.5, 0])).toEqual([1, 0]);
+    // And half way between two of its lines is left where it is.
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [20, 0])).toEqual([5, 0]);
+
+    // The case that tells the two rules apart: all but on a whole unit, and
+    // nowhere near a line the grid is drawing. Snapping to units would pull
+    // this to three; snapping to the step leaves it alone.
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [11.8, 0])).toEqual([
+      2.95, 0,
+    ]);
+  });
+
+  test('the reach shrinks where the lines are closest, leaving half of each gap', () => {
+    // Thirteen pixels to the unit is the crowded end of a step of one: four
+    // pixels from either side would leave only five of the thirteen free, so
+    // the reach is held to a quarter of a step -- 3.25 pixels.
+    const close = getViewXformMatrix([0, 0], 13, [400, 300]);
+
+    expect(griddedPosition(vec3.ORIGIN, close, [0, 0], [9.75, 0])).toEqual([
+      1, 0,
+    ]);
+    expect(griddedPosition(vec3.ORIGIN, close, [0, 0], [9.7, 0])).toEqual([
+      0.75, 0,
+    ]);
   });
 
   test('its reach is in pixels, so in units it is finer the nearer the view', () => {

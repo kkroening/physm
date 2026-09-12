@@ -3,28 +3,55 @@ import * as vec3 from './../Vec3';
 import type { Mat3 } from './../Mat3';
 import type { ScreenPoint } from './placeGizmos';
 
-/** One line of a grid: the whole unit it marks, and its two ends on screen. */
+/** One line of a grid: the coordinate it marks, and its two ends on screen. */
 export interface GridLine {
   readonly unit: number;
   readonly from: ScreenPoint;
   readonly to: ScreenPoint;
 }
 
-/** The whole numbers from `low` to `high`, both included. */
-function wholeNumbersBetween(low: number, high: number): number[] {
-  const from = Math.ceil(low);
+/**
+ * How near each other the grid's lines may be drawn, in pixels.
+ *
+ * Twelve, because the pane opens at eighteen pixels to the unit and a line at
+ * every whole unit there is the grid this editor has always drawn. A larger
+ * minimum would step the grid at the view it opens at, which is not a change
+ * to make by picking a round number.
+ */
+const MIN_SPACING = 12;
 
-  // Between two units there are none: the floor of `high` is then `from - 1`,
+/**
+ * How far apart the grid's lines stand, in the lattice's own units.
+ *
+ * The smallest power of ten whose lines clear `MIN_SPACING`, so the grid stays
+ * legible however far the view pulls back instead of flooding the pane with a
+ * line per unit. A drag snaps to this same step -- `griddedPosition` reads it
+ * from here -- so the rule a person feels is always the one they can see.
+ *
+ * Never finer than a unit, even zoomed well in: positions are written to
+ * hundredths, so a step below one would want that rounding to follow it, which
+ * is a change to the writing rather than to the grid.
+ */
+export function gridStep(pixelsPerUnit: number): number {
+  return 10 ** Math.max(0, Math.ceil(Math.log10(MIN_SPACING / pixelsPerUnit)));
+}
+
+/** The multiples of `step` from `low` to `high`, both included. */
+function multiplesBetween(step: number, low: number, high: number): number[] {
+  const from = Math.ceil(low / step);
+
+  // Between two of them there are none: the floor of `high` is then `from - 1`,
   // a length of zero.
   return Array.from(
-    { length: Math.floor(high) - from + 1 },
-    (_, index) => from + index,
+    { length: Math.floor(high / step) - from + 1 },
+    (_, index) => (from + index) * step,
   );
 }
 
 /**
- * The lines of a grid across a pane: one at every whole unit the pane reaches
- * -- `xLines` at each x, `yLines` at each y -- with its ends on screen.
+ * The lines of a grid across a pane: one at every multiple of `gridStep` the
+ * pane reaches -- `xLines` at each x, `yLines` at each y -- with its ends on
+ * screen.
  *
  * `lattice` takes the grid's units to the screen: the view itself for the
  * world's grid, or a turned and moved one for a frame's parent. The pane's
@@ -48,14 +75,15 @@ export default function gridLines(
   const top = Math.max(...corners.map(([, y]) => y));
   const onScreen = (x: number, y: number): ScreenPoint =>
     vec3.toPlanar(mat3.apply(lattice, vec3.point(x, y)));
+  const step = gridStep(mat3.scaleFactor(lattice));
 
   return {
-    xLines: wholeNumbersBetween(left, right).map((unit) => ({
+    xLines: multiplesBetween(step, left, right).map((unit) => ({
       unit,
       from: onScreen(unit, bottom),
       to: onScreen(unit, top),
     })),
-    yLines: wholeNumbersBetween(bottom, top).map((unit) => ({
+    yLines: multiplesBetween(step, bottom, top).map((unit) => ({
       unit,
       from: onScreen(left, unit),
       to: onScreen(right, unit),

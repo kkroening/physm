@@ -24,21 +24,18 @@ export const HOME: View = { translation: [0, 0], scale: VIEW_SCALE };
 /**
  * How far the view zooms out, in pixels to the world unit.
  *
- * Not taste. The grid draws a line at every whole unit and a drag snaps to
- * those units, so zooming out without bound either floods the pane with lines
- * or forces the grid to step -- and a stepped grid that went on snapping to
- * whole units would put the rule back out of sight of the mark it stands for.
- * A decade-stepped grid, snapping to the step it draws, is what would let this
- * widen.
+ * This was four while the grid drew a line at every whole unit, because
+ * further out the lines flood the pane and the snap's window grows to cover
+ * the unit it was meant to pick out. The grid steps by powers of ten now and
+ * the snap follows the step it draws, so both of those bounds moved with it:
+ * the lines stay at least twelve pixels apart at any scale, and the reach is
+ * held to a quarter of a step from either side.
  *
- * The snap's own window says the same thing from the other side. It is four
- * pixels wide and every coordinate is within half a unit of a whole one, so
- * below eight pixels to the unit that window covers the entire unit and a drag
- * could land nowhere but on whole numbers. `griddedPosition` caps its reach in
- * world units for exactly that reason, which is what makes a bound down here
- * usable rather than eight being where the trouble starts.
+ * What is left is a plain judgement about how much world is useful at once. A
+ * four-hundred pixel pane shows four hundred units here, which is a very large
+ * rig; there is no rule stopping it going lower.
  */
-export const MIN_SCALE = 4;
+export const MIN_SCALE = 1;
 
 /**
  * And how far it zooms in. A pick rather than a rule: nothing goes wrong above

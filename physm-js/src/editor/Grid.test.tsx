@@ -1,7 +1,7 @@
 import * as mat3 from './../Mat3';
 import Grid from './Grid';
 import getViewXformMatrix from './../getViewXformMatrix';
-import gridLines from './gridLines';
+import gridLines, { gridStep } from './gridLines';
 import { render } from '@testing-library/react';
 
 /** 18 pixels to the unit, on a 400 by 300 pane, with the world's origin at its middle. */
@@ -23,6 +23,40 @@ function endsOf(line: Element): number[] {
     near(Number(line.getAttribute(name))),
   );
 }
+
+describe('gridStep', () => {
+  test('a line at every unit, while they are far enough apart to read', () => {
+    expect(gridStep(18)).toBe(1);
+    expect(gridStep(12)).toBe(1);
+  });
+
+  test('a decade at a time as the view pulls back', () => {
+    expect(gridStep(11)).toBe(10);
+    expect(gridStep(4)).toBe(10);
+    expect(gridStep(1.2)).toBe(10);
+    expect(gridStep(1)).toBe(100);
+  });
+
+  test('never finer than a unit, however near the view', () => {
+    expect(gridStep(120)).toBe(1);
+    expect(gridStep(10000)).toBe(1);
+  });
+
+  test('its lines are never crowded, and no coarser than they need to be', () => {
+    for (const scale of [1, 1.7, 4, 9, 11, 12, 18, 47, 119]) {
+      const step = gridStep(scale);
+
+      // Twelve pixels is the closest the grid draws two lines.
+      expect(step * scale).toBeGreaterThanOrEqual(12);
+
+      // And the step is the smallest that clears it: a decade finer would
+      // have crowded them -- except at the floor of a whole unit.
+      if (step > 1) {
+        expect((step / 10) * scale).toBeLessThan(12);
+      }
+    }
+  });
+});
 
 describe('gridLines', () => {
   test('a line at every whole unit in view, straight across the pane', () => {
@@ -87,6 +121,50 @@ describe('gridLines', () => {
 });
 
 describe('Grid', () => {
+  test('pulled back, it steps to tens rather than flooding the pane', () => {
+    // Four pixels to the unit: a line per unit would be four pixels apart and
+    // five hundred of them across, so the grid draws tens, forty apart.
+    const far = getViewXformMatrix([0, 0], 4, [400, 300]);
+    const { container } = render(
+      <svg>
+        <Grid lattice={far} size={[400, 300]} />
+      </svg>,
+    );
+
+    expect(
+      [...container.querySelectorAll('.editor__grid-line[data-x]')].map(
+        (line) => line.getAttribute('data-x'),
+      ),
+    ).toEqual([
+      '-50',
+      '-40',
+      '-30',
+      '-20',
+      '-10',
+      '10',
+      '20',
+      '30',
+      '40',
+      '50',
+    ]);
+
+    // The world's own axes are still drawn apart from the rest.
+    expect(
+      [...container.querySelectorAll('.editor__grid-axis')].map((line) => [
+        line.getAttribute('data-x'),
+        line.getAttribute('data-y'),
+      ]),
+    ).toEqual([
+      ['0', null],
+      [null, '0'],
+    ]);
+
+    // Ten units out is forty pixels right of the middle.
+    expect(endsOf(container.querySelector('[data-x="10"]')!)).toEqual([
+      240, 300, 240, 0,
+    ]);
+  });
+
   test("its lines cross the pane, and the grid's own axes are drawn apart", () => {
     const { container } = render(
       <svg>

@@ -1,4 +1,5 @@
 import * as mat3 from './../Mat3';
+import { gridStep } from './gridLines';
 import * as vec3 from './../Vec3';
 import type { Mat3 } from './../Mat3';
 import type { ScreenPoint } from './placeGizmos';
@@ -12,15 +13,15 @@ import type { Vec3 } from './../Vec3';
 const GRID_REACH = 4;
 
 /**
- * ...and never more of a unit than this, however far the view has zoomed out.
+ * ...and never more of a *step* than this, at any zoom.
  *
  * A reach in pixels alone was right while the scale was fixed. Every
- * coordinate is within half a unit of a whole one, so a four-pixel window
- * covers the entire unit at eight pixels to it and below -- and a drag there
- * could land on nothing but whole numbers, which is precisely the range a
- * person reaches by zooming out to see a large rig.
+ * coordinate is within half a step of a line, so a window as wide as the step
+ * covers all of it and a drag can land on nothing but the grid. Holding the
+ * reach to a quarter of the step from either side leaves half of every gap
+ * free, whatever the step and whatever the scale.
  */
-const GRID_REACH_UNITS = 0.25;
+const GRID_REACH_STEPS = 0.25;
 
 /** A value to the nearest hundredth. */
 function rounded(value: number): number {
@@ -94,9 +95,15 @@ export default function movedPosition(
 
 /**
  * Where a drag takes a `position`, as `movedPosition` has it -- but with each
- * coordinate that comes within `GRID_REACH` pixels of a whole unit snapped to
- * it. Each on its own, so a drag along a grid line keeps to it; and in the
- * parent's units, so the code gets whole numbers however the parent is placed.
+ * coordinate that comes within `GRID_REACH` pixels of a drawn grid line
+ * snapped to it. Each on its own, so a drag along a line keeps to it; and in
+ * the parent's units, so the code gets round numbers however the parent is
+ * placed.
+ *
+ * The lines are the ones `gridLines` draws, at multiples of the same
+ * `gridStep` -- which is the point rather than a convenience. A snap to a
+ * spacing the grid had stopped drawing would be a rule with nothing on screen
+ * standing for it.
  */
 export function griddedPosition(
   position: Vec3,
@@ -105,16 +112,17 @@ export function griddedPosition(
   to: ScreenPoint,
 ): [number, number] {
   const pixelsPerUnit = mat3.scaleFactor(parentXform);
+  const step = gridStep(pixelsPerUnit);
   // In pixels, so the snap feels the same at every zoom -- but never more than
-  // a quarter of a unit, so that a zoomed-out drag can still land between two
-  // whole numbers. At the scale the pane opens at the pixel reach is the
-  // smaller of the two, so nothing about the usual case moves.
-  const reach = Math.min(GRID_REACH, GRID_REACH_UNITS * pixelsPerUnit);
+  // a quarter of a step, so a drag can always land between two lines. At the
+  // scale the pane opens at the pixel reach is the smaller of the two, so
+  // nothing about the usual case moves.
+  const reach = Math.min(GRID_REACH, GRID_REACH_STEPS * step * pixelsPerUnit);
   const snapped = (value: number): number => {
-    const whole = Math.round(value);
+    const line = Math.round(value / step) * step;
 
-    return Math.abs(value - whole) * pixelsPerUnit <= reach
-      ? whole || 0
+    return Math.abs(value - line) * pixelsPerUnit <= reach
+      ? line || 0
       : rounded(value);
   };
   const [x, y] = moved(position, parentXform, from, to);
