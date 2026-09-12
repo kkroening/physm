@@ -1985,6 +1985,8 @@ describe('Editor, dragging', () => {
 
     fireEvent.click(undoButton());
 
+    expect(code()).toMatch(/<FixedFrame position=\{\[0, -0\.5\]\}>/);
+
     // And just above it, where the cart's own gizmo lies under the pivot's.
     // The pivot is on top and still cannot move, so the press passes over it.
     fireEvent.mouseMove(svg, { clientX: 0, clientY: 8 });
@@ -2047,6 +2049,53 @@ describe('Editor, dragging', () => {
     dragScene(container, [0, 0], [18, 0]);
 
     expect(code()).toBe(before);
+
+    // And down the rod, clear of the gizmo's nine pixels: a shape leading
+    // nowhere refuses too, and saying nothing there reads as empty space.
+    fireEvent.mouseMove(svg, { clientX: 36, clientY: 0 });
+
+    expect(svg.style.cursor).toBe('not-allowed');
+  });
+
+  test('a press passes over what leads nowhere to what does', () => {
+    const [arm] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={[4, 0]} lineWidth={0.6} />
+      </RotationalFrame>,
+    );
+    const [cart] = nodesFrom(
+      <TrackFrame id="cart">
+        <Box width={4} height={2} />
+      </TrackFrame>,
+    );
+    const { container } = render(
+      <Editor
+        initialDocument={{
+          root: 'Scene',
+          definitions: [
+            {
+              name: 'Scene',
+              body: [
+                cart!,
+                {
+                  type: { kind: 'defined', name: 'Arm' },
+                  props: {},
+                  children: [],
+                },
+              ],
+            },
+            { name: 'Arm', body: [arm!] },
+          ],
+        }}
+      />,
+    );
+
+    // The arm draws last, so its rod is the topmost hit -- and it leads
+    // nowhere, the instance being placed by no frame. The cart's box lies
+    // under the same pixel and does lead somewhere, so the press takes it.
+    dragScene(container, [36, 0], [54, 0]);
+
+    expect(code()).toMatch(/<TrackFrame id="cart"[^>]*position=\{\[1, 0\]\}>/);
   });
 
   test('a press on a shape that has a position of its own drags its frame', () => {

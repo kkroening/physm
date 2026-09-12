@@ -994,6 +994,9 @@ interface Built {
   /** The focused body's node that built a frame or decal itself, if one did. */
   readonly ownPathOf: (built: Frame | Decal) => NodePath | null;
 
+  /** The frame a node of this body built, if it built one. */
+  readonly frameAt: (path: NodePath) => Frame | null;
+
   /** The node that built something, in whatever body wrote it. */
   readonly expandedOf: (built: Frame | Decal) => Selection | null;
 }
@@ -1144,6 +1147,19 @@ function useBuiltScene(
         ownPathOf: (built) =>
           ownPathOf(trails.get(built) ?? [], origins, focus),
         expandedOf: (built) => expandedOf(trails.get(built) ?? [], origins),
+        frameAt: (path) => {
+          for (const built of trails.keys()) {
+            if (
+              built instanceof Frame &&
+              ownPathOf(trails.get(built) ?? [], origins, focus)?.join('.') ===
+                path.join('.')
+            ) {
+              return built;
+            }
+          }
+
+          return null;
+        },
       };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
@@ -1168,9 +1184,11 @@ function useBuiltScene(
  * so a click on a component's instance selects the instance. Clicking the same
  * place again goes one deeper, through everything under the click.
  *
- * A frame's gizmo drags, writing the `position` of the node that built it --
- * when the focused body wrote that node, since otherwise there is nowhere to
- * write to. The pointer says which, before the press. Held within a few
+ * A press drags the nearest frame above whatever it points at that this body
+ * can write to, so pointing into a component's instance moves the frame
+ * placing the instance rather than refusing. A frame's own gizmo drags it
+ * directly, and the selected node's gizmo wins where they overlap. The pointer
+ * says whether a press will move anything, before it. Held within a few
  * pixels of another frame's origin, a line's end or a circle's centre, the
  * origin snaps to it exactly; short of that, each coordinate within a few
  * pixels of a whole unit snaps to it; Alt places it freely instead. While it moves,
@@ -1281,12 +1299,23 @@ function ScenePane({
     return [event.clientX - bounds.left, event.clientY - bounds.top];
   };
 
-  /** The frames whose gizmos are under `point`, topmost first, and the node each can be dragged by. */
-  const gizmosAt = (
-    point: ScreenPoint,
-  ): { frame: Frame; path: NodePath | null }[] =>
+  /**
+   * Everything under `point`, topmost first.
+   *
+   * One sweep: `hitsAt` places every frame's gizmo and walks every decal, so
+   * asking it twice for one pointer move solves the scene's pose twice over.
+   */
+  const hitsAtPoint = (point: ScreenPoint): (Frame | Decal)[] =>
     'scene' in built && drawn
       ? hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point)
+      : [];
+
+  /** The frames among `hits`, and the node each can be dragged by. */
+  const gizmosIn = (
+    hits: readonly (Frame | Decal)[],
+  ): { frame: Frame; path: NodePath | null }[] =>
+    'scene' in built
+      ? hits
           .filter((hit): hit is Frame => hit instanceof Frame)
           .map((frame) => ({ frame, path: built.ownPathOf(frame) }))
       : [];
@@ -1316,16 +1345,19 @@ function ScenePane({
    * cycling reaches one in a stack -- and otherwise the topmost gizmo, when
    * this body can move it.
    *
-   * Failing that, whatever is under the pointer at all, gizmo or shape, leads
-   * back to the nearest node *above* it that this body can move. A press
-   * anywhere in a component's instance therefore drags the frame that puts the
-   * instance where it is: the instance's own frames belong to another body, so
-   * the alternative is refusing a gesture the picture invites.
+   * Failing that, each thing under the pointer in turn, gizmo or shape, leads
+   * back to the nearest node *above* it that this body can move, and the first
+   * that leads anywhere wins. A press anywhere in a component's instance
+   * therefore drags the frame that puts the instance where it is: the
+   * instance's own frames belong to another body, so the alternative is
+   * refusing a gesture the picture invites.
    *
    * Deliberately not "the next gizmo down the stack this body can move": that
    * agrees with the rule above wherever both answer, and where they differ it
    * drags whatever frame happens to lie under the pointer rather than the one
-   * placing what was pointed at.
+   * placing what was pointed at. Walking the stack is not that rule -- every
+   * answer is still the frame placing something pointed at, and a hit is
+   * passed over only when it places nothing at all.
    */
   const dragTargetAt = (
     point: ScreenPoint,
@@ -1334,7 +1366,8 @@ function ScenePane({
       return null;
     }
 
-    const gizmos = gizmosAt(point);
+    const hits = hitsAtPoint(point);
+    const gizmos = gizmosIn(hits);
     const selected = selectedPath
       ? gizmos.find(({ path }) => path?.join('.') === selectedPath.join('.'))
       : undefined;
@@ -1343,20 +1376,19 @@ function ScenePane({
       return { frame: own.frame, path: own.path };
     }
 
-    const [hit] = hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point);
-    const authored = hit ? built.authoredPathOf(hit) : null;
-    const path = authored ? movable(authored) : null;
-    if (!path) {
-      return null;
-    }
+    const leadsTo = (hit: Frame | Decal): NodePath | null => {
+      const authored = built.authoredPathOf(hit);
 
-    const placement = placeGizmos(
-      drawn.scene,
-      drawn.scene.getPosMatrixMap(drawn.stateMap),
-      xformMatrix,
-    ).find(({ frame }) => built.ownPathOf(frame)?.join('.') === path.join('.'));
+      return authored ? movable(authored) : null;
+    };
 
-    return placement ? { frame: placement.frame, path } : null;
+    const path = hits.reduce<NodePath | null>(
+      (found, hit) => found ?? leadsTo(hit),
+      null,
+    );
+    const frame = path ? built.frameAt(path) : null;
+
+    return frame && path ? { frame, path } : null;
   };
 
   const hover = (event: MouseEvent<SVGSVGElement>): void => {
@@ -1365,10 +1397,12 @@ function ScenePane({
     }
 
     const point = pointOf(event);
+    // Anything under the pointer, not a gizmo: a shape leading nowhere
+    // refuses too, and silence there reads as empty space.
     setCursor(
       dragTargetAt(point)
         ? 'grab'
-        : gizmosAt(point).length
+        : hitsAtPoint(point).length
           ? 'not-allowed'
           : '',
     );
