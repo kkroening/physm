@@ -1152,7 +1152,14 @@ describe('Editor, playing', () => {
   });
 });
 
-/** Click the scene pane at a point in its own coordinates. */
+/**
+ * Press, release and click the scene pane at a point in its own coordinates.
+ *
+ * The press and the release land on the same element, so the svg is exactly
+ * where a browser would raise the click -- none of the approximation
+ * `dragScene` has to account for -- and a modifier held across all three is
+ * what a browser sends too.
+ */
 function clickScene(
   container: HTMLElement,
   [x, y]: readonly [number, number],
@@ -1161,11 +1168,10 @@ function clickScene(
   const svg = container.querySelector('.editor__scene svg')!;
   const at = { clientX: x, clientY: y, ...held };
 
-  // Press, release, then the click -- the three a browser sends, in order.
-  // The press matters beyond tidiness: it clears the flag that makes a drag's
-  // own release click get swallowed, so a click after a drag picks, as one
-  // does in a browser. A bare `click` cannot spend that flag, which is why
-  // this used to need two calls to model one real click.
+  // The three a browser sends, in order. The press matters beyond tidiness:
+  // `startDrag` clears the flag that suppresses one click after a drag, so a
+  // click following a drag picks, as one does in a browser. A bare `click`
+  // spends that flag too -- but pays for it by being the click suppressed.
   fireEvent.mouseDown(svg, at);
   fireEvent.mouseUp(svg, at);
   fireEvent.click(svg, at);
@@ -4318,6 +4324,23 @@ describe('Editor, moving the view', () => {
       expect(drawnX(container, 0)).toBe(200);
       expect(control('Reset view')).toBeDisabled();
       expect(shown()).toBe(null);
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('a click leaves no pan behind', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      const before = drawnX(container, 0);
+      clickScene(container, [30, 30]);
+
+      // Nothing is held down any more, so a pointer crossing the pane moves
+      // nothing: the click's own release ended the pan its press began.
+      fireEvent.mouseMove(window, { clientX: 80, clientY: 30, buttons: 1 });
+
+      expect(drawnX(container, 0)).toBe(before);
     } finally {
       pane.restore();
     }

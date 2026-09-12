@@ -17,10 +17,6 @@ Six pull requests since the scene-editing work began have each surfaced the
 next, so the run stopping here is a real boundary rather than tiredness: what
 is left is not a step nobody has taken, but a choice nobody has made.
 
-_The MVP below is complete but for promote-to-prop, and nearly everything left
-in *Further out* is marked as Karl's call -- so after this one, the direction
-wants his steer rather than a pick of mine._
-
 ## Next — the MVP
 
 Roughly one PR each.
@@ -336,13 +332,13 @@ was built while gizmos were in review.
   a line at every unit -- see the entry above, which is what lifted that -- and
   the zoom-in bound is a pick.
 - **A click in a test presses first** — `clickScene` fired a bare `click` with
-  no `mousedown`, so it could not spend the flag that swallows a drag's own
-  release click. That is why a click straight after a drag used to be
-  swallowed: an artifact of the helper rather than anything a browser does,
-  and one that made the file need two synthetic clicks to model one real one.
-  It presses, releases and clicks now, which also closes a trap that was
-  latent rather than theoretical -- a dozen hand-rolled drags still end at
-  `mouseup` with the flag set.
+  no `mousedown`, so a click straight after a drag was suppressed rather than
+  picking. The flag that suppresses one click after a drag is cleared by a
+  press, and a bare click could only spend it by being the click suppressed —
+  which is not what a browser does, since a real click always begins with a
+  press. It presses, releases and clicks now, closing a trap that was latent
+  rather than theoretical: a dozen drags in the file are still driven by hand
+  to `mouseup`, leaving that flag set.
 - **A grid that steps 1-2-5** — the grid's step is the smallest rung of the
   1-2-5 ladder whose lines clear twelve pixels, rather than the smallest power
   of ten. A decade ladder let the spacing grow tenfold before the next rung
