@@ -6,19 +6,16 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**`clickScene` should press and release, as `dragScene` now does.** It fires a
-bare `click` with no `mousedown`, so it cannot spend the `dragged` flag the way
-a real click does -- which is why a click straight after a drag used to be
-swallowed, an artifact of the helper rather than anything a browser does. The
-trap is latent rather than gone: a dozen hand-rolled drags in the file still
-end at `mouseup` with the flag set, none of them yet followed by a
-`clickScene`, and the first one that is will swallow a click no browser would.
-Closing it for clicks is the same fix the drag helper just had, across
-forty-odd call sites.
+**Nothing, and the next direction is Karl's to set.** The MVP below is complete
+but for promote-to-prop, and every remaining item in *Further out* is marked as
+his call -- promote-to-prop against scoping ids per instance, which snapping
+targets a shape offers, whether the view is owed a keyboard path, what a drag
+does while the scene plays, types-first against schema-first, and the
+constraint-first direction the issue's last page sketches.
 
-_The MVP below is complete but for promote-to-prop, and nearly everything left
-in *Further out* is marked as Karl's call -- so after this one, the direction
-wants his steer rather than a pick of mine._
+Six pull requests since the scene-editing work began have each surfaced the
+next, so the run stopping here is a real boundary rather than tiredness: what
+is left is not a step nobody has taken, but a choice nobody has made.
 
 ## Next — the MVP
 
@@ -334,6 +331,14 @@ was built while gizmos were in review.
   refuses the wheel while it runs. Its zoom-out was clamped by the grid drawing
   a line at every unit -- see the entry above, which is what lifted that -- and
   the zoom-in bound is a pick.
+- **A click in a test presses first** — `clickScene` fired a bare `click` with
+  no `mousedown`, so a click straight after a drag was suppressed rather than
+  picking. The flag that suppresses one click after a drag is cleared by a
+  press, and a bare click could only spend it by being the click suppressed —
+  which is not what a browser does, since a real click always begins with a
+  press. It presses, releases and clicks now, closing a trap that was latent
+  rather than theoretical: a dozen drags in the file are still driven by hand
+  to `mouseup`, leaving that flag set.
 - **A grid that steps 1-2-5** — the grid's step is the smallest rung of the
   1-2-5 ladder whose lines clear twelve pixels, rather than the smallest power
   of ten. A decade ladder let the spacing grow tenfold before the next rung
