@@ -1732,22 +1732,40 @@ describe('Editor, undo', () => {
   });
 });
 
-/** Press at `from` in the scene pane, move through each of `to`, and let go at the last. */
+/**
+ * Press at `from` in the scene pane, move through each of `to`, let go at the
+ * last, and raise the click a browser would.
+ *
+ * A browser raises that click on the nearest ancestor the press and the
+ * release have in common, so one released off the pane never reaches the
+ * pane's own handler; this always raises it on the svg. Nothing can read the
+ * difference: `startDrag` clears `dragged` on the next press, so a flag left
+ * behind cannot survive into a later pick, and every call site where the
+ * raised click decides anything releases within `SAME_PLACE` of its press --
+ * the same element by construction. Exact where it is load-bearing, and
+ * approximate only where the result goes unread.
+ */
 function dragScene(
   container: HTMLElement,
   from: readonly [number, number],
   ...to: (readonly [number, number])[]
 ): void {
   const [endX, endY] = to[to.length - 1] ?? from;
-  fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
-    clientX: from[0],
-    clientY: from[1],
-  });
+  const svg = container.querySelector('.editor__scene svg')!;
+  fireEvent.mouseDown(svg, { clientX: from[0], clientY: from[1] });
   for (const [x, y] of to) {
     fireEvent.mouseMove(window, { clientX: x, clientY: y, buttons: 1 });
   }
 
   fireEvent.mouseUp(window, { clientX: endX, clientY: endY });
+
+  // Picking listens to `click` and to nothing else, so a helper stopping at
+  // `mouseup` leaves every assertion about what a drag's *release* does to the
+  // selection asserting nothing at all -- three such tests reached `master`
+  // that way, each found by a mutant rather than by the suite. A drag that
+  // moved is not among them: it picks from its own move handler, before any
+  // release, so what it selects was never in question.
+  fireEvent.click(svg, { clientX: endX, clientY: endY });
 }
 
 /**
@@ -2136,9 +2154,8 @@ describe('Editor, dragging', () => {
     const { container } = render(<Editor />);
     dragScene(container, onCart, [18, -3]);
 
-    // The first click is the release's own. Swallowed, it leaves the next to
-    // be a first click there, on the cart's gizmo, rather than a second.
-    clickScene(container, [18, -3]);
+    // The drag's own release click is swallowed, which leaves this one to be
+    // a first click there, on the cart's gizmo, rather than a second.
     clickScene(container, [18, -3]);
 
     expect(shown()).toBe('TrackFrame');
@@ -2149,8 +2166,8 @@ describe('Editor, dragging', () => {
     const before = code();
     dragScene(container, onCart, [1, -3]);
 
-    // The first click is the release's own, which picks as any click does.
-    clickScene(container, onCart);
+    // The drag never moved, so its release click picks as any click does,
+    // and this one is the second in the same place.
     clickScene(container, onCart);
 
     expect(code()).toBe(before);
@@ -4267,10 +4284,8 @@ describe('Editor, moving the view', () => {
       select('Box');
 
       // Two pixels of slop, which is a click. Panning on that would swallow
-      // the release, and a click on empty space is how the selection clears --
-      // so the release's click is raised here, as a browser would.
+      // the release, and a click on empty space is how the selection clears.
       dragScene(container, [30, 30], [32, 31]);
-      clickScene(container, [32, 31]);
 
       expect(drawnX(container, 0)).toBe(200);
       expect(control('Reset view')).toBeDisabled();
@@ -4288,12 +4303,11 @@ describe('Editor, moving the view', () => {
 
       expect(shown()).toBe('Box');
 
+      // The release's click is `dragScene`'s. Raised, the pan swallows it and
+      // the selection stands; not raised, there is nothing to swallow and the
+      // assertion below passes having exercised nothing -- so the dependency
+      // is named here, because the test itself cannot notice it going away.
       dragScene(container, [30, 30], [70, 55]);
-
-      // The click a browser raises when the press and its release land on one
-      // element: without it this asserts nothing, since picking is what that
-      // click does and a drag alone never raises one.
-      clickScene(container, [70, 55]);
 
       expect(shown()).toBe('Box');
     } finally {
