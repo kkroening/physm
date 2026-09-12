@@ -46,7 +46,7 @@ function decalPointsUnder(
   frames: readonly Frame[],
   poses: PoseMap,
   viewXform: Mat3,
-  skip: Frame,
+  skip: Frame | null,
 ): ScreenPoint[] {
   return frames.flatMap((frame) => {
     if (frame === skip) {
@@ -101,9 +101,12 @@ export default function snapPoints(
   scene: CoreScene,
   stateMap: StateMap,
   xformMatrix: Mat3,
-  dragged: Frame,
+  dragged: Frame | null,
 ): ScreenPoint[] {
-  const moving = movingWith(dragged);
+  // What moves with the drag, and so would only follow it. A frame takes its
+  // whole subtree with it; a shape takes nothing at all -- the frame drawing
+  // it stays where it was, and its points are the ones nearest to hand.
+  const moving = dragged ? movingWith(dragged) : new Set<Frame>();
   const poses = scene.getPosMatrixMap(stateMap);
 
   return [

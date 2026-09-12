@@ -24,7 +24,7 @@ function hits(
   point: Point,
   stateMap: StateMap = scene.getInitialStateMap(),
 ): unknown[] {
-  return hitsAt(scene, stateMap, VIEW, point);
+  return hitsAt(scene, scene.getPosMatrixMap(stateMap), VIEW, point);
 }
 
 /** Assert the hits are exactly these, in this order: the same objects. */

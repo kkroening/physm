@@ -1,3 +1,4 @@
+import Anchor from './../react/Anchor';
 import Box from './../react/Box';
 import Circle from './../react/Circle';
 import Coincidence from './../react/Coincidence';
@@ -3510,6 +3511,248 @@ describe('Editor, moving a node into another', () => {
     }
 
     expect(code()).toBe(before);
+  });
+});
+
+describe('Editor, dragging a shape', () => {
+  /** Select a row of the scene's tree by what it shows. */
+  const pick = (tag: string): void => {
+    fireEvent.click(
+      within(screen.getByRole('tree', { name: 'Scene' })).getAllByText(tag)[0]!,
+    );
+  };
+
+  const handles = (container: HTMLElement): string[] =>
+    [...container.querySelectorAll('.editor__handle')].map(
+      (handle) => handle.getAttribute('data-prop') ?? '',
+    );
+
+  test('a selected shape shows what it can be dragged by', () => {
+    const { container } = render(<Editor />);
+
+    expect(handles(container)).toEqual([]);
+
+    pick('Box');
+
+    expect(handles(container)).toEqual(['position']);
+
+    // A line is moved an end at a time, so it offers both and no whole.
+    pick('Line');
+
+    expect(handles(container)).toEqual(['endPos', 'startPos']);
+
+    // A weight draws nothing at all: its handle is the only mark it has.
+    pick('Weight');
+
+    expect(handles(container)).toEqual(['position']);
+  });
+
+  test('the selected shape is what moves, where several sit on one point', () => {
+    const { container } = render(<Editor />);
+
+    // The cart's box and its weight both sit at the cart's own origin, and the
+    // cart's gizmo is there too. Selection is what tells them apart.
+    pick('Box');
+    dragScene(container, [0, 0], [18, 0]);
+
+    expect(code()).toMatch(/<Box width=\{2\}[^/]*position=\{\[1, 0\]\}/);
+    expect(code()).toMatch(/<TrackFrame id="cart" resistance=\{5\}>/);
+
+    fireEvent.click(undoButton());
+    pick('Weight');
+    dragScene(container, [0, 0], [18, 0]);
+
+    expect(code()).toMatch(/<Weight mass=\{50\} position=\{\[1, 0\]\}/);
+  });
+
+  test("a line's ends move one at a time", () => {
+    const { container } = render(<Editor />);
+    pick('Line');
+
+    // The ground line runs from -12 to 12, so its ends are far from each other
+    // and from every gizmo.
+    dragScene(container, [212, 5], [230, 5]);
+
+    expect(code()).toMatch(/endPos=\{\[13, -0\.5\]\}/);
+    expect(code()).toMatch(/startPos=\{\[-12, -0\.5\]\}/);
+
+    dragScene(container, [-220, 5], [-202, 5]);
+
+    expect(code()).toMatch(/startPos=\{\[-11, -0\.5\]\}/);
+  });
+
+  test('the same pixel means the shape or its frame, by what is selected', () => {
+    const { container } = render(<Editor />);
+
+    // Inside the cart's box and well clear of its handle at the origin. With
+    // nothing selected this drags the cart -- the rule from before -- and with
+    // the box selected it drags the box.
+    pick('Box');
+    dragScene(container, [12, -6], [30, -6]);
+
+    expect(code()).toMatch(/<Box width=\{2\}[^/]*position=\{\[1, 0\]\}/);
+    expect(code()).toMatch(/<TrackFrame id="cart" resistance=\{5\}>/);
+  });
+
+  test("a shape snaps by the point held, not by its frame's origin", () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <TrackFrame id="a">
+              <Box width={1} height={1} position={[1, 0]} />
+            </TrackFrame>
+            <TrackFrame id="b" position={[3.4, 0]} />
+          </>,
+        )}
+      />,
+    );
+    pick('Box');
+
+    // The box sits 18 across; the other frame's origin is 61.2. Dragged
+    // almost onto it, the point held snaps there exactly, so the box lands at
+    // [3.4, 0]. Snapped by its frame's origin instead, the target is 20 pixels
+    // away and missed -- and the grid cannot stand in for it, which is why
+    // this frame is off a whole unit.
+    dragScene(container, [18, 0], [61, 0]);
+
+    expect(code()).toMatch(/<Box[^/]*position=\{\[3\.4, 0\]\}/);
+  });
+
+  test('a constraint offers no handles: its points are not read here', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <TrackFrame id="left" />
+            <TrackFrame id="right" position={[2, 0]} />
+            <Coincidence frame1="left" frame2="right" position1={[1, 0]} />
+          </>,
+        )}
+      />,
+    );
+    pick('Coincidence');
+
+    // `position1` is read in `frame1`'s coordinates, which this places
+    // against no frame it knows; and `position2` is absent because it is
+    // solved for, so writing a value would stop the scene building.
+    expect(handles(container)).toEqual([]);
+  });
+
+  test('an anchor offers no handle: its point is solved for', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <TrackFrame id="cart">
+            <Anchor id="hitch" />
+          </TrackFrame>,
+        )}
+      />,
+    );
+    pick('Anchor');
+
+    // `Anchor.position` carries no default on purpose -- an anchor without one
+    // has its point solved for, and no pair of numbers says that. A handle
+    // would write a value and freeze what the solver is there to find.
+    expect(handles(container)).toEqual([]);
+  });
+
+  test('the nearer of two handles takes the press', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <TrackFrame id="cart">
+            <Line startPos={[0, 0]} endPos={[0.3, 0]} lineWidth={0.2} />
+          </TrackFrame>,
+        )}
+      />,
+    );
+    pick('Line');
+
+    // The ends are 0.3 of a unit apart, so both are inside one press. The
+    // nearer must win: first-declared would always take `endPos`, and
+    // `startPos` could never be grabbed at all.
+    dragScene(container, [1, 0], [19, 0]);
+
+    expect(code()).toMatch(/startPos=\{\[1, 0\]\}/);
+    expect(code()).toMatch(/endPos=\{\[0\.3, 0\]\}/);
+  });
+
+  test('a shape snaps to points in the frame drawing it, which does not move', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <TrackFrame id="cart">
+            <Box width={1} height={1} position={[1, 0]} />
+            <RotationalFrame id="pivot" position={[3.4, 0]} />
+          </TrackFrame>,
+        )}
+      />,
+    );
+    pick('Box');
+
+    // The pivot shares the box's own frame. Excluding what moves with the
+    // drag used to exclude that whole frame, so the points nearest to hand
+    // were the ones left out; a shape moves nothing but itself.
+    dragScene(container, [18, 0], [61, 0]);
+
+    expect(code()).toMatch(/<Box[^/]*position=\{\[3\.4, 0\]\}/);
+  });
+
+  test('a click on a handle keeps what has nothing else to be clicked', () => {
+    const { container } = render(<Editor />);
+    pick('Weight');
+
+    // A weight draws nothing but its handle, so a click reaching past it
+    // would dismiss the only mark it has.
+    clickScene(container, [0, 0]);
+
+    expect(shown()).toBe('Weight');
+    expect(handles(container)).toEqual(['position']);
+
+    // A box has geometry of its own, so clicking it selects it again and the
+    // click is left alone -- which is what lets a scene click still close a
+    // name being typed.
+    pick('Box');
+    clickScene(container, [0, -3]);
+
+    expect(shown()).not.toBe('Box');
+  });
+
+  test("a shape moves along its own frame's axes, not its parent's", () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame
+            id="arm"
+            position={[2, 0]}
+            initialState={[Math.PI / 2, 0]}
+          >
+            <Box width={1} height={1} position={[1, 0]} />
+          </RotationalFrame>,
+        )}
+      />,
+    );
+    pick('Box');
+
+    // The arm stands at [2, 0] turned a quarter, so its box sits at [2, 1] in
+    // the world -- 36 across and 18 up the pane. Dragging one unit along the
+    // world's +x is one unit along the arm's -y, because a shape's position is
+    // read in the frame drawing it. Read in the arm's *parent's*, as a frame's
+    // own position is, the same drag would write [2, 0].
+    dragScene(container, [36, -18], [54, -18]);
+
+    expect(code()).toMatch(/<Box[^/]*position=\{\[1, -1\]\}/);
+  });
+
+  test('an unselected shape still drags the frame drawing it', () => {
+    const { container } = render(<Editor />);
+
+    // Nothing selected: the rule from before, that a press takes the nearest
+    // frame above what it points at.
+    dragScene(container, [12, -6], [30, -6]);
+
+    expect(code()).toMatch(/<TrackFrame id="cart"[^>]*position=\{\[1, 0\]\}>/);
   });
 });
 

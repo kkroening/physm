@@ -1,8 +1,10 @@
 import './Editor.css';
+import * as mat3 from './../Mat3';
 import * as vec3 from './../Vec3';
 import Frame from './../Frame';
 import Gizmos from './Gizmos';
 import Grid from './Grid';
+import Handles from './Handles';
 import ParentAxes from './ParentAxes';
 import PropertiesPane from './PropertiesPane';
 import SceneView from './../react/SceneView';
@@ -11,12 +13,13 @@ import coreComponents from './../react/coreComponents';
 import emitScene, { rangeKey } from './emitScene';
 import getViewXformMatrix from './../getViewXformMatrix';
 import hitsAt from './hitsAt';
+import { poseIn } from './../Scene';
 import movedPosition, {
   griddedPosition,
   placedPosition,
   positionGrid,
 } from './movedPosition';
-import placeGizmos from './placeGizmos';
+import placeGizmos, { HANDLE_REACH, placePoint } from './placeGizmos';
 import snapPoints, { nearestSnap } from './snapPoints';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
@@ -52,6 +55,7 @@ import { scrollPaneTo } from './scrollTopFor';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
 import type Decal from './../Decal';
+import type { PropSpec } from './../react/componentMeta';
 import type { StateMap } from './../Frame';
 import type {
   ComponentRef,
@@ -1061,7 +1065,10 @@ interface Drag {
   readonly doc: SceneDocument;
   readonly definition: string;
 
-  /** The node's `position` when the drag began, and the transform it is read in. */
+  /** Which prop of the node moves: a frame's `position`, a line's end. */
+  readonly prop: string;
+
+  /** That prop's value when the drag began, and the transform it is read in. */
   readonly position: Vec3;
   readonly parentXform: Mat3;
 
@@ -1078,6 +1085,24 @@ interface Drag {
   /** Names the drag to the history, so all of it is one step. */
   readonly field: string;
   moved: boolean;
+}
+
+/** What a press decided to move, and the geometry that decision implies. */
+interface DragTarget {
+  readonly path: NodePath;
+
+  /** Which prop of the node moves: a frame's `position`, a line's end. */
+  readonly prop: string;
+
+  /** The frame the drag belongs to: `null` for a shape at a body's top. */
+  readonly frame: Frame | null;
+
+  /** Whether a shape moves rather than the frame itself. */
+  readonly shape: boolean;
+
+  /** The transform that prop is read in, and the point the drag turns on. */
+  readonly parentXform: Mat3;
+  readonly origin: ScreenPoint;
 }
 
 /**
@@ -1305,10 +1330,19 @@ function ScenePane({
    * One sweep: `hitsAt` places every frame's gizmo and walks every decal, so
    * asking it twice for one pointer move solves the scene's pose twice over.
    */
-  const hitsAtPoint = (point: ScreenPoint): (Frame | Decal)[] =>
+  const poses =
     'scene' in built && drawn
-      ? hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point)
+      ? drawn.scene.getPosMatrixMap(drawn.stateMap)
+      : null;
+
+  const hitsAtPoint = (point: ScreenPoint): (Frame | Decal)[] =>
+    'scene' in built && drawn && poses
+      ? hitsAt(drawn.scene, poses, xformMatrix, point)
       : [];
+
+  /** How far apart two points on screen are. */
+  const distance = (a: ScreenPoint, b: ScreenPoint): number =>
+    Math.hypot(a[0] - b[0], a[1] - b[1]);
 
   /** The frames among `hits`, and the node each can be dragged by. */
   const gizmosIn = (
@@ -1319,6 +1353,78 @@ function ScenePane({
           .filter((hit): hit is Frame => hit instanceof Frame)
           .map((frame) => ({ frame, path: built.ownPathOf(frame) }))
       : [];
+
+  /**
+   * The handle nearest `point`, if one is in reach.
+   *
+   * The nearest rather than the first declared: two of a line's ends come
+   * within one press on a short line, and which of two identical marks wins
+   * should not be decided by the order their props happen to be written in.
+   */
+  const nearestHandle = (
+    point: ScreenPoint,
+  ): { prop: string; at: ScreenPoint } | null =>
+    handles
+      .filter(({ at }) => distance(at, point) <= HANDLE_REACH)
+      .reduce<{ prop: string; at: ScreenPoint } | null>(
+        (found, handle) =>
+          !found || distance(handle.at, point) < distance(found.at, point)
+            ? handle
+            : found,
+        null,
+      );
+
+  /**
+   * The selected node's point-props, placed on screen.
+   *
+   * A shape has no gizmo -- only frames do -- so these are what says it can be
+   * moved at all, and what a press takes hold of. A line offers both its ends
+   * and so is moved an end at a time; a weight draws nothing whatever, which
+   * is why it needs one most.
+   */
+  const handles = ((): { prop: string; at: ScreenPoint }[] => {
+    if (!selectedPath || !('scene' in built) || !drawn || !poses) {
+      return [];
+    }
+
+    const node = nodeAt(doc, focus, selectedPath);
+    const { type } = node;
+    if (type.kind !== 'core' || type.component.meta.slot === 'frame') {
+      return [];
+    }
+
+    const parent = selectedPath.slice(0, -1);
+    const frame = parent.length ? built.frameAt(parent) : null;
+    if (parent.length && !frame) {
+      return [];
+    }
+
+    const { props } = type.component.meta;
+
+    return (
+      Object.entries(props)
+        .map(([prop, spec]) => [prop, spec as PropSpec] as const)
+        // A point read in an end's frame -- a constraint's -- is not read in the
+        // one drawing it, which is the only frame this places against.
+        .filter(([, spec]) => spec.kind === 'point' && !spec.relativeTo)
+        // And one absent with no default says something no value can: an
+        // anchor's point, a constraint's second end, are solved for. Writing a
+        // value would freeze it, and the scene would stop building.
+        .filter(([prop, spec]) => prop in node.props || 'default' in spec)
+        .map(([prop, spec]) => ({
+          prop,
+          at: placePoint(
+            poses,
+            frame,
+            xformMatrix,
+            vec3.coerce(
+              (node.props[prop] ?? spec.default ?? [0, 0]) as
+                number | readonly number[],
+            ),
+          ),
+        }))
+    );
+  })();
 
   /** The nearest node at or above `path` whose position this body can move. */
   const movable = (path: NodePath): NodePath | null => {
@@ -1341,9 +1447,15 @@ function ScenePane({
    * What a press at `point` drags: the frame, and the node whose `position`
    * moves.
    *
-   * The selected node's gizmo when the pointer is on it -- which is how click
-   * cycling reaches one in a stack -- and otherwise the topmost gizmo, when
-   * this body can move it.
+   * A handle of the selected node first, when the pointer is on one: a shape
+   * is moved by the props it declares, so a line is taken by an end rather
+   * than bodily, and a weight -- which draws nothing at all -- by the only
+   * mark it has. Then the selected shape itself, wherever the pointer is on
+   * it, since selecting a thing and dragging it is what a person means.
+   *
+   * Then the selected node's gizmo when the pointer is on it -- which is how
+   * click cycling reaches one in a stack -- and otherwise the topmost gizmo,
+   * when this body can move it.
    *
    * Failing that, each thing under the pointer in turn, gizmo or shape, leads
    * back to the nearest node *above* it that this body can move, and the first
@@ -1359,21 +1471,87 @@ function ScenePane({
    * answer is still the frame placing something pointed at, and a hit is
    * passed over only when it places nothing at all.
    */
-  const dragTargetAt = (
-    point: ScreenPoint,
-  ): { frame: Frame; path: NodePath } | null => {
+  const dragTargetAt = (point: ScreenPoint): DragTarget | null => {
     if (!('scene' in built) || !drawn) {
       return null;
     }
 
+    const poses = drawn.scene.getPosMatrixMap(drawn.stateMap);
+
+    /**
+     * A shape's drag, placed.
+     *
+     * Its prop is read in the coordinates of the frame drawing it -- not that
+     * frame's parent's, which is where a frame's own `position` is read -- and
+     * the point it turns on is the handle rather than the frame's origin. A
+     * shape at the top of a body has no frame at all, and is read in the
+     * world's.
+     */
+    const shapeDrag = (
+      path: NodePath,
+      prop: string,
+      at: ScreenPoint,
+    ): DragTarget => {
+      const parent = path.slice(0, -1);
+      const frame = parent.length ? built.frameAt(parent) : null;
+
+      return {
+        path,
+        prop,
+        frame,
+        shape: true,
+        parentXform: frame
+          ? mat3.multiply(xformMatrix, poseIn(poses, frame.id))
+          : xformMatrix,
+        origin: at,
+      };
+    };
+
+    /** A frame's drag: its `position` in its parent's, turning on its origin. */
+    const frameDrag = (frame: Frame, path: NodePath): DragTarget | null => {
+      const placement = placeGizmos(drawn.scene, poses, xformMatrix).find(
+        ({ frame: placed }) => placed === frame,
+      );
+
+      return placement
+        ? {
+            path,
+            prop: 'position',
+            frame,
+            shape: false,
+            parentXform: placement.parentXform,
+            origin: placement.origin,
+          }
+        : null;
+    };
+
     const hits = hitsAtPoint(point);
+    const held = nearestHandle(point);
+    if (held && selectedPath) {
+      return shapeDrag(selectedPath, held.prop, held.at);
+    }
+
+    // The selected shape itself, anywhere on it -- but only where it declares
+    // a position to move: a line is its two ends, and has no `position` to
+    // take it by bodily.
+    const whole = handles.find(({ prop }) => prop === 'position');
+    const onSelected =
+      selectedPath &&
+      whole &&
+      hits.some(
+        (hit) => built.ownPathOf(hit)?.join('.') === selectedPath.join('.'),
+      );
+    if (onSelected && selectedPath && whole) {
+      return shapeDrag(selectedPath, 'position', whole.at);
+    }
+
     const gizmos = gizmosIn(hits);
     const selected = selectedPath
       ? gizmos.find(({ path }) => path?.join('.') === selectedPath.join('.'))
       : undefined;
     const own = selected ?? gizmos[0];
     if (own?.path) {
-      return { frame: own.frame, path: own.path };
+      return frameDrag(own.frame, own.path);
     }
 
     const leadsTo = (hit: Frame | Decal): NodePath | null => {
@@ -1388,7 +1566,7 @@ function ScenePane({
     );
     const frame = path ? built.frameAt(path) : null;
 
-    return frame && path ? { frame, path } : null;
+    return frame && path ? frameDrag(frame, path) : null;
   };
 
   const hover = (event: MouseEvent<SVGSVGElement>): void => {
@@ -1419,22 +1597,14 @@ function ScenePane({
 
     const from = pointOf(event);
     const target = dragTargetAt(from);
-    const placement =
-      target && drawn
-        ? placeGizmos(
-            drawn.scene,
-            drawn.scene.getPosMatrixMap(drawn.stateMap),
-            xformMatrix,
-          ).find(({ frame }) => frame === target.frame)
-        : undefined;
-    if (!target || !placement) {
+    if (!target) {
       return;
     }
 
     event.preventDefault();
     drags.current += 1;
     const position = vec3.coerce(
-      (nodeAt(doc, focus, target.path).props.position ?? [0, 0]) as
+      (nodeAt(doc, focus, target.path).props[target.prop] ?? [0, 0]) as
         number | readonly number[],
     );
 
@@ -1446,18 +1616,29 @@ function ScenePane({
       atAuthoredPose(drawn.stateMap, built.initial);
     drag.current = {
       path: target.path,
+      prop: target.prop,
       doc,
       definition: focus,
       position,
-      parentXform: placement.parentXform,
+      parentXform: target.parentXform,
       from,
-      origin: placement.origin,
+      origin: target.origin,
+      // A frame to leave out of its own snapping. A shape at the top of a
+      // body has none, and snaps to the grid alone.
+      // What moves with the drag is left out of its own targets: a frame
+      // takes its subtree, a shape takes only itself -- and its own point is
+      // dropped below, so a short drag does not stick to where it began.
       targets:
         authored && drawn
-          ? snapPoints(drawn.scene, drawn.stateMap, xformMatrix, target.frame)
+          ? snapPoints(
+              drawn.scene,
+              drawn.stateMap,
+              xformMatrix,
+              target.shape ? null : target.frame,
+            ).filter((at) => distance(at, target.origin) > 0.5)
           : [],
       grid: authored
-        ? positionGrid(position, placement.parentXform, placement.origin)
+        ? positionGrid(position, target.parentXform, target.origin)
         : null,
       field: `drag ${drags.current}`,
       moved: false,
@@ -1547,7 +1728,7 @@ function ScenePane({
           current.doc,
           current.definition,
           current.path,
-          'position',
+          current.prop,
           position,
         ),
         current.field,
@@ -1571,30 +1752,43 @@ function ScenePane({
 
     const point = pointOf(event);
 
+    // A handle is not a way of selecting what lies under it -- but only where
+    // the click would otherwise lose the node it belongs to. A weight draws
+    // nothing but its handle, so a click reaching past it dismisses the only
+    // mark it has, with no way back but the tree. A shape with geometry of its
+    // own is under the pointer too, and clicking it selects it again, so
+    // nothing is lost and the click is left alone.
+    const ownHit = selectedPath
+      ? hitsAtPoint(point).some(
+          (hit) => built.ownPathOf(hit)?.join('.') === selectedPath.join('.'),
+        )
+      : false;
+    if (nearestHandle(point) && !ownHit) {
+      return;
+    }
+
     // With Shift, the node that built each hit, wherever it is written -- the
     // one to inspect. Without, the node here that stands for it, which is the
     // instance for anything a component built, since that is what this tab can
     // act on.
     const candidates = distinctPicks(
-      hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point).map(
-        (hit): Picked | null => {
-          const produced = built.authoredPathOf(hit);
-          const written = event.shiftKey ? built.expandedOf(hit) : null;
-          if (written) {
-            return { selection: written, producer: produced };
-          }
+      hitsAtPoint(point).map((hit): Picked | null => {
+        const produced = built.authoredPathOf(hit);
+        const written = event.shiftKey ? built.expandedOf(hit) : null;
+        if (written) {
+          return { selection: written, producer: produced };
+        }
 
-          // Nothing wrote it that this document can name -- what an imported
-          // component built inside itself. Shift then lands where a plain
-          // click would, rather than doing less than not holding it.
-          return produced
-            ? {
-                selection: { definition: focus, path: produced },
-                producer: null,
-              }
-            : null;
-        },
-      ),
+        // Nothing wrote it that this document can name -- what an imported
+        // component built inside itself. Shift then lands where a plain
+        // click would, rather than doing less than not holding it.
+        return produced
+          ? {
+              selection: { definition: focus, path: produced },
+              producer: null,
+            }
+          : null;
+      }),
     );
     const last = lastPick.current;
     const again =
@@ -1644,6 +1838,7 @@ function ScenePane({
           <>
             <SceneView {...drawn} xformMatrix={xformMatrix} />
             <Gizmos {...drawn} xformMatrix={xformMatrix} />
+            <Handles handles={handles} />
             {draggedPlacement ? (
               <ParentAxes placement={draggedPlacement} />
             ) : null}
