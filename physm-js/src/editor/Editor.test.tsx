@@ -2822,7 +2822,7 @@ describe('Editor, the selection in the code', () => {
       ),
     );
 
-    expect(marked()).toBe('<Circle position={[4, 0]} radius={0.5} />');
+    expect(marked()).toBe('<Circle position={POSITION} radius={0.5} />');
 
     // The pane holds the module unchanged, and the mark starts where codegen
     // wrote the node -- not merely somewhere its text occurs.
@@ -3071,7 +3071,7 @@ describe('Editor, components that take children', () => {
     // its bob, so its instance takes a pendulum -- and the cart hangs it from
     // a fixed frame of its own, at the bottom edge of its box.
     expect(code()).toMatch(
-      /<FixedFrame position=\{\[4, 0\]\}>\s*\{children\}\s*<\/FixedFrame>/,
+      /<FixedFrame position=\{POSITION\}>\s*\{children\}\s*<\/FixedFrame>/,
     );
     expect(code()).toMatch(
       /<FixedFrame position=\{\[0, -0\.5\]\}>\s*<Pendulum \/>\s*<\/FixedFrame>/,
@@ -3198,7 +3198,7 @@ describe('Editor, children on a fixed frame', () => {
     add('Children');
 
     expect(code()).toMatch(
-      /<FixedFrame position=\{\[4, 0\]\}>\s*\{children\}\s*<\/FixedFrame>/,
+      /<FixedFrame position=\{POSITION\}>\s*\{children\}\s*<\/FixedFrame>/,
     );
 
     // In the scene's tab, a pendulum hung in the pendulum.

@@ -499,6 +499,90 @@ describe('emitScene', () => {
   });
 });
 
+describe('emitScene, repeated values', () => {
+  test('a value written more than once is named, and used by name', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <RotationalFrame id="arm">
+          <Line endPos={[4, 0]} lineWidth={0.15} />
+          <Circle position={[4, 0]} radius={0.5} />
+          <Weight mass={10} position={[4, 0]} />
+        </RotationalFrame>,
+      ),
+    );
+
+    // The name a person wrote is gone with the rest of how the file was
+    // written, so it comes from the prop that carries the value -- the most
+    // common of them, which is `position` here rather than `endPos`.
+    expect(source).toContain('const POSITION = [4, 0];');
+    expect(source).toContain('endPos={POSITION}');
+    expect(source).toContain('position={POSITION}');
+    expect(source).not.toContain('[4, 0]}');
+  });
+
+  test('what is written once, and what is not compound, stays where it is', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <TrackFrame id="cart">
+          <Weight mass={2} position={[1, 0]} />
+          <Weight mass={2} />
+          <Weight mass={2} />
+        </TrackFrame>,
+      ),
+    );
+
+    // Two weights of the same mass are two masses that agree, not one value
+    // written twice -- and a point written once is not worth a name.
+    expect(source).not.toContain('const ');
+    expect(source).toContain('mass={2}');
+    expect(source).toContain('position={[1, 0]}');
+  });
+
+  test('a tie between prop names goes the same way every time', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <>
+          <RotationalFrame id="a">
+            <Line endPos={[2, 0]} lineWidth={0.1} />
+            <Circle position={[2, 0]} radius={0.3} />
+          </RotationalFrame>
+          <RotationalFrame id="b">
+            <Line endPos={[2, 0]} lineWidth={0.1} />
+            <Weight mass={1} position={[2, 0]} />
+          </RotationalFrame>
+        </>,
+      ),
+    );
+
+    // Counted across the whole module, this point is two `endPos` and two
+    // `position`. A tie goes alphabetically, so the same document emits the
+    // same file rather than whichever name the walk reached first.
+    expect(source).toContain('const END_POS = [2, 0];');
+    expect(source).toContain('position={END_POS}');
+  });
+
+  test('the name steps aside for one the module already binds', () => {
+    // The root is the one definition nothing instantiates, so a walk of the
+    // tags never meets its name -- and a module declaring `const POSITION`
+    // beside `function POSITION()` would not even evaluate.
+    const [arm] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={[4, 0]} lineWidth={0.15} />
+        <Circle position={[4, 0]} radius={0.5} />
+        <Weight mass={10} position={[4, 0]} />
+      </RotationalFrame>,
+    );
+    const source = expectRoundTrip({
+      root: 'POSITION',
+      definitions: [{ name: 'POSITION', body: [arm!] }],
+    });
+
+    expect(source).toContain('function POSITION(');
+    expect(source).toContain('const POSITION_2 = [4, 0];');
+    expect(source).toContain('position={POSITION_2}');
+  });
+});
+
 describe('emitScene, numbers', () => {
   test.each([
     [Math.PI, 'Math.PI'],
