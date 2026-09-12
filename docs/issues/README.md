@@ -7,7 +7,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
-| [0015](0015.md) | Decide what physm-js publishes, so a dead export can be told from a published one | RFC | Open |
+| [0015](0015.md) | Decide whether physm-js declares a surface, and run the dead-code check against it | RFC | Open |
 | [0014](0014.md) | An interactive scene editor that emits TSX | RFC | Open |
 | [0013](0013.md) | Decide whether `stabilize` should default off, rather than leaving it defaulted | RFC | Resolved |
 | [0012](0012.md) | Give `physm-rs` its own stabilizer, so `RsSolver` need not step one at a time | Enhancement | Resolved |

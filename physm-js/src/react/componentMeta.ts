@@ -7,7 +7,7 @@ import type { SceneNode } from './sceneNodes';
  * numbers or tuples of them to the compiler; to a person editing a rig one is a
  * place and the other a size, and they want different widgets.
  */
-export type PropKind =
+type PropKind =
   /** Any finite number. */
   | 'number'
   /** A non-negative distance, in scene units. */

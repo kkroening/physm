@@ -119,7 +119,7 @@ export interface PoseQueryOptions {
  * a `catch` with no filter would swallow a wrongly assembled Jacobian on the
  * same path, turning the stabilizer into a silent no-op instead of a crash.
  */
-export class SingularCorrectionError extends Error {}
+class SingularCorrectionError extends Error {}
 
 export interface StabilizationOptions {
   tolerance?: number;

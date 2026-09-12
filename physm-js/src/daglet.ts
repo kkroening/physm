@@ -7,19 +7,19 @@
  */
 
 /** Where a node's incoming edges come from. `null` means "not a node to visit". */
-export type GetNodeParents<Node> = (node: Node) => readonly Node[] | null;
+type GetNodeParents<Node> = (node: Node) => readonly Node[] | null;
 
 /** A node's stable identity, which need not be the node itself. */
-export type GetNodeKey<Node, Key> = (node: Node) => Key;
+type GetNodeKey<Node, Key> = (node: Node) => Key;
 
 /** Folds a node together with the values already computed for its parents. */
-export type VisitNode<Node, NodeValue, EdgeValue> = (
+type VisitNode<Node, NodeValue, EdgeValue> = (
   node: Node,
   parentValues: readonly EdgeValue[],
 ) => NodeValue;
 
 /** Folds one edge, given the value already computed for the parent it comes from. */
-export type VisitEdge<Node, NodeValue, EdgeValue> = (
+type VisitEdge<Node, NodeValue, EdgeValue> = (
   node: Node,
   parentNode: Node,
   parentValue: NodeValue | undefined,
@@ -40,14 +40,12 @@ export interface TraversalOptions<Node, Key> {
  * nodes shaped that way -- hence the cast. Callers whose nodes are shaped
  * otherwise pass their own accessor, and then this is never reached.
  */
-export function defaultGetNodeParents<Node>(
-  node: Node,
-): readonly Node[] | null {
+function defaultGetNodeParents<Node>(node: Node): readonly Node[] | null {
   return (node as { parents?: readonly Node[] | null }).parents ?? null;
 }
 
 /** The default identity: the node is its own key. */
-export function defaultGetNodeKey<Node, Key>(node: Node): Key {
+function defaultGetNodeKey<Node, Key>(node: Node): Key {
   return node as unknown as Key;
 }
 

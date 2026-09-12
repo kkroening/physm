@@ -49,7 +49,7 @@ type Planar = [number, number];
 // a person placing frames by eye is not accurate to twelve digits.
 export const CONSISTENCY_RELATIVE_TOLERANCE = 1e-5;
 
-export function consistencyTolerance(scale = 0): number {
+function consistencyTolerance(scale = 0): number {
   // The floor keeps a scene authored near the origin from demanding exactness
   // no floating-point computation can deliver.
   return Math.max(1e-12, CONSISTENCY_RELATIVE_TOLERANCE * Math.abs(scale));
