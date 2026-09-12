@@ -232,6 +232,28 @@ jobs:
       - name: Lint
         run: npm run lint -- --max-warnings 13
 
+      # Both unused-variable rules above see unused *locals*; nothing else in
+      # the toolchain sees a module with no importer, which is how
+      # `testutils.ts` outlived its last consumer and was eventually found by
+      # eye against a green CI (0008, 0010). This closes that.
+      #
+      # Everything knip checks by default is on -- files, dependencies,
+      # exports, types, duplicates -- and the tree is clean of all of it, which
+      # is why the config beside it is one line. Counts quoted anywhere near
+      # this check are knip 6's: which findings exist is a property of the tool
+      # as much as of the tree, and 5 reported fifty-one unused exports on the
+      # same tree where 6 reports none. A major bump is therefore the moment to
+      # re-read the decision, not to take the green tick.
+      #
+      # What it does *not* see: a module kept alive only by its own test. knip
+      # treats a test file as an entry point, and 39 of the 68 modules under
+      # src/ have a sibling test -- so for those, green means "not even its own
+      # test imports this", which is weaker than it looks. Closing that needs a
+      # production-scoped pass, which is 0015: run today it reports the React
+      # binding's own barrel, imported from nothing but two test files.
+      - name: Dead code
+        run: npm run lint:dead
+
       # `.prettierrc` was committed and enforced by nothing, so the tree drifted
       # out of its own style: fifteen files were unformatted by the time anyone
       # ran it. A committed convention nothing checks is the worst of the three

@@ -24,7 +24,7 @@ export class InvalidStateMapError extends Error {
  * propagates silently through every subsequent step -- so it is worth catching
  * at the tick that produced it rather than at the render that shows nothing.
  */
-export function isValidStateMap(stateMap: StateMap): boolean {
+function isValidStateMap(stateMap: StateMap): boolean {
   return [...stateMap].every(
     ([, [q, qd]]) => !Number.isNaN(q) && !Number.isNaN(qd),
   );

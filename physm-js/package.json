@@ -9,6 +9,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "lint:dead": "knip",
     "prebuild": "npm run wasm",
     "predev": "npm run wasm",
     "pretest": "npm run wasm:node",
@@ -28,11 +29,11 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@faker-js/faker": "^10.6.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
-    "@testing-library/user-event": "^14.5.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^5.0.0",
@@ -41,6 +42,7 @@
     "eslint-plugin-react-refresh": "^0.4.16",
     "globals": "^15.14.0",
     "jsdom": "^26.0.0",
+    "knip": "^6.35.1",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",

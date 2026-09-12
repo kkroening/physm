@@ -7,11 +7,12 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0015](0015.md) | Decide whether physm-js declares a surface, and run the dead-code check against it | RFC | Open |
 | [0014](0014.md) | An interactive scene editor that emits TSX | RFC | Open |
 | [0013](0013.md) | Decide whether `stabilize` should default off, rather than leaving it defaulted | RFC | Resolved |
 | [0012](0012.md) | Give `physm-rs` its own stabilizer, so `RsSolver` need not step one at a time | Enhancement | Resolved |
 | [0011](0011.md) | Give the binding a way to name a frame from outside the scene | RFC | Open |
-| [0010](0010.md) | Make a dead export a build signal rather than an eyeball finding | Enhancement | Open |
+| [0010](0010.md) | Make a dead export a build signal rather than an eyeball finding | Enhancement | Resolved |
 | [0009](0009.md) | Centre the demo's view on the plot rather than on a hardcoded point | Bug | Resolved |
 | [0008](0008.md) | Delete `testutils.ts`, which nothing imports and the lint config misnames | Bug | Resolved |
 | [0007](0007.md) | Settle whether authoring components should share names with the classes they wrap | RFC | Resolved |

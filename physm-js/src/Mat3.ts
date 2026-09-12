@@ -221,7 +221,7 @@ export function invert(m: Mat3): Mat3 {
 }
 
 /** The signed area scaling of the linear part, ignoring translation. */
-export function planarDeterminant(m: Mat3): number {
+function planarDeterminant(m: Mat3): number {
   return m[0] * m[4] - m[1] * m[3];
 }
 

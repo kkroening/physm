@@ -5,7 +5,7 @@ import type { ComponentMeta } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
 
 /** Any component, as the document holds it: a function of some props. */
-export type AnyComponent = (props: never) => ReactNode;
+type AnyComponent = (props: never) => ReactNode;
 
 /** A binding building block: a component that carries its own `meta`. */
 export type CoreComponent = AnyComponent & {
