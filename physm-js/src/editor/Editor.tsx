@@ -1291,23 +1291,72 @@ function ScenePane({
           .map((frame) => ({ frame, path: built.ownPathOf(frame) }))
       : [];
 
+  /** The nearest node at or above `path` whose position this body can move. */
+  const movable = (path: NodePath): NodePath | null => {
+    for (let depth = path.length; depth > 0; depth -= 1) {
+      const at = path.slice(0, depth);
+      const { type } = nodeAt(doc, focus, at);
+      if (
+        type.kind === 'core' &&
+        type.component.meta.slot === 'frame' &&
+        'position' in type.component.meta.props
+      ) {
+        return at;
+      }
+    }
+
+    return null;
+  };
+
   /**
-   * The frame a press at `point` would drag, and the node that built it: the
-   * selected node, when its gizmo is under the pointer -- which is how click
-   * cycling reaches one in a stack -- and otherwise the topmost gizmo, when its
-   * frame can be dragged. A gizmo on top that cannot drag blocks the press, as
-   * a click there would select something else.
+   * What a press at `point` drags: the frame, and the node whose `position`
+   * moves.
+   *
+   * The selected node's gizmo when the pointer is on it -- which is how click
+   * cycling reaches one in a stack -- and otherwise the topmost gizmo, when
+   * this body can move it.
+   *
+   * Failing that, whatever is under the pointer at all, gizmo or shape, leads
+   * back to the nearest node *above* it that this body can move. A press
+   * anywhere in a component's instance therefore drags the frame that puts the
+   * instance where it is: the instance's own frames belong to another body, so
+   * the alternative is refusing a gesture the picture invites.
+   *
+   * Deliberately not "the next gizmo down the stack this body can move": that
+   * agrees with the rule above wherever both answer, and where they differ it
+   * drags whatever frame happens to lie under the pointer rather than the one
+   * placing what was pointed at.
    */
   const dragTargetAt = (
     point: ScreenPoint,
   ): { frame: Frame; path: NodePath } | null => {
+    if (!('scene' in built) || !drawn) {
+      return null;
+    }
+
     const gizmos = gizmosAt(point);
     const selected = selectedPath
       ? gizmos.find(({ path }) => path?.join('.') === selectedPath.join('.'))
       : undefined;
-    const target = selected ?? gizmos[0];
+    const own = selected ?? gizmos[0];
+    if (own?.path) {
+      return { frame: own.frame, path: own.path };
+    }
 
-    return target?.path ? { frame: target.frame, path: target.path } : null;
+    const [hit] = hitsAt(drawn.scene, drawn.stateMap, xformMatrix, point);
+    const authored = hit ? built.authoredPathOf(hit) : null;
+    const path = authored ? movable(authored) : null;
+    if (!path) {
+      return null;
+    }
+
+    const placement = placeGizmos(
+      drawn.scene,
+      drawn.scene.getPosMatrixMap(drawn.stateMap),
+      xformMatrix,
+    ).find(({ frame }) => built.ownPathOf(frame)?.join('.') === path.join('.'));
+
+    return placement ? { frame: placement.frame, path } : null;
   };
 
   const hover = (event: MouseEvent<SVGSVGElement>): void => {

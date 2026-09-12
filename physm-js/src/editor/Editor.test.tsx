@@ -1968,16 +1968,37 @@ describe('Editor, dragging', () => {
     expect(code()).toContain('position={[0.39, 0]}');
   });
 
-  test("a frame inside a component's instance does not drag, and says so", () => {
+  test('a press inside an instance drags the frame that places it', () => {
     const { container } = render(<Editor />);
-    const before = code();
     const svg = container.querySelector<SVGSVGElement>('.editor__scene svg')!;
 
-    // Just below the pivot, whose frame the pendulum's own body builds.
+    // Just below the pivot, whose frame the pendulum's own body builds. That
+    // frame is not this body's to move, so the press takes the one above it:
+    // the fixed frame hanging the pendulum from the cart.
     fireEvent.mouseMove(svg, { clientX: 0, clientY: 12 });
 
-    expect(svg.style.cursor).toBe('not-allowed');
+    expect(svg.style.cursor).toBe('grab');
 
+    dragScene(container, [0, 12], [18, 12]);
+
+    expect(code()).toMatch(/<FixedFrame position=\{\[1, -0\.5\]\}>/);
+
+    fireEvent.click(undoButton());
+
+    // And just above it, where the cart's own gizmo lies under the pivot's.
+    // The pivot is on top and still cannot move, so the press passes over it.
+    fireEvent.mouseMove(svg, { clientX: 0, clientY: 8 });
+
+    expect(svg.style.cursor).toBe('grab');
+
+    dragScene(container, [0, 8], [18, 8]);
+
+    expect(code()).toMatch(/<FixedFrame position=\{\[1, -0\.5\]\}>/);
+  });
+
+  test('the pointer says nothing where nothing is', () => {
+    const { container } = render(<Editor />);
+    const svg = container.querySelector<SVGSVGElement>('.editor__scene svg')!;
     fireEvent.mouseMove(svg, { clientX: onCart[0], clientY: onCart[1] });
 
     expect(svg.style.cursor).toBe('grab');
@@ -1985,20 +2006,77 @@ describe('Editor, dragging', () => {
     fireEvent.mouseMove(svg, { clientX: 300, clientY: -300 });
 
     expect(svg.style.cursor).toBe('');
+  });
 
-    dragScene(container, [0, 12], [18, 12]);
+  test('a press refuses only where nothing at all can move', () => {
+    const [arm] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={[4, 0]} lineWidth={0.2} />
+      </RotationalFrame>,
+    );
+    const { container } = render(
+      <Editor
+        initialDocument={{
+          root: 'Scene',
+          definitions: [
+            {
+              name: 'Scene',
+              body: [
+                {
+                  type: { kind: 'defined', name: 'Arm' },
+                  props: {},
+                  children: [],
+                },
+              ],
+            },
+            { name: 'Arm', body: [arm!] },
+          ],
+        }}
+      />,
+    );
+    const svg = container.querySelector<SVGSVGElement>('.editor__scene svg')!;
+    const before = code();
 
-    expect(code()).toBe(before);
-
-    // Just above the pivot, the cart's gizmo lies under the pivot's. The pivot
-    // is on top, so it blocks the press, as a click there selects the pendulum.
-    fireEvent.mouseMove(svg, { clientX: 0, clientY: 8 });
+    // The instance stands at the top of the body with no frame placing it, so
+    // above the arm's own frame there is nothing for the press to take. This
+    // is the one refusal left, and it is one the picture cannot satisfy.
+    fireEvent.mouseMove(svg, { clientX: 0, clientY: 0 });
 
     expect(svg.style.cursor).toBe('not-allowed');
 
-    dragScene(container, [0, 8], [18, 8]);
+    dragScene(container, [0, 0], [18, 0]);
 
     expect(code()).toBe(before);
+  });
+
+  test('a press on a shape that has a position of its own drags its frame', () => {
+    const { container } = render(<Editor />);
+
+    // On the cart's box, clear of every gizmo. A box carries a `position`, so
+    // the walk has to pass over it deliberately: a shape has no gizmo to drag
+    // by, and the frame drawing it is what moves.
+    dragScene(container, [12, -6], [30, -6]);
+
+    expect(code()).toMatch(/<TrackFrame id="cart"[^>]*position=\{\[1, 0\]\}>/);
+  });
+
+  test('a press on a shape drags the frame it is drawn in', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <TrackFrame id="cart">
+            <Line endPos={[4, 0]} lineWidth={0.2} />
+          </TrackFrame>,
+        )}
+      />,
+    );
+
+    // Mid-rod, well clear of the cart's gizmo at the pane's corner. The line
+    // is not something this body can move on its own, so the frame drawing it
+    // moves instead.
+    dragScene(container, [36, 0], [54, 0]);
+
+    expect(code()).toContain('position={[1, 0]}');
   });
 
   test('the click that ends a drag picks nothing', () => {

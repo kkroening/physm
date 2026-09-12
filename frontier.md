@@ -6,16 +6,16 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**An imported component's tag, from its module rather than its function.** The
-document records an imported composite by `Function.name`, and the emitter
-writes both its tag and its import path from that -- so a production build,
-which minifies those names, would emit a file naming the wrong component and
-importing from the wrong path.
-[0014 page 6](docs/issues/0014/06-codegen.md) says the document holds function
-identities "so the emitter knows exactly which module each component came
-from", but a function carries no module path at runtime: something has to
-supply that map. A registry the host passes to the editor, or a build-time
-convention -- which of the two is the question to settle before building it.
+**Editing in the scene.** Most gestures in the scene pane are met with a
+refusal rather than an effect (_Karl, 2026-09-11_). Three parts:
+
+1. **A press drags the nearest thing that can move**, rather than being
+   blocked by something on top that cannot. A press anywhere in a component's
+   instance drags the frame that places the instance.
+2. **Shapes can be edited at all.** A selected box, circle or weight drags its
+   `position`; a selected line's ends drag independently; and selecting any of
+   them shows handles, so the picture says what can be moved.
+3. **The crosshairs and the grid can be hidden**, from a control in the pane.
 
 ## Next — the MVP
 
@@ -44,6 +44,13 @@ it. Play came forward because the shell made it cheap, and picking because it
 was built while gizmos were in review.
 
 ## Further out
+
+- An imported component's tag, from its module rather than its function. The
+  document records an imported composite by `Function.name`, and the emitter
+  writes both its tag and its import path from that, so a production build
+  would name the wrong component and import from the wrong path. A function
+  carries no module path at runtime: a registry the host passes in, or a
+  build-time convention -- Karl's call which.
 
 - Draw a pose that does not build. Retyping a position under a stated length
   fails at nearly every keystroke, so the kept scene shows the pose from
