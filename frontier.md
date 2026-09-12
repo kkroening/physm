@@ -6,15 +6,25 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-Nothing. Editing in the scene, the three parts Karl asked for on 2026-09-11,
-is done and recorded below; what comes next is open, and his standing
-invitation was "anything else you can think of like that". The candidates the
-work turned up, none of them chosen: a shape's own snapping targets (a box's
-corners, a circle's rim), which the *Further out* entry on snapping already
-half-covers; a way to reach a frame inside an instance without opening its
-tab; and zoom and pan, which the scene pane still lacks entirely -- the view
-transform is fixed at 18 pixels to the unit, so a rig larger than the pane
-cannot be edited at all. That last is the one this work kept running into.
+**The view can move.** The scene pane draws at a fixed 18 pixels to the world
+unit, centred on the world origin, so a rig larger than the pane cannot be
+edited at all -- every gesture built so far is confined to whatever happens to
+fit. Taken from the standing invitation to pick (_Karl, 2026-09-11_) as the
+candidate the editing work kept running into.
+
+Smaller than it sounds: `getViewXformMatrix` already takes a translation and a
+scale, and every consumer -- the scene, the gizmos, the handles, hit-testing,
+the snap points -- is handed the matrix rather than building one. Only the call
+site pins the two arguments, so this is making them state.
+
+The wheel zooms about the pointer, dragging empty space pans -- the one gesture
+the pane had spare -- and a control returns the view home. The scale is
+clamped, and that bound is a rule rather than a taste: the grid draws a line at
+every whole unit and a drag snaps to those units, so an unbounded zoom-out
+either floods the pane with lines or forces the grid to step, and a stepped
+grid still snapping to whole units would put the rule back out of sight of the
+mark standing for it. A decade-stepped grid, snapping to the step it draws, is
+what would let the clamp widen.
 
 ## Next — the MVP
 

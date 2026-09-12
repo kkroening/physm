@@ -666,6 +666,13 @@
   color: #4d6275;
 }
 
+/* Nothing to reset: the view is already where it opened. */
+.editor__overlays button:disabled {
+  border-color: #b9c6d3;
+  color: #a3b1bd;
+  cursor: default;
+}
+
 /* Play, pause and reset, over the scene they run -- and no wider than it, so a
    hint wraps inside the pane rather than running over the tree. */
 .editor__playback {

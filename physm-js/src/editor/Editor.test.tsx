@@ -1999,16 +1999,19 @@ describe('Editor, dragging', () => {
     expect(code()).toMatch(/<FixedFrame position=\{\[1, -0\.5\]\}>/);
   });
 
-  test('the pointer says nothing where nothing is', () => {
+  test('the pointer offers a grab wherever a press would do something', () => {
     const { container } = render(<Editor />);
     const svg = container.querySelector<SVGSVGElement>('.editor__scene svg')!;
     fireEvent.mouseMove(svg, { clientX: onCart[0], clientY: onCart[1] });
 
     expect(svg.style.cursor).toBe('grab');
 
+    // Empty space used to say nothing, because a press there did nothing. It
+    // pans now, so it offers the same grab; what a press refuses is pinned by
+    // the test below instead.
     fireEvent.mouseMove(svg, { clientX: 300, clientY: -300 });
 
-    expect(svg.style.cursor).toBe('');
+    expect(svg.style.cursor).toBe('grab');
   });
 
   test('a press refuses only where nothing at all can move', () => {
@@ -4057,5 +4060,153 @@ describe('Editor, hiding the marks and the grid', () => {
     expect(container.querySelector('.editor__parent-axis')).toBeNull();
 
     fireEvent.mouseUp(window, { clientX: 213, clientY: 4 });
+  });
+});
+
+describe('Editor, moving the view', () => {
+  const control = (name: string): HTMLElement =>
+    screen.getByRole('button', { name });
+
+  /** Where a whole unit of the world's x is drawn, in the pane's pixels. */
+  const drawnX = (container: HTMLElement, unit: number): number =>
+    Number(
+      container
+        .querySelector(`.editor__grid [data-x="${unit}"]`)!
+        .getAttribute('x1'),
+    );
+
+  /** Where the world's y origin is drawn. */
+  const drawnY = (container: HTMLElement): number =>
+    Number(
+      container.querySelector('.editor__grid [data-y="0"]')!.getAttribute('y1'),
+    );
+
+  test('the wheel zooms about the pointer, not about the pane', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      const svg = container.querySelector('.editor__scene svg')!;
+
+      // The world origin is at the pane's middle, eighteen pixels to the unit.
+      expect([drawnX(container, 0), drawnX(container, 1)]).toEqual([200, 218]);
+
+      // x = 5 is drawn ninety pixels right of the origin. A notch in, taken
+      // there, has to leave it there -- zooming about the pane's middle
+      // instead would carry it outwards.
+      fireEvent.wheel(svg, { deltaY: -320, clientX: 290, clientY: 150 });
+
+      expect(drawnX(container, 5)).toBeCloseTo(290, 6);
+      expect(drawnX(container, 1) - drawnX(container, 0)).toBeCloseTo(
+        18 * Math.E,
+        6,
+      );
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('dragging empty space moves the view, and nothing in the scene', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      const before = code();
+
+      // The pane's top-left corner: no shape, and no frame's gizmo.
+      dragScene(container, [30, 30], [70, 55]);
+
+      expect(drawnX(container, 0)).toBeCloseTo(240, 6);
+      expect(drawnY(container)).toBeCloseTo(175, 6);
+      expect(code()).toBe(before);
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('a click with a wobble in it is not a pan', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+
+      // Two pixels of slop, which is a click. Panning on that would swallow
+      // the release, and a click on empty space is how the selection clears.
+      dragScene(container, [30, 30], [32, 31]);
+
+      expect(drawnX(container, 0)).toBe(200);
+      expect(control('Reset view')).toBeDisabled();
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('a pan leaves the selection alone rather than picking at its release', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      select('Box');
+
+      expect(shown()).toBe('Box');
+
+      dragScene(container, [30, 30], [70, 55]);
+
+      // The click a browser raises when the press and its release land on one
+      // element: without it this asserts nothing, since picking is what that
+      // click does and a drag alone never raises one.
+      clickScene(container, [70, 55]);
+
+      expect(shown()).toBe('Box');
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('Reset view says whether the view has moved, and returns it', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      const svg = container.querySelector('.editor__scene svg')!;
+
+      expect(control('Reset view')).toBeDisabled();
+
+      fireEvent.wheel(svg, { deltaY: -320, clientX: 290, clientY: 150 });
+
+      expect(control('Reset view')).toBeEnabled();
+
+      dragScene(container, [30, 30], [70, 55]);
+      fireEvent.click(control('Reset view'));
+
+      expect([drawnX(container, 0), drawnX(container, 1)]).toEqual([200, 218]);
+      expect(drawnY(container)).toBe(150);
+      expect(control('Reset view')).toBeDisabled();
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('the same gesture reaches the same node once the view has moved', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+
+      // Everything that decides a press -- the gizmos, the hits, the snap
+      // points, the parent's axes a drag writes along -- reads the one view
+      // transform, so moving the view must change which pixels a gesture is
+      // aimed at and nothing else about it.
+      dragScene(container, [200, 150], [218, 150]);
+      const unpanned = code();
+
+      expect(unpanned).toMatch(/position=\{\[1, -0\.5\]\}/);
+
+      fireEvent.click(undoButton());
+      dragScene(container, [30, 30], [66, 30]);
+
+      expect(drawnX(container, 0)).toBeCloseTo(236, 6);
+
+      // The same drag, thirty-six pixels along, where the pan put it.
+      dragScene(container, [236, 150], [254, 150]);
+
+      expect(code()).toBe(unpanned);
+    } finally {
+      pane.restore();
+    }
   });
 });

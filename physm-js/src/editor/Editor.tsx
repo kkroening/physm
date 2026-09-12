@@ -21,6 +21,7 @@ import movedPosition, {
 } from './movedPosition';
 import placeGizmos, { HANDLE_REACH, placePoint } from './placeGizmos';
 import snapPoints, { nearestSnap } from './snapPoints';
+import { HOME, isHome, pannedBy, zoomedAbout } from './viewChange';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
 import useSimulation from './useSimulation';
@@ -73,9 +74,7 @@ import type { ScreenPoint } from './placeGizmos';
 import type { Selection } from './PropertiesPane';
 import type { Trail } from './../react/buildScene';
 import type { Vec3 } from './../Vec3';
-
-/** Pixels per scene unit. */
-const VIEW_SCALE = 18;
+import type { View } from './viewChange';
 
 /** The order the library shelves its categories in. */
 const CATEGORIES = ['Frames', 'Shapes', 'Physics', 'Constraints'] as const;
@@ -1269,7 +1268,10 @@ function ScenePane({
     playable && 'scene' in built ? built : null,
     structure,
   );
-  const xformMatrix = getViewXformMatrix([0, 0], VIEW_SCALE, size);
+  // Where the pane is looking. The transform always took these two; until now
+  // the call site pinned them.
+  const [view, setView] = useState<View>(HOME);
+  const xformMatrix = getViewXformMatrix(view.translation, view.scale, size);
   const failure = 'error' in built ? built.error : simulation.error;
 
   // One pose for the scene and its gizmos, so a gizmo is always where its frame
@@ -1339,6 +1341,32 @@ function ScenePane({
 
     return [event.clientX - bounds.left, event.clientY - bounds.top];
   };
+
+  // The wheel zooms about the pointer. Attached by hand rather than through
+  // `onWheel`, because React's own wheel listener is passive, and there the
+  // `preventDefault` that stops the page scrolling along with the zoom is
+  // silently ignored.
+  useEffect(() => {
+    const element = svgRef.current;
+    if (!element) {
+      return;
+    }
+
+    const zoom = (event: WheelEvent): void => {
+      event.preventDefault();
+      const bounds = element.getBoundingClientRect();
+      const at: ScreenPoint = [
+        event.clientX - bounds.left,
+        event.clientY - bounds.top,
+      ];
+      const { deltaY } = event;
+      setView((current) => zoomedAbout(current, at, deltaY, size));
+    };
+
+    element.addEventListener('wheel', zoom, { passive: false });
+
+    return () => element.removeEventListener('wheel', zoom);
+  }, [size]);
 
   /**
    * Everything under `point`, topmost first -- the shapes alone while the
@@ -1612,15 +1640,66 @@ function ScenePane({
     }
 
     const point = pointOf(event);
-    // Anything under the pointer, not a gizmo: a shape leading nowhere
-    // refuses too, and silence there reads as empty space.
+    // A shape that leads nowhere still refuses. Empty space no longer reads as
+    // silence, though: a drag there moves the view.
     setCursor(
-      dragTargetAt(point)
-        ? 'grab'
-        : hitsAtPoint(point).length
-          ? 'not-allowed'
-          : '',
+      !dragTargetAt(point) && hitsAtPoint(point).length
+        ? 'not-allowed'
+        : 'grab',
     );
+  };
+
+  /**
+   * A drag that points at nothing moves the view rather than the scene.
+   *
+   * The one gesture the pane had spare -- a press on empty space did nothing
+   * at all before this. It waits for the pointer to leave the press, as a
+   * drag does, so a click with a pixel of wobble in it still clears the
+   * selection; and once it has moved, the release is swallowed like any other
+   * drag's, or letting go would select whatever the pan had brought under the
+   * pointer.
+   */
+  const startPan = (
+    event: MouseEvent<SVGSVGElement>,
+    from: ScreenPoint,
+  ): void => {
+    event.preventDefault();
+    setCursor('grabbing');
+    const listening = new AbortController();
+    let last = from;
+    let panned = false;
+
+    const end = (): void => {
+      listening.abort();
+      setCursor('');
+    };
+
+    const move = (moveEvent: globalThis.MouseEvent): void => {
+      if (moveEvent.buttons % 2 === 0) {
+        end();
+        return;
+      }
+
+      const to = pointOf(moveEvent);
+      if (
+        !panned &&
+        Math.hypot(to[0] - from[0], to[1] - from[1]) <= SAME_PLACE
+      ) {
+        return;
+      }
+
+      panned = true;
+      dragged.current = true;
+
+      // Settled here, not inside the updater: React runs that later, by which
+      // time `last` has already moved on and every pan would be by nothing.
+      const by: ScreenPoint = [to[0] - last[0], to[1] - last[1]];
+      last = to;
+      setView((current) => pannedBy(current, by));
+    };
+
+    window.addEventListener('mousemove', move, { signal: listening.signal });
+    window.addEventListener('mouseup', end, { signal: listening.signal });
   };
 
   const startDrag = (event: MouseEvent<SVGSVGElement>): void => {
@@ -1635,6 +1714,7 @@ function ScenePane({
     const from = pointOf(event);
     const target = dragTargetAt(from);
     if (!target) {
+      startPan(event, from);
       return;
     }
 
@@ -1912,6 +1992,13 @@ function ScenePane({
           onClick={() => setShowGrid(!showGrid)}
         >
           Grid
+        </button>
+        <button
+          type="button"
+          disabled={isHome(view)}
+          onClick={() => setView(HOME)}
+        >
+          Reset view
         </button>
       </div>
       <div className="editor__playback">
