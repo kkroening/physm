@@ -6,15 +6,14 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-Nothing. Editing in the scene, the three parts Karl asked for on 2026-09-11,
-is done and recorded below; what comes next is open, and his standing
-invitation was "anything else you can think of like that". The candidates the
-work turned up, none of them chosen: a shape's own snapping targets (a box's
-corners, a circle's rim), which the *Further out* entry on snapping already
-half-covers; a way to reach a frame inside an instance without opening its
-tab; and zoom and pan, which the scene pane still lacks entirely -- the view
-transform is fixed at 18 pixels to the unit, so a rig larger than the pane
-cannot be edited at all. That last is the one this work kept running into.
+**A grid that steps, and snaps to the step it draws.** The grid puts a line at
+every whole unit and a drag snaps to whole units, which is why the view's
+zoom-out is clamped: further out, the lines either flood the pane or the grid
+has to step, and a stepped grid still snapping to units it no longer draws
+would put the rule out of sight of its mark -- the thing hiding the marks was
+built to stop. Stepping by powers of ten, with the snap following the step, is
+what lets the clamp widen. The snap's reach is already capped in world units as
+well as pixels, which is the same argument met from the other side.
 
 ## Next — the MVP
 
@@ -74,6 +73,16 @@ was built while gizmos were in review.
   targets" rather than "all of them go" -- a change to `snapPoints` with its
   own tests. Whether that, a third control, or the current pairing is right is
   Karl's call.
+- Reaching the view from the keyboard. The wheel and a button-held drag are
+  the only ways to zoom or pan, and `Reset view` -- the one keyboard-reachable
+  control -- is disabled precisely while it is all someone has. The view is
+  also the first piece of editor state with no typed surface: a frame that
+  cannot be dragged can still be reached by typing into the properties pane,
+  and there is no equivalent for scale or origin. `App.jsx` has carried a
+  keyboard scheme all along, but it leans on a held-key loop with a
+  `deltaTime`, and four of its six keys are letters the tree's type-ahead owns;
+  `-` and `=` are free. Whether navigation is owed a keyboard path at all, and
+  where those keys would live, is Karl's call.
 - What a drag does while the scene plays. The frame drifts from the pointer,
   since its own coordinate and its parents' keep moving: pause while a drag is
   held, refuse one during play, or keep the live nudge. Karl's call.
@@ -310,6 +319,15 @@ was built while gizmos were in review.
   that needs nothing drawn. With the grid off a drag no longer snaps to whole
   units. Hiding the marks alone would have left those rules deciding presses
   invisibly.
+- **The view can move** — the wheel zooms about the pointer, dragging empty
+  space pans, and a control returns the view home; before this the scene pane
+  drew at a fixed eighteen pixels to the unit centred on the world origin, so a
+  rig larger than the pane could not be edited at all. `getViewXformMatrix`
+  always took a translation and a scale and every consumer is handed the
+  matrix, so the change was those two arguments becoming state -- except in the
+  drag, which caches values derived from the matrix across frames and so
+  refuses the wheel while it runs. The zoom-out is clamped by the grid argument
+  above; the zoom-in bound is a pick.
 - **Constants for repeated values** — a compound value written three times or
   more anywhere in the module is declared once, above the definitions, and
   used by name: the starter's bob becomes `const POSITION = [4, 0]`. The name
