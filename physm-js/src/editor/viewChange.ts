@@ -26,7 +26,7 @@ export const HOME: View = { translation: [0, 0], scale: VIEW_SCALE };
  *
  * This was four while the grid drew a line at every whole unit, because
  * further out the lines flood the pane and the snap's window grows to cover
- * the unit it was meant to pick out. The grid steps by powers of ten now and
+ * the unit it was meant to pick out. The grid steps up a 1-2-5 ladder now and
  * the snap follows the step it draws, so both of those bounds moved with it:
  * the lines stay at least twelve pixels apart at any scale, and the reach is
  * held to a quarter of a step from either side.

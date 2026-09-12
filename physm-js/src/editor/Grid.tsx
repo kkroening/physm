@@ -26,8 +26,9 @@ function GridLineView({
 
 /**
  * A faint line at every multiple of the grid's step -- a whole unit while the
- * lines are far enough apart to read, and a power of ten of them once they are
- * not -- across the scene pane and under the scene, so a position can be read
+ * lines are far enough apart to read, and a rung of the 1-2-5 ladder above it
+ * once they are not -- across the scene pane and under the scene, so a
+ * position can be read
  * off the picture. The grid's own axes are a shade darker, so its origin can be
  * found. `lattice` takes its units to the screen: the view, for the world's
  * grid.

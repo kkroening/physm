@@ -6,14 +6,15 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**A grid that steps 1-2-5 rather than by decades.** A pure decade ladder swings
-the spacing tenfold inside each step -- twelve pixels at one end, a hundred and
-nineteen at the other -- and since the snap rides the same ladder that is not
-only a look: one wheel notch takes a person from placing on multiples of ten to
-multiples of a hundred, with no rung between, and that is what gets written
-into the code. A 1-2-5 ladder holds both swings to 2.5x. It wants its own tests
-at the new rungs and a look on screen, which is why it is a step rather than a
-tweak.
+**`clickScene` should press and release, as `dragScene` now does.** It fires a
+bare `click` with no `mousedown`, so it cannot spend the `dragged` flag the way
+a real click does -- which is why a click straight after a drag used to be
+swallowed, an artifact of the helper rather than anything a browser does. The
+trap is latent rather than gone: a dozen hand-rolled drags in the file still
+end at `mouseup` with the flag set, none of them yet followed by a
+`clickScene`, and the first one that is will swallow a click no browser would.
+Closing it for clicks is the same fix the drag helper just had, across
+forty-odd call sites.
 
 _The MVP below is complete but for promote-to-prop, and nearly everything left
 in *Further out* is marked as Karl's call -- so after this one, the direction
@@ -69,15 +70,6 @@ was built while gizmos were in review.
   point. Neither is a target yet -- Karl's call -- though a frame at the top
   whose origin sits at its position reaches the origin as a crossing of the
   grid: any rotational frame, and a track frame at a coordinate of zero.
-- `clickScene` should press and release, as `dragScene` now does. It fires a
-  bare `click` with no `mousedown`, so it cannot spend the `dragged` flag the
-  way a real click does -- which is why a click straight after a drag used to
-  be swallowed, an artifact of the helper rather than anything a browser does.
-  The trap is latent rather than gone: a dozen hand-rolled drags in the file
-  still end at `mouseup` with the flag set, none of them yet followed by a
-  `clickScene`, and the first one that is will swallow a click no browser
-  would. Closing it for clicks is the same fix this did for drags, across
-  forty-odd call sites.
 - Which snap targets survive the marks being hidden. Point snapping goes with
   *Marks* today because the ring reporting it is drawn there, but the targets
   are a mixed bag: another frame's origin is invisible once the marks are off,
@@ -342,6 +334,14 @@ was built while gizmos were in review.
   refuses the wheel while it runs. Its zoom-out was clamped by the grid drawing
   a line at every unit -- see the entry above, which is what lifted that -- and
   the zoom-in bound is a pick.
+- **A grid that steps 1-2-5** — the grid's step is the smallest rung of the
+  1-2-5 ladder whose lines clear twelve pixels, rather than the smallest power
+  of ten. A decade ladder let the spacing grow tenfold before the next rung
+  arrived, which as drawing is only crowded at one end and sparse at the other
+  -- but the snap rides the same ladder, so it also meant one wheel notch took
+  a person from placing on tens to placing on hundreds with nothing between,
+  and that is what reaches the code. No two rungs are further apart than two
+  and a half.
 - **The drag helper raises the click a browser does** — `dragScene`, which
   nearly every scene test goes through, fired mouse down, move and up and
   stopped. A browser also raises a `click`, and picking listens to that and to

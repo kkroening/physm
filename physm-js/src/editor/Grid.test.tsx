@@ -30,11 +30,13 @@ describe('gridStep', () => {
     expect(gridStep(12)).toBe(1);
   });
 
-  test('a decade at a time as the view pulls back', () => {
-    expect(gridStep(11)).toBe(10);
-    expect(gridStep(4)).toBe(10);
+  test('a rung at a time as the view pulls back', () => {
+    // 1, 2, 5, 10, 20 -- the ladder rather than the decades. Every one of
+    // these would have been 10 or 100 on a ladder of powers of ten.
+    expect(gridStep(11)).toBe(2);
+    expect(gridStep(4)).toBe(5);
     expect(gridStep(1.21)).toBe(10);
-    expect(gridStep(1)).toBe(100);
+    expect(gridStep(1)).toBe(20);
   });
 
   test('never finer than a unit, however near the view', () => {
@@ -43,18 +45,47 @@ describe('gridStep', () => {
   });
 
   test('its lines are never crowded, and no coarser than they need to be', () => {
-    for (const scale of [1, 1.7, 4, 9, 11, 12, 18, 47, 119]) {
+    /** The rung below `step` on the 1-2-5 ladder. */
+    const under = (step: number): number => {
+      const decade = 10 ** Math.floor(Math.log10(step) + 1e-9);
+      const rung = Math.round(step / decade);
+
+      return rung === 1 ? decade / 2 : (rung === 2 ? 1 : 2) * decade;
+    };
+
+    for (const scale of [1, 1.7, 4, 6, 9, 11, 12, 18, 47, 119]) {
       const step = gridStep(scale);
 
       // Twelve pixels is the closest the grid draws two lines.
       expect(step * scale).toBeGreaterThanOrEqual(12);
 
-      // And the step is the smallest that clears it: a decade finer would
+      // And the step is the smallest rung that clears it: the one below would
       // have crowded them -- except at the floor of a whole unit.
       if (step > 1) {
-        expect((step / 10) * scale).toBeLessThan(12);
+        expect(under(step) * scale).toBeLessThan(12);
       }
     }
+  });
+
+  test('no rung is more than two and a half times the one beneath it', () => {
+    // What bounds how far the spacing -- and the snap with it -- can swing.
+    // Measured from two outputs of `gridStep` rather than from the ladder's
+    // own definition, since an expectation derived from the definition holds
+    // whatever the function returns: two per cent a notch down the range is
+    // fine enough that no rung is stepped over.
+    const steps = [
+      ...new Set(
+        Array.from({ length: 400 }, (_, index) => gridStep(12 / 1.02 ** index)),
+      ),
+    ];
+
+    expect(steps.length).toBeGreaterThan(5);
+
+    steps.forEach((step, index) => {
+      if (index > 0) {
+        expect(step / steps[index - 1]!).toBeLessThanOrEqual(2.5);
+      }
+    });
   });
 });
 
@@ -121,9 +152,9 @@ describe('gridLines', () => {
 });
 
 describe('Grid', () => {
-  test('pulled back, it steps to tens rather than flooding the pane', () => {
+  test('pulled back, it steps up the ladder rather than flooding the pane', () => {
     // Four pixels to the unit: a line per unit would be four pixels apart and
-    // five hundred of them across, so the grid draws tens, forty apart.
+    // five hundred of them across, so the grid draws fives, twenty apart.
     const far = getViewXformMatrix([0, 0], 4, [400, 300]);
     const { container } = render(
       <svg>
@@ -137,14 +168,24 @@ describe('Grid', () => {
       ),
     ).toEqual([
       '-50',
+      '-45',
       '-40',
+      '-35',
       '-30',
+      '-25',
       '-20',
+      '-15',
       '-10',
+      '-5',
+      '5',
       '10',
+      '15',
       '20',
+      '25',
       '30',
+      '35',
       '40',
+      '45',
       '50',
     ]);
 
