@@ -1,0 +1,4 @@
+{
+  "include": ["files", "dependencies", "unlisted", "binaries", "unresolved"],
+  "ignoreBinaries": ["wasm-pack"]
+}

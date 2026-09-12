@@ -232,6 +232,19 @@ jobs:
       - name: Lint
         run: npm run lint -- --max-warnings 13
 
+      # Both unused-variable rules above see unused *locals*; nothing in the
+      # toolchain sees a module with no importer, which is how `testutils.ts`
+      # outlived its last consumer and was found by eye rather than by CI
+      # (0008, 0010). This closes that: a file nobody imports fails here.
+      #
+      # Scoped to files, dependencies and binaries, and deliberately *not* to
+      # unused exports -- a component library's props interfaces account for
+      # forty-five of those on day one, and a check that must be argued with
+      # every time is one that gets removed. What the package's public export
+      # surface is, and therefore which of those are real, is 0015.
+      - name: Dead code
+        run: npm run lint:dead
+
       # `.prettierrc` was committed and enforced by nothing, so the tree drifted
       # out of its own style: fifteen files were unformatted by the time anyone
       # ran it. A committed convention nothing checks is the worst of the three
