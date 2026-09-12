@@ -64,11 +64,28 @@ describe('gridStep', () => {
       if (step > 1) {
         expect(under(step) * scale).toBeLessThan(12);
       }
-
-      // No rung is more than two and a half times the one beneath it, which
-      // is what bounds how far the spacing -- and the snap with it -- swings.
-      expect(step / under(step)).toBeLessThanOrEqual(2.5);
     }
+  });
+
+  test('no rung is more than two and a half times the one beneath it', () => {
+    // What bounds how far the spacing -- and the snap with it -- can swing.
+    // Measured from two outputs of `gridStep` rather than from the ladder's
+    // own definition, since an expectation derived from the definition holds
+    // whatever the function returns: two per cent a notch down the range is
+    // fine enough that no rung is stepped over.
+    const steps = [
+      ...new Set(
+        Array.from({ length: 400 }, (_, index) => gridStep(12 / 1.02 ** index)),
+      ),
+    ];
+
+    expect(steps.length).toBeGreaterThan(5);
+
+    steps.forEach((step, index) => {
+      if (index > 0) {
+        expect(step / steps[index - 1]!).toBeLessThanOrEqual(2.5);
+      }
+    });
   });
 });
 

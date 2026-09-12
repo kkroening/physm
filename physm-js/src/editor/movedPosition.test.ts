@@ -73,15 +73,20 @@ describe('griddedPosition', () => {
   });
 
   test('pulled back, it snaps to the step the grid draws, not to units', () => {
-    // Four pixels to the unit: the grid steps to tens there, so tens are what
-    // a drag lands on, and a unit is no longer a line to be caught by.
+    // Four pixels to the unit: the grid steps to fives there, so fives are
+    // what a drag lands on, and a unit is no longer a line to be caught by.
     const far = getViewXformMatrix([0, 0], 4, [400, 300]);
 
     // Two pixels short of ten units across.
     expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [38, 0])).toEqual([10, 0]);
 
-    // And half way between two of its lines is left where it is. Five units
-    // is a line of its own now, so the gap's middle sits at 2.5.
+    // Five units is a line of its own on this ladder, so a drag that comes
+    // within reach of it lands there. Under a ladder of decades the nearest
+    // line would be ten, eighteen pixels off, and this would stay at 4.5.
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [18, 0])).toEqual([5, 0]);
+
+    // And half way between two of its lines is left where it is -- true of
+    // both ladders, so it says something about the gap rather than the rungs.
     expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [10, 0])).toEqual([
       2.5, 0,
     ]);
