@@ -166,6 +166,38 @@
   color: #6c4f9e;
 }
 
+/* A drop lands among rows as readily as inside one, so every row carries a gap
+   above it: nothing to see until a drag is over it. */
+/* No vertical space of its own, so the rows keep their spacing -- but above
+   them, so the whole painted band takes the drop rather than only the 2px it
+   does not overlap a neighbour by. */
+.editor__gap {
+  position: relative;
+  z-index: 1;
+  height: 4px;
+  margin: -2px 0;
+  border-radius: 2px;
+}
+
+.editor__gap[data-over] {
+  background-color: #2d6a4f;
+}
+
+/* The row being carried, as against the ones it is dragged over. */
+.editor__row[data-dragging] {
+  opacity: 0.5;
+}
+
+.editor__row[data-over] {
+  outline: 2px solid #2d6a4f;
+  outline-offset: -2px;
+}
+
+[role='tree'][data-over] {
+  outline: 2px dashed #2d6a4f;
+  outline-offset: -2px;
+}
+
 .editor__disclosure {
   width: 0.75rem;
   color: #738290;

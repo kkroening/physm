@@ -330,26 +330,111 @@ function placeRefusal(
   return null;
 }
 
+/** Where a row dropped on another lands. */
+export type DropWhere = 'inside' | 'before';
+
 /**
- * Where moving the node at `path` into the node above it puts it: after that
- * node's last child. `null` for the first of its siblings, or when the node
- * above takes no children.
+ * Where a node dropped on the row at `target` lands: inside that node after
+ * its last child, or among that node's siblings, just before it. `null` for a
+ * drop inside a node that takes no children.
+ *
+ * `target` is `null` for a drop on the body itself, which lands at its end --
+ * the point adding with nothing selected lands at, and the only one `where`
+ * does not decide.
  */
-export function indentPoint(
+export function dropPoint(
   doc: SceneDocument,
   definition: string,
-  path: NodePath,
+  target: NodePath | null,
+  where: DropWhere,
 ): InsertionPoint | null {
-  const index = path[path.length - 1]!;
-  if (index === 0) {
-    return null;
+  if (!target) {
+    return insertionPoint(doc, definition, null);
   }
 
-  const above = [...path.slice(0, -1), index - 1];
-  const node = nodeAt(doc, definition, above);
+  if (where === 'before') {
+    const parent = target.slice(0, -1);
+
+    return {
+      parent,
+      index: target[target.length - 1]!,
+      holder: parent.length
+        ? holderOf(doc, nodeAt(doc, definition, parent))
+        : 'root',
+    };
+  }
+
+  const node = nodeAt(doc, definition, target);
   const holder = holderOf(doc, node);
 
-  return holder ? { parent: above, index: node.children.length, holder } : null;
+  return holder
+    ? { parent: target, index: node.children.length, holder }
+    : null;
+}
+
+/** Whether the node at `from` stands in the list `point` names. */
+function inList(from: NodePath, point: InsertionPoint): boolean {
+  return (
+    from.length === point.parent.length + 1 &&
+    point.parent.every((segment, at) => segment === from[at])
+  );
+}
+
+/**
+ * `point.index`, counted in the list as it reads once the node at `from` has
+ * left it -- which is the index `moveNode` takes.
+ *
+ * Only a move within one list counts differently, and only when the node stood
+ * before the point: everything after it has shifted down by one.
+ */
+export function movedIndex(from: NodePath, point: InsertionPoint): number {
+  return inList(from, point) && from[from.length - 1]! < point.index
+    ? point.index - 1
+    : point.index;
+}
+
+/**
+ * Why the node at `from` cannot be dropped on the row at `target`, or `null`
+ * when it can.
+ *
+ * A drop is held to what adding there is held to -- the slot rules, and a
+ * component's place for its children -- and to two a move has of its own: a
+ * node cannot go inside itself, and one dropped where it already stands is
+ * refused rather than recorded as a step that changes nothing.
+ */
+export function dropRefusal(
+  doc: SceneDocument,
+  definition: string,
+  from: NodePath,
+  target: NodePath | null,
+  where: DropWhere,
+): string | null {
+  const point = dropPoint(doc, definition, target, where);
+  if (!point) {
+    // Only a drop inside a node yields no point, so there is a target.
+    const name = nodeName(nodeAt(doc, definition, target!).type);
+
+    return `A ${name} takes no children.`;
+  }
+
+  const intoItself =
+    point.parent.length >= from.length &&
+    from.every((segment, at) => segment === point.parent[at]);
+  if (intoItself) {
+    return 'A node cannot go inside itself.';
+  }
+
+  if (
+    inList(from, point) &&
+    movedIndex(from, point) === from[from.length - 1]
+  ) {
+    return 'It is already there.';
+  }
+
+  return (
+    slotRefusal(nodeAt(doc, definition, from).type, point) ??
+    placeRefusal(doc, definition, from, point)
+  );
 }
 
 /**
@@ -375,6 +460,25 @@ export function outdentPoint(
       ? holderOf(doc, nodeAt(doc, definition, grandparent))
       : 'root',
   };
+}
+
+/**
+ * Where moving the node at `path` into the node above it puts it: after that
+ * node's last child. `null` for the first of its siblings, or when the node
+ * above takes no children.
+ */
+export function indentPoint(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+): InsertionPoint | null {
+  const index = path[path.length - 1]!;
+
+  // Indenting is a drop inside the row above. Outdenting is not a drop: it
+  // lands just after its target, where no drop does.
+  return index === 0
+    ? null
+    : dropPoint(doc, definition, [...path.slice(0, -1), index - 1], 'inside');
 }
 
 /**

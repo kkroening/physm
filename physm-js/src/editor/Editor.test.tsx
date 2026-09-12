@@ -1942,7 +1942,7 @@ describe('Editor, dragging', () => {
         )}
       />,
     );
-    fireEvent.click(rows()[1]!.firstElementChild!);
+    fireEvent.click(rowLine(rows()[1]!));
     extract('Slider');
     fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
       clientX: 0,
@@ -2273,7 +2273,7 @@ describe('Editor, dragging', () => {
           )}
         />,
       );
-      fireEvent.click(rows()[0]!.firstElementChild!);
+      fireEvent.click(rowLine(rows()[0]!));
       extract('Arm');
       const svg = container.querySelector('.editor__scene svg')!;
 
@@ -2849,10 +2849,23 @@ function foundStatus(): string {
     .textContent!;
 }
 
+/** The gap above a row, which a drop lands in to go among its siblings. */
+function gapOf(item: HTMLElement): HTMLElement {
+  return item.querySelector<HTMLElement>('.editor__gap')!;
+}
+
+/**
+ * A row's clickable line. The gap a drop lands in comes first in the item, so
+ * the line is asked for by name rather than by position.
+ */
+function rowLine(item: HTMLElement): HTMLElement {
+  return item.querySelector<HTMLElement>('.editor__row')!;
+}
+
 /** The rows find has marked, by what each shows. */
 function marks(): (string | null)[] {
   return rows()
-    .filter((row) => row.firstElementChild!.hasAttribute('data-match'))
+    .filter((row) => rowLine(row).hasAttribute('data-match'))
     .map((row) => row.getAttribute('aria-label'));
 }
 
@@ -3227,7 +3240,7 @@ describe('Editor, moving a node into another', () => {
     const arm = (): HTMLElement =>
       screen.getByRole('treeitem', { name: 'RotationalFrame id="arm"' });
     act(() => arm().focus());
-    fireEvent.click(arm().firstElementChild!);
+    fireEvent.click(rowLine(arm()));
     pressKey('Enter');
     fireEvent.keyDown(arm(), {
       key: 'ArrowRight',
@@ -3268,8 +3281,7 @@ describe('Editor, moving a node into another', () => {
     expect(out()).toBeDisabled();
 
     fireEvent.click(
-      screen.getByRole('treeitem', { name: 'TrackFrame id="cart"' })
-        .firstElementChild!,
+      rowLine(screen.getByRole('treeitem', { name: 'TrackFrame id="cart"' })),
     );
 
     expect(into()).toBeDisabled();
@@ -3284,8 +3296,9 @@ describe('Editor, moving a node into another', () => {
     );
 
     fireEvent.click(
-      screen.getByRole('treeitem', { name: 'RotationalFrame id="arm"' })
-        .firstElementChild!,
+      rowLine(
+        screen.getByRole('treeitem', { name: 'RotationalFrame id="arm"' }),
+      ),
     );
     fireEvent.click(into());
 
@@ -3299,7 +3312,7 @@ describe('Editor, moving a node into another', () => {
   test('a move the rules refuse does nothing, from the keyboard either', () => {
     render(<Editor />);
     const weight = screen.getByRole('treeitem', { name: 'Weight mass=50' });
-    fireEvent.click(weight.firstElementChild!);
+    fireEvent.click(rowLine(weight));
     const before = code();
 
     // Out of the cart would put a weight at the top of the scene.
@@ -3323,7 +3336,7 @@ describe('Editor, moving a node into another', () => {
       screen.getByRole('treeitem', { name: 'TrackFrame id="cart"' });
     const arm = (): HTMLElement =>
       screen.getByRole('treeitem', { name: 'RotationalFrame id="arm"' });
-    fireEvent.click(cart().firstElementChild!);
+    fireEvent.click(rowLine(cart()));
     act(() => arm().focus());
 
     // The arm is at the top of the body: there is nothing to move it out of,
@@ -3337,7 +3350,7 @@ describe('Editor, moving a node into another', () => {
     expect(document.activeElement).toBe(arm());
 
     // The cart, first in the body, has nothing above it to move into.
-    fireEvent.click(arm().firstElementChild!);
+    fireEvent.click(rowLine(arm()));
     act(() => cart().focus());
     fireEvent.keyDown(cart(), {
       key: 'ArrowRight',
@@ -3352,7 +3365,7 @@ describe('Editor, moving a node into another', () => {
     render(<Editor initialDocument={doc()} />);
     const arm = (): HTMLElement =>
       screen.getByRole('treeitem', { name: 'RotationalFrame id="arm"' });
-    fireEvent.click(arm().firstElementChild!);
+    fireEvent.click(rowLine(arm()));
     const before = code();
 
     for (const held of [{ ctrlKey: true }, { metaKey: true }]) {
@@ -3370,5 +3383,172 @@ describe('Editor, moving a node into another', () => {
     }
 
     expect(code()).toBe(before);
+  });
+});
+
+describe('Editor, dragging a row', () => {
+  const doc = (): SceneDocument =>
+    documentFrom(
+      <>
+        <TrackFrame id="cart">
+          <Box width={2} height={1} />
+          <Weight mass={5} />
+          <Line endPos={[1, 0]} />
+        </TrackFrame>
+        <RotationalFrame id="arm" />
+      </>,
+    );
+
+  // Rows: [0] cart, [1] box, [2] weight, [3] line, [4] arm.
+
+  /** What a browser hands a drag, which jsdom supplies nothing of. */
+  const transfer = (): DataTransfer =>
+    ({
+      setData: vi.fn(),
+      getData: vi.fn(),
+      effectAllowed: 'none',
+      dropEffect: 'none',
+    }) as unknown as DataTransfer;
+
+  const pickUp = (at: number): DataTransfer => {
+    const dataTransfer = transfer();
+    fireEvent.dragStart(rowLine(rows()[at]!), { dataTransfer });
+
+    return dataTransfer;
+  };
+
+  const dragOver = (target: HTMLElement): DataTransfer => {
+    const dataTransfer = transfer();
+    fireEvent.dragOver(target, { dataTransfer });
+
+    return dataTransfer;
+  };
+
+  test('the drag carries data, so that a browser begins one at all', () => {
+    render(<Editor initialDocument={doc()} />);
+    const dataTransfer = pickUp(4);
+
+    // Firefox starts no drag without it, and jsdom has no drag-and-drop model
+    // to notice: every other test here assumes a drag that has begun.
+    expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', '1');
+    expect(dataTransfer.effectAllowed).toBe('move');
+  });
+
+  test('the row being carried is marked, and an abandoned drag clears it', () => {
+    render(<Editor initialDocument={doc()} />);
+    pickUp(4);
+
+    expect(rowLine(rows()[4]!)).toHaveAttribute('data-dragging');
+
+    dragOver(gapOf(rows()[1]!));
+
+    expect(gapOf(rows()[1]!)).toHaveAttribute('data-over');
+
+    // Abandoned rather than dropped -- Escape, or a release over the scene --
+    // never reaches the drop, so the end is what returns the pane to rest.
+    fireEvent.dragEnd(rowLine(rows()[4]!));
+
+    expect(rowLine(rows()[4]!)).not.toHaveAttribute('data-dragging');
+    expect(gapOf(rows()[1]!)).not.toHaveAttribute('data-over');
+  });
+
+  test('dropped on a row, a node goes inside it after its last child', () => {
+    render(<Editor initialDocument={doc()} />);
+    const before = code();
+    pickUp(4);
+    fireEvent.drop(rowLine(rows()[0]!));
+
+    expect(code()).toMatch(
+      /<Line endPos=\{\[1, 0\]\} \/>\s*<RotationalFrame id="arm" \/>\s*<\/TrackFrame>/,
+    );
+
+    // One step to undo, like every other move.
+    fireEvent.click(undoButton());
+
+    expect(code()).toBe(before);
+  });
+
+  test('dropped in the gap above a row, it goes among those siblings', () => {
+    render(<Editor initialDocument={doc()} />);
+    pickUp(4);
+    fireEvent.drop(gapOf(rows()[1]!));
+
+    expect(code()).toMatch(
+      /<TrackFrame id="cart">\s*<RotationalFrame id="arm" \/>\s*<Box/,
+    );
+  });
+
+  test('within one list, the node counts itself out of the way', () => {
+    render(<Editor initialDocument={doc()} />);
+
+    // The box, dropped above the line it stood two before, lands second --
+    // not third, which is where its target sits while it is still in the list.
+    pickUp(1);
+    fireEvent.drop(gapOf(rows()[3]!));
+
+    expect(code()).toMatch(
+      /<Weight mass=\{5\} \/>\s*<Box width=\{2\} \/>\s*<Line/,
+    );
+  });
+
+  test('a drop the rules refuse does nothing, and marks nothing', () => {
+    render(<Editor initialDocument={doc()} />);
+    const before = code();
+
+    // A weight cannot stand at the top of a body.
+    pickUp(2);
+
+    // The cursor says no, as well as the target staying unlit.
+    expect(dragOver(gapOf(rows()[0]!)).dropEffect).toBe('none');
+    expect(gapOf(rows()[0]!)).not.toHaveAttribute('data-over');
+
+    fireEvent.drop(gapOf(rows()[0]!));
+
+    expect(code()).toBe(before);
+  });
+
+  test('a target a drop would land in is marked while it is over', () => {
+    render(<Editor initialDocument={doc()} />);
+    pickUp(4);
+
+    // A move, rather than the copy a drag says by default.
+    expect(dragOver(gapOf(rows()[1]!)).dropEffect).toBe('move');
+    expect(gapOf(rows()[1]!)).toHaveAttribute('data-over');
+
+    fireEvent.dragLeave(gapOf(rows()[1]!));
+
+    expect(gapOf(rows()[1]!)).not.toHaveAttribute('data-over');
+
+    // The row itself marks for a drop inside it.
+    dragOver(rowLine(rows()[0]!));
+
+    expect(rowLine(rows()[0]!)).toHaveAttribute('data-over');
+  });
+
+  test("dropped on the tree's own space, it goes to the end of the body", () => {
+    render(<Editor initialDocument={doc()} />);
+    pickUp(0);
+    fireEvent.drop(screen.getByRole('tree'));
+
+    expect(code()).toMatch(
+      /<RotationalFrame id="arm" \/>\s*<TrackFrame id="cart">/,
+    );
+  });
+
+  test('the selection follows the node, through the list it left', () => {
+    render(<Editor initialDocument={doc()} />);
+
+    // The cart goes inside the arm, which stands after it: once the cart has
+    // left the body, the arm is the first node in it, and the cart is its
+    // first child rather than the second body node's.
+    pickUp(0);
+    fireEvent.drop(rowLine(rows()[4]!));
+
+    expect(code()).toMatch(
+      /<RotationalFrame id="arm">\s*<TrackFrame id="cart">/,
+    );
+    expect(
+      screen.getByRole('treeitem', { name: 'TrackFrame id="cart"' }),
+    ).toHaveAttribute('aria-selected', 'true');
   });
 });

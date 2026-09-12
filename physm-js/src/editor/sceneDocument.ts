@@ -559,6 +559,25 @@ export function moveNode(
 }
 
 /**
+ * Where `moveNode` leaves the node it moved: the list at `parent` as the
+ * document reads once the node has left it, and `index` within that list.
+ *
+ * Not simply `[...parent, index]`, because the two are read at the two moments
+ * `moveNode` reads them. A node leaving a list that precedes its destination
+ * shifts the destination's own path. The keyboard's moves never see it --
+ * indenting lands in a sibling's list and outdenting in the grandparent's, and
+ * a removal shifts neither -- which is true rather than obvious, and the reason
+ * only the drag asks.
+ */
+export function movedPath(
+  from: NodePath,
+  parent: NodePath,
+  index: number,
+): NodePath {
+  return [...afterRemoval(parent, from), index];
+}
+
+/**
  * ECMAScript's own capitalised built-ins: names generated code may use -- page
  * 6's `-Math.PI / 2`, say -- and the same set whichever host runs the editor.
  */
