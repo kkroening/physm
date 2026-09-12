@@ -508,7 +508,7 @@ export function removeNode(
  * Only a path that passes *through* the removed node's list, at a later
  * sibling, moves -- by one, at that level. Everything else is untouched.
  */
-export function afterRemoval(path: NodePath, removed: NodePath): NodePath {
+function afterRemoval(path: NodePath, removed: NodePath): NodePath {
   const level = removed.length - 1;
   const sameList =
     path.length > level &&
@@ -556,6 +556,25 @@ export function moveNode(
     index,
     node,
   );
+}
+
+/**
+ * Where `moveNode` leaves the node it moved: the list at `parent` as the
+ * document reads once the node has left it, and `index` within that list.
+ *
+ * Not simply `[...parent, index]`, because the two are read at the two moments
+ * `moveNode` reads them. A node leaving a list that precedes its destination
+ * shifts the destination's own path. The keyboard's moves never see it --
+ * indenting lands in a sibling's list and outdenting in the grandparent's, and
+ * a removal shifts neither -- which is true rather than obvious, and the reason
+ * only the drag asks.
+ */
+export function movedPath(
+  from: NodePath,
+  parent: NodePath,
+  index: number,
+): NodePath {
+  return [...afterRemoval(parent, from), index];
 }
 
 /**

@@ -330,25 +330,6 @@ function placeRefusal(
   return null;
 }
 
-/**
- * Where moving the node at `path` into the node above it puts it: after that
- * node's last child. `null` for the first of its siblings, or when the node
- * above takes no children.
- */
-export function indentPoint(
-  doc: SceneDocument,
-  definition: string,
-  path: NodePath,
-): InsertionPoint | null {
-  const index = path[path.length - 1]!;
-
-  // Indenting is a drop inside the row above. Outdenting is not a drop: it
-  // lands just after its target, where no drop does.
-  return index === 0
-    ? null
-    : dropPoint(doc, definition, [...path.slice(0, -1), index - 1], 'inside');
-}
-
 /** Where a row dropped on another lands. */
 export type DropWhere = 'inside' | 'before';
 
@@ -479,6 +460,25 @@ export function outdentPoint(
       ? holderOf(doc, nodeAt(doc, definition, grandparent))
       : 'root',
   };
+}
+
+/**
+ * Where moving the node at `path` into the node above it puts it: after that
+ * node's last child. `null` for the first of its siblings, or when the node
+ * above takes no children.
+ */
+export function indentPoint(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+): InsertionPoint | null {
+  const index = path[path.length - 1]!;
+
+  // Indenting is a drop inside the row above. Outdenting is not a drop: it
+  // lands just after its target, where no drop does.
+  return index === 0
+    ? null
+    : dropPoint(doc, definition, [...path.slice(0, -1), index - 1], 'inside');
 }
 
 /**

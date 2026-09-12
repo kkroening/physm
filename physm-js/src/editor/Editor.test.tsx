@@ -3400,9 +3400,57 @@ describe('Editor, dragging a row', () => {
     );
 
   // Rows: [0] cart, [1] box, [2] weight, [3] line, [4] arm.
-  const pickUp = (at: number): void => {
-    fireEvent.dragStart(rowLine(rows()[at]!));
+
+  /** What a browser hands a drag, which jsdom supplies nothing of. */
+  const transfer = (): DataTransfer =>
+    ({
+      setData: vi.fn(),
+      getData: vi.fn(),
+      effectAllowed: 'none',
+      dropEffect: 'none',
+    }) as unknown as DataTransfer;
+
+  const pickUp = (at: number): DataTransfer => {
+    const dataTransfer = transfer();
+    fireEvent.dragStart(rowLine(rows()[at]!), { dataTransfer });
+
+    return dataTransfer;
   };
+
+  const dragOver = (target: HTMLElement): DataTransfer => {
+    const dataTransfer = transfer();
+    fireEvent.dragOver(target, { dataTransfer });
+
+    return dataTransfer;
+  };
+
+  test('the drag carries data, so that a browser begins one at all', () => {
+    render(<Editor initialDocument={doc()} />);
+    const dataTransfer = pickUp(4);
+
+    // Firefox starts no drag without it, and jsdom has no drag-and-drop model
+    // to notice: every other test here assumes a drag that has begun.
+    expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', '1');
+    expect(dataTransfer.effectAllowed).toBe('move');
+  });
+
+  test('the row being carried is marked, and an abandoned drag clears it', () => {
+    render(<Editor initialDocument={doc()} />);
+    pickUp(4);
+
+    expect(rowLine(rows()[4]!)).toHaveAttribute('data-dragging');
+
+    dragOver(gapOf(rows()[1]!));
+
+    expect(gapOf(rows()[1]!)).toHaveAttribute('data-over');
+
+    // Abandoned rather than dropped -- Escape, or a release over the scene --
+    // never reaches the drop, so the end is what returns the pane to rest.
+    fireEvent.dragEnd(rowLine(rows()[4]!));
+
+    expect(rowLine(rows()[4]!)).not.toHaveAttribute('data-dragging');
+    expect(gapOf(rows()[1]!)).not.toHaveAttribute('data-over');
+  });
 
   test('dropped on a row, a node goes inside it after its last child', () => {
     render(<Editor initialDocument={doc()} />);
@@ -3449,8 +3497,9 @@ describe('Editor, dragging a row', () => {
 
     // A weight cannot stand at the top of a body.
     pickUp(2);
-    fireEvent.dragOver(gapOf(rows()[0]!));
 
+    // The cursor says no, as well as the target staying unlit.
+    expect(dragOver(gapOf(rows()[0]!)).dropEffect).toBe('none');
     expect(gapOf(rows()[0]!)).not.toHaveAttribute('data-over');
 
     fireEvent.drop(gapOf(rows()[0]!));
@@ -3461,8 +3510,9 @@ describe('Editor, dragging a row', () => {
   test('a target a drop would land in is marked while it is over', () => {
     render(<Editor initialDocument={doc()} />);
     pickUp(4);
-    fireEvent.dragOver(gapOf(rows()[1]!));
 
+    // A move, rather than the copy a drag says by default.
+    expect(dragOver(gapOf(rows()[1]!)).dropEffect).toBe('move');
     expect(gapOf(rows()[1]!)).toHaveAttribute('data-over');
 
     fireEvent.dragLeave(gapOf(rows()[1]!));
@@ -3470,7 +3520,7 @@ describe('Editor, dragging a row', () => {
     expect(gapOf(rows()[1]!)).not.toHaveAttribute('data-over');
 
     // The row itself marks for a drop inside it.
-    fireEvent.dragOver(rowLine(rows()[0]!));
+    dragOver(rowLine(rows()[0]!));
 
     expect(rowLine(rows()[0]!)).toHaveAttribute('data-over');
   });

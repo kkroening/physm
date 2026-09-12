@@ -22,7 +22,7 @@ import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
 import useSimulation from './useSimulation';
 import {
-  afterRemoval,
+  movedPath,
   definitionOf,
   deletionRefusal,
   elementOf,
@@ -441,6 +441,7 @@ function TreeRow({
         onDragOver={(event) => {
           if (!drag.refusalAt(path, 'before')) {
             event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
             drag.onOver(`${key}:before`);
           }
         }}
@@ -453,12 +454,21 @@ function TreeRow({
       <div
         className="editor__row"
         draggable
-        onDragStart={() => drag.onPickUp(path)}
+        onDragStart={(event) => {
+          // Firefox begins no drag at all unless the start sets something.
+          // What it is does not matter: `getData` is empty during a dragover
+          // by design, which is why the pane carries the path itself.
+          event.dataTransfer.setData('text/plain', key);
+          event.dataTransfer.effectAllowed = 'move';
+          drag.onPickUp(path);
+        }}
         onDragEnd={() => drag.onEnd()}
+        data-dragging={drag.dragging === key ? '' : undefined}
         data-over={drag.over === `${key}:inside` ? '' : undefined}
         onDragOver={(event) => {
           if (!drag.refusalAt(path, 'inside')) {
             event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
             drag.onOver(`${key}:inside`);
           }
         }}
@@ -620,6 +630,16 @@ function TreePane({
   // with the old one: it follows the node to where it went. Only from the
   // keys -- the toolbar's buttons keep the focus a run of clicks needs -- and
   // only when there is a move, so a refused keystroke leaves the focus alone.
+  const [moved, setMoved] = useState(0);
+
+  useEffect(() => {
+    if (moved) {
+      listRef.current
+        ?.querySelector<HTMLElement>('[aria-selected="true"]')
+        ?.focus();
+    }
+  }, [moved]);
+
   const [dragging, setDragging] = useState<NodePath | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const drag: TreeDrag = {
@@ -627,6 +647,13 @@ function TreePane({
     over,
     // Nothing dragged refuses every target, so a file dragged in from
     // elsewhere marks no row and drops nowhere.
+    //
+    // The sentence goes unshown while a drag is under way, and that is a
+    // decision rather than an omission: a title does not render during one,
+    // and a status line is not where the eye is. An unlit target says no
+    // where the person is looking, and the same refusal is spelled out on
+    // the toolbar's keyboard move. A drag layer of our own would have
+    // somewhere to put the words.
     refusalAt: (target, where) =>
       dragging
         ? dropRefusal(doc, focus, dragging, target, where)
@@ -651,15 +678,6 @@ function TreePane({
       setOver(null);
     },
   };
-  const [moved, setMoved] = useState(0);
-
-  useEffect(() => {
-    if (moved) {
-      listRef.current
-        ?.querySelector<HTMLElement>('[aria-selected="true"]')
-        ?.focus();
-    }
-  }, [moved]);
 
   const rowActions: TreeActions = {
     ...actions,
@@ -899,6 +917,7 @@ function TreePane({
             !drag.refusalAt(null, 'inside')
           ) {
             event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
             drag.onOver('end');
           }
         }}
@@ -1929,14 +1948,11 @@ export default function Editor({
         return;
       }
 
-      // `moveNode` takes the list's path as it reads before the move and the
-      // index as it reads after; the selection needs both after, since a node
-      // that left a list before its destination has shifted it.
       const index = movedIndex(from, point);
-      change(moveNode(doc, focus, from, point.parent, index), [
-        ...afterRemoval(point.parent, from),
-        index,
-      ]);
+      change(
+        moveNode(doc, focus, from, point.parent, index),
+        movedPath(from, point.parent, index),
+      );
     },
     onIndent: (path) => {
       const point = indentPoint(doc, focus, path);
