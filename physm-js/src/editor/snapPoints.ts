@@ -107,7 +107,7 @@ export default function snapPoints(
   const poses = scene.getPosMatrixMap(stateMap);
 
   return [
-    ...placeGizmos(scene, stateMap, xformMatrix, poses)
+    ...placeGizmos(scene, poses, xformMatrix)
       .filter(({ frame }) => !moving.has(frame))
       .map(({ origin }) => origin),
     ...scene.decals.flatMap((decal) => decalPoints(decal, xformMatrix)),

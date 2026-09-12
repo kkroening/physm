@@ -151,7 +151,7 @@ describe('Gizmos', () => {
     // to agree with it by luck. Keyed by id, since the two are ordered for
     // different reasons -- drawing order here, the solver's order there.
     const placed = Object.fromEntries(
-      placeGizmos(scene, stateMap, xformMatrix).map(({ frame, origin }) => [
+      placeGizmos(scene, poses, xformMatrix).map(({ frame, origin }) => [
         frame.id,
         origin,
       ]),
@@ -250,7 +250,7 @@ function drawParentAxes(
 ): Element[] {
   const placement = placeGizmos(
     scene,
-    scene.getInitialStateMap(),
+    scene.getPosMatrixMap(),
     xformMatrix,
   ).find(({ frame }) => frame.id === id)!;
 

@@ -22,6 +22,12 @@ export interface SceneViewProps {
  *
  * `xformMatrix` is the view transform: world coordinates to the SVG's. It
  * defaults to the identity, which draws the scene in its own units.
+ *
+ * It takes a state and makes the poses here, rather than taking poses: a
+ * caller can be expected to hold a scene and a state, where poses would send
+ * every one of them through the core first. The editor draws its gizmos over
+ * this and so walks the same scene a second time -- the price of that
+ * boundary, deliberately paid, rather than an oversight.
  */
 export default function SceneView({
   scene,

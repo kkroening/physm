@@ -93,7 +93,7 @@ export interface AddConstraintOptions {
    * tick.
    */
   allowInitialViolation?: boolean;
-  posMatMap?: Map<FrameId, Mat3> | null;
+  posMatMap?: PoseMap | null;
 }
 
 /** A point, as any of the shapes the query API accepts for one. */
@@ -107,7 +107,7 @@ export interface Separation {
 
 export interface PoseQueryOptions {
   stateMap?: StateMap | null;
-  posMatMap?: Map<FrameId, Mat3> | null;
+  posMatMap?: PoseMap | null;
 }
 
 /**
@@ -232,7 +232,7 @@ export default class Scene {
     }
   }
 
-  getPosMatrixMap(stateMap: StateMap | null = null): Map<FrameId, Mat3> {
+  getPosMatrixMap(stateMap: StateMap | null = null): PoseMap {
     /**
      * The local->global position transformation matrix of every frame, indexed
      * by frame id — the scene's pose, as a function of its state.
@@ -449,7 +449,7 @@ export default class Scene {
     return this;
   }
 
-  getInvPosMatrixMap(posMatMap: Map<FrameId, Mat3>): Map<FrameId, Mat3> {
+  getInvPosMatrixMap(posMatMap: PoseMap): Map<FrameId, Mat3> {
     /**
      * The global->local ("inverse") transformation of every frame.
      *
@@ -469,7 +469,7 @@ export default class Scene {
   }
 
   getVelMatrixMap(
-    posMatMap: Map<FrameId, Mat3>,
+    posMatMap: PoseMap,
     invPosMatMap: Map<FrameId, Mat3>,
     stateMap: StateMap | null = null,
   ): Map<FrameId, Mat3> {
@@ -519,7 +519,7 @@ export default class Scene {
     };
   }
 
-  getWeightPosMap(posMatMap: Map<FrameId, Mat3>): Map<FrameId, Vec3[]> {
+  getWeightPosMap(posMatMap: PoseMap): Map<FrameId, Vec3[]> {
     /**
      * Every point mass in world coordinates, grouped by the frame carrying it.
      */

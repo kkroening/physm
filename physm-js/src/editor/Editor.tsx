@@ -1338,9 +1338,11 @@ function ScenePane({
     const target = dragTargetAt(from);
     const placement =
       target && drawn
-        ? placeGizmos(drawn.scene, drawn.stateMap, xformMatrix).find(
-            ({ frame }) => frame === target.frame,
-          )
+        ? placeGizmos(
+            drawn.scene,
+            drawn.scene.getPosMatrixMap(drawn.stateMap),
+            xformMatrix,
+          ).find(({ frame }) => frame === target.frame)
         : undefined;
     if (!target || !placement) {
       return;
@@ -1530,7 +1532,11 @@ function ScenePane({
   // in: a path means nothing in another body.
   const draggedPlacement =
     dragging?.definition === focus && 'scene' in built && drawn
-      ? placeGizmos(drawn.scene, drawn.stateMap, xformMatrix).find(
+      ? placeGizmos(
+          drawn.scene,
+          drawn.scene.getPosMatrixMap(drawn.stateMap),
+          xformMatrix,
+        ).find(
           ({ frame }) =>
             built.ownPathOf(frame)?.join('.') === dragging.path.join('.'),
         )

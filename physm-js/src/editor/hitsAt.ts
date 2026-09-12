@@ -147,7 +147,7 @@ export default function hitsAt(
   point: ScreenPoint,
 ): (Frame | Decal)[] {
   const poses = scene.getPosMatrixMap(stateMap);
-  const frames = placeGizmos(scene, stateMap, xformMatrix, poses)
+  const frames = placeGizmos(scene, poses, xformMatrix)
     .filter(
       (placement) =>
         distance(point, placement.origin) <= ARM_LENGTH + REACH ||

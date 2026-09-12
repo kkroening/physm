@@ -5,7 +5,6 @@ import type CoreScene from './../Scene';
 import type Frame from './../Frame';
 import type { Mat3 } from './../Mat3';
 import type { PoseMap } from './../Scene';
-import type { StateMap } from './../Frame';
 import type { Vec3 } from './../Vec3';
 
 /** How far each arm of a gizmo's cross reaches from its origin, in pixels. */
@@ -80,14 +79,17 @@ function placeAll(
  * Where every frame's gizmo goes on screen, each frame before its children:
  * the order they are drawn in, so the last is on top.
  *
+ * The poses rather than the state they were made from, so that one call
+ * cannot say where the frames are twice and disagree with itself -- and so
+ * that a map made from another scene is not a thing this can be handed.
+ *
  * Its own module because two things need it -- `Gizmos`, which draws them, and
  * `hitsAt`, which finds the ones under a click.
  */
 export default function placeGizmos(
   scene: CoreScene,
-  stateMap: StateMap,
+  poses: PoseMap,
   xformMatrix: Mat3,
-  poses: PoseMap = scene.getPosMatrixMap(stateMap),
 ): GizmoPlacement[] {
   return placeAll(scene.frames, poses, xformMatrix, xformMatrix);
 }
