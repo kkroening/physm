@@ -1158,11 +1158,17 @@ function clickScene(
   [x, y]: readonly [number, number],
   held: { shiftKey?: boolean } = {},
 ): void {
-  fireEvent.click(container.querySelector('.editor__scene svg')!, {
-    clientX: x,
-    clientY: y,
-    ...held,
-  });
+  const svg = container.querySelector('.editor__scene svg')!;
+  const at = { clientX: x, clientY: y, ...held };
+
+  // Press, release, then the click -- the three a browser sends, in order.
+  // The press matters beyond tidiness: it clears the flag that makes a drag's
+  // own release click get swallowed, so a click after a drag picks, as one
+  // does in a browser. A bare `click` cannot spend that flag, which is why
+  // this used to need two calls to model one real click.
+  fireEvent.mouseDown(svg, at);
+  fireEvent.mouseUp(svg, at);
+  fireEvent.click(svg, at);
 }
 
 /** The centre of the one circle the scene pane draws. */
@@ -2148,6 +2154,28 @@ describe('Editor, dragging', () => {
     dragScene(container, [36, 0], [54, 0]);
 
     expect(code()).toContain('position={[1, 0]}');
+  });
+
+  test('a click after a drag picks, because a real click begins with a press', () => {
+    const { container } = render(<Editor />);
+    const svg = container.querySelector('.editor__scene svg')!;
+
+    // A drag driven by hand, ending at `mouseup` -- which is how a dozen
+    // tests in this file drive one. The flag that swallows a release click is
+    // left set, since nothing has spent it.
+    fireEvent.mouseDown(svg, { clientX: onCart[0], clientY: onCart[1] });
+    fireEvent.mouseMove(window, { clientX: 18, clientY: -3, buttons: 1 });
+    fireEvent.mouseUp(window, { clientX: 18, clientY: -3 });
+
+    expect(shown()).toBe('TrackFrame');
+
+    // A click on empty space then clears the selection, because its own press
+    // spends that flag first. A bare `click` would be swallowed instead, and
+    // the dragged frame would stay selected -- which is what this helper did
+    // before it pressed, and what a browser never does.
+    clickScene(container, [300, -300]);
+
+    expect(shown()).toBeNull();
   });
 
   test('the click that ends a drag picks nothing', () => {
