@@ -632,6 +632,40 @@
   margin-top: 0.6rem;
 }
 
+/* What the editor draws over the scene and under it, turned off from the
+   pane's other corner -- the playback controls have the right. Pressed is the
+   state that draws something, so both sit pressed at rest. */
+.editor__overlays {
+  position: absolute;
+  z-index: 1;
+  top: 0.6rem;
+  left: 0.6rem;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.editor__overlays button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #a1b5d8;
+  border-radius: 4px;
+  background-color: #eef4f9;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor__overlays button:hover {
+  background-color: #dce7f2;
+}
+
+/* Turned off: the button recedes rather than going quiet altogether, since it
+   is the only way back to what it hides. */
+.editor__overlays button[aria-pressed='false'] {
+  border-color: #b9c6d3;
+  background-color: transparent;
+  color: #4d6275;
+}
+
 /* Play, pause and reset, over the scene they run -- and no wider than it, so a
    hint wraps inside the pane rather than running over the tree. */
 .editor__playback {
@@ -644,11 +678,14 @@
   gap: 0.3rem;
 }
 
-/* Darker than a hint elsewhere: it sits on the scene's blue, not on white. */
+/* Darker than a hint elsewhere: it sits on the scene's blue, not on white --
+   and takes no clicks, since it can reach across the pane to the view controls
+   on a tab that cannot play, and sits over the rig everywhere else. */
 .editor__playback .editor__hint {
   margin-right: 0.3rem;
   color: #4d6275;
   text-align: right;
+  pointer-events: none;
 }
 
 .editor__playback button {
