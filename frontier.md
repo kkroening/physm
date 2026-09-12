@@ -68,6 +68,14 @@ was built while gizmos were in review.
   [0014 page 5](docs/issues/0014/05-metadata.md) argues schema-first. Declared
   components take no props until promote-to-prop, so it stays open -- Karl's
   call.
+- Whether an emitted constant is the answer or a placeholder. What page 6's
+  first row loses is not the constant but *the fact that the uses were one
+  value*, and no count recovers that: three values can coincide as easily as
+  two, and a rod used by a line and a weight without a circle is a real repeat
+  left inline. The threshold trades a false positive for a false negative
+  rather than removing the guess. What would end it is the document recording
+  that several props hold one value -- which is close to what promote-to-prop
+  implies -- and whether that is where this goes is Karl's call.
 - Promote to prop, or scope ids per instance: either makes a component that
   names an id reusable. Which comes first is Karl's call. A promoted prop that
   sets a count -- page 8's `segmentCount` -- changes the structure but arrives

@@ -35,6 +35,25 @@ function Gantry({
   );
 }
 
+/**
+ * An imported composite taking a tuple, which is the shape a hoisted literal
+ * would stop satisfying: a `const` is inferred on its own and widens to
+ * `number[]`, where inline the prop's own type named it.
+ */
+function Strut({ at }: { at: readonly [number, number] }): ReactElement {
+  return <Weight mass={1} position={at} />;
+}
+
+/** `./Strut` as `tsc` sees it. */
+const STRUT_MODULE = `import type { ReactElement } from 'react';
+
+export default function Strut(_props: {
+  at: readonly [number, number];
+}): ReactElement {
+  throw new Error('declared for type-checking only');
+}
+`;
+
 /** `./Gantry` as `tsc` sees it: its type, for an emitted import to check against. */
 const GANTRY_MODULE = `import type { ReactElement } from 'react';
 
@@ -57,6 +76,7 @@ const MODULES: Record<string, unknown> = {
   './react': binding,
   './CartAndRope': cartAndRopeModule,
   './Gantry': { default: Gantry },
+  './Strut': { default: Strut },
 };
 
 /**
@@ -254,6 +274,32 @@ function demo(): SceneDocument {
   return documentFrom(<CartAndRope />);
 }
 
+/** One point, under three tuple-typed props of an imported composite. */
+function struts(): SceneDocument {
+  return documentFrom(
+    <TrackFrame id="cart">
+      <Strut at={[4, 0]} />
+      <Strut at={[4, 0]} />
+      <Strut at={[4, 0]} />
+    </TrackFrame>,
+  );
+}
+
+/**
+ * One point carried three times by building blocks and once by an imported
+ * component -- so the constant exists, and one use of it must not take it.
+ */
+function shared(): SceneDocument {
+  return documentFrom(
+    <RotationalFrame id="arm">
+      <Line endPos={[4, 0]} lineWidth={0.15} />
+      <Circle position={[4, 0]} radius={0.5} />
+      <Weight mass={10} position={[4, 0]} />
+      <Strut at={[4, 0]} />
+    </RotationalFrame>,
+  );
+}
+
 /** A component the document defines, listed after the scene that uses it. */
 function definedLater(): SceneDocument {
   const [arm] = nodesFrom(
@@ -351,13 +397,18 @@ describe('emitScene', () => {
     // `undefined` that `exactOptionalPropertyTypes` refuses, would fail to
     // build -- so every module they emit is checked here, in one program.
     const modules = Object.fromEntries(
-      Object.entries({ everything, demo, definedLater }).map(([name, doc]) => [
-        `Emitted_${name}.tsx`,
-        emitScene(doc()).source,
-      ]),
+      Object.entries({ everything, demo, definedLater, struts, shared }).map(
+        ([name, doc]) => [`Emitted_${name}.tsx`, emitScene(doc()).source],
+      ),
     );
 
-    expect(typeCheck({ ...modules, 'Gantry.tsx': GANTRY_MODULE })).toEqual([]);
+    expect(
+      typeCheck({
+        ...modules,
+        'Gantry.tsx': GANTRY_MODULE,
+        'Strut.tsx': STRUT_MODULE,
+      }),
+    ).toEqual([]);
   }, 60_000);
 
   test('refuses components that instantiate each other in a cycle', () => {
@@ -536,6 +587,46 @@ describe('emitScene, repeated values', () => {
     expect(source).not.toContain('const ');
     expect(source).toContain('mass={2}');
     expect(source).toContain('position={[1, 0]}');
+  });
+
+  test('a compound value written twice is left where it is', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <TrackFrame id="cart" position={[12, -0.5]}>
+          <Line startPos={[-12, -0.5]} endPos={[12, -0.5]} lineWidth={0.05} />
+        </TrackFrame>,
+      ),
+    );
+
+    // The demo's own coincidence: a cart dragged onto the ground line's end.
+    // Two uses is where the threshold sits, so it is stated here rather than
+    // borrowed from tests about snapping that name the literal in passing.
+    expect(source).not.toContain('const ');
+    expect(source).toContain('position={[12, -0.5]}');
+    expect(source).toContain('endPos={[12, -0.5]}');
+  });
+
+  test('what an imported component is given is left alone', () => {
+    const source = expectRoundTrip(struts());
+
+    // Three uses, and still inline: the emitter cannot see `Strut`'s types,
+    // and a hoisted `const AT = [4, 0]` widens to `number[]`, which its
+    // tuple-typed prop would refuse. The type-check test emits this one too.
+    expect(source).not.toContain('const ');
+    expect(source).toContain('at={[4, 0]}');
+  });
+
+  test('a constant stops at the components whose types are known', () => {
+    const source = expectRoundTrip(shared());
+
+    // The building blocks take the name; the imported component keeps the
+    // literal, because `const POSITION = [4, 0]` is inferred on its own and
+    // widens to `number[]`, which its tuple-typed prop would refuse. The
+    // type-check test emits this document too, which is where that would show.
+    expect(source).toContain('const POSITION = [4, 0];');
+    expect(source).toContain('endPos={POSITION}');
+    expect(source).toContain('position={POSITION}');
+    expect(source).toContain('at={[4, 0]}');
   });
 
   test('a tie between prop names goes the same way every time', () => {

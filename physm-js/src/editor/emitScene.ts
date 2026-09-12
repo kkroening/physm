@@ -115,134 +115,6 @@ function literal(value: unknown): string {
 }
 
 /**
- * Whether a value is worth naming: the compound ones.
- *
- * A number or a string written twice is not what makes a file tedious to
- * change -- `mass={2}` on two weights is two different masses that happen to
- * agree. A point written at a rod's line, its circle and its weight is one
- * length written three times, and that is the case worth recovering.
- */
-function compound(value: unknown): boolean {
-  return (
-    Array.isArray(value) ||
-    (typeof value === 'object' &&
-      value !== null &&
-      Object.getPrototypeOf(value) === Object.prototype)
-  );
-}
-
-/**
- * How many times a value is written before it earns a name.
- *
- * Three rather than two, from watching the demo: dragging the cart onto the
- * ground line's end makes its `position` equal that `endPos`, and at two the
- * coincidence was named -- `END_POS`, by a tie -- and the cart written
- * `position={END_POS}`. Twice can be two values that agree; three times is a
- * value used three times.
- */
-const REPEATS = 3;
-
-/** A prop's name as a constant's: `endPos` becomes `END_POS`. */
-function constantName(prop: string): string {
-  return prop.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
-}
-
-/**
- * A name for each value the module writes more than once, keyed by the
- * literal that value prints as.
- *
- * [0014 page 6](../../../docs/issues/0014/06-codegen.md) asks for this, and
- * says what it can and cannot be: the document is what the source *evaluated
- * to*, so the name a person wrote -- `TIP`, `SWEEP` -- is gone with the rest
- * of how the file was written. The name therefore comes from the prop that
- * carries the value, which is the mechanical recovery that page calls for
- * rather than a reconstruction of what was lost.
- *
- * The most common prop name among the uses, so a point used as three
- * positions and one `endPos` is a `POSITION`; ties go alphabetically, so the
- * same document always emits the same file.
- */
-function constantsOf(
-  doc: SceneDocument,
-  bound: ReadonlySet<string>,
-): Map<string, string> {
-  const uses = new Map<string, string[]>();
-  const visit = (nodes: readonly DocNode[]): void => {
-    for (const node of nodes) {
-      if (node.type.kind !== 'children') {
-        for (const [prop, value] of writtenProps(node)) {
-          if (compound(value)) {
-            try {
-              const text = literal(value);
-              uses.set(text, [...(uses.get(text) ?? []), prop]);
-            } catch {
-              // Not writable at all: the write says so, with the node's path.
-            }
-          }
-        }
-      }
-
-      visit(node.children);
-    }
-  };
-
-  for (const { body } of doc.definitions) {
-    visit(body);
-  }
-
-  const named = new Map<string, string>();
-  const taken = new Set(bound);
-  for (const [text, props] of uses) {
-    if (props.length < REPEATS) {
-      continue;
-    }
-
-    const counts = new Map<string, number>();
-    for (const prop of props) {
-      counts.set(prop, (counts.get(prop) ?? 0) + 1);
-    }
-
-    const [best] = [...counts].sort(
-      ([a, byA], [b, byB]) => byB - byA || a.localeCompare(b),
-    )[0]!;
-    const base = constantName(best);
-    let name = base;
-    for (let n = 2; taken.has(name); n += 1) {
-      name = `${base}_${n}`;
-    }
-
-    taken.add(name);
-    named.set(text, name);
-  }
-
-  return named;
-}
-
-/** Every name the module binds, which a constant's may not be. */
-function boundNames(doc: SceneDocument): Set<string> {
-  const bound = new Set<string>([
-    'ReactElement',
-    'ReactNode',
-    ...doc.definitions.map(({ name }) => name),
-  ]);
-  const visit = (nodes: readonly DocNode[]): void => {
-    for (const node of nodes) {
-      if (node.type.kind !== 'children') {
-        bound.add(tagOf(node.type));
-      }
-
-      visit(node.children);
-    }
-  };
-
-  for (const { body } of doc.definitions) {
-    visit(body);
-  }
-
-  return bound;
-}
-
-/**
  * One attribute, as JSX writes it.
  *
  * A string goes in quotes where it can -- `id="cart"` -- and in braces where it
@@ -318,6 +190,144 @@ function writtenProps(node: DocNode): [string, unknown][] {
       !(spec && 'default' in spec && sameValue(spec.default, value))
     );
   });
+}
+
+/**
+ * Whether a value is worth naming: the compound ones.
+ *
+ * A number or a string written twice is not what makes a file tedious to
+ * change -- `mass={2}` on two weights is two different masses that happen to
+ * agree. A point written at a rod's line, its circle and its weight is one
+ * length written three times, and that is the case worth recovering.
+ */
+function compound(value: unknown): boolean {
+  return (
+    Array.isArray(value) ||
+    (typeof value === 'object' &&
+      value !== null &&
+      Object.getPrototypeOf(value) === Object.prototype)
+  );
+}
+
+/**
+ * How many times a value is written before it earns a name.
+ *
+ * Three rather than two, from watching the demo: dragging the cart onto the
+ * ground line's end makes its `position` equal that `endPos`, and at two the
+ * coincidence was named -- `END_POS`, by a tie -- and the cart written
+ * `position={END_POS}`. Twice can be two values that agree; three times is a
+ * value used three times.
+ */
+const REPEATS = 3;
+
+/** A prop's name as a constant's: `endPos` becomes `END_POS`. */
+function constantName(prop: string): string {
+  return prop.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+}
+
+/**
+ * A name for each value the module writes more than once, keyed by the
+ * literal that value prints as.
+ *
+ * [0014 page 6](../../../docs/issues/0014/06-codegen.md) asks for this, and
+ * says what it can and cannot be: the document is what the source *evaluated
+ * to*, so the name a person wrote -- `TIP`, `SWEEP` -- is gone with the rest
+ * of how the file was written. The name therefore comes from the prop that
+ * carries the value, which is the mechanical recovery that page calls for
+ * rather than a reconstruction of what was lost.
+ *
+ * The most common prop name among the uses, so a point used as three
+ * positions and one `endPos` is a `POSITION`. A tie compares the names
+ * directly rather than through `localeCompare`, whose order depends on the
+ * runtime's locale, so the same document emits the same file everywhere --
+ * not merely the same file twice on one machine.
+ */
+function constantsOf(
+  doc: SceneDocument,
+  bound: ReadonlySet<string>,
+): Map<string, string> {
+  const uses = new Map<string, string[]>();
+  const visit = (nodes: readonly DocNode[]): void => {
+    for (const node of nodes) {
+      // Building blocks only. A hoisted literal is inferred on its own and
+      // widens -- `[4, 0]` becomes `number[]` -- where inline it was typed by
+      // the prop receiving it. Every core prop takes the widened form; an
+      // imported composite's types live in a module the document does not
+      // hold, so a tuple or a literal union there would stop compiling.
+      if (node.type.kind === 'core') {
+        for (const [prop, value] of writtenProps(node)) {
+          if (compound(value)) {
+            try {
+              const text = literal(value);
+              uses.set(text, [...(uses.get(text) ?? []), prop]);
+            } catch {
+              // Not writable at all: the write says so, with the node's path.
+            }
+          }
+        }
+      }
+
+      visit(node.children);
+    }
+  };
+
+  for (const { body } of doc.definitions) {
+    visit(body);
+  }
+
+  const named = new Map<string, string>();
+  const taken = new Set(bound);
+  for (const [text, props] of uses) {
+    if (props.length < REPEATS) {
+      continue;
+    }
+
+    const counts = new Map<string, number>();
+    for (const prop of props) {
+      counts.set(prop, (counts.get(prop) ?? 0) + 1);
+    }
+
+    const [best] = [...counts].sort(
+      ([a, byA], [b, byB]) => byB - byA || (a < b ? -1 : 1),
+    )[0]!;
+    const base = constantName(best);
+    let name = base;
+    for (let n = 2; taken.has(name); n += 1) {
+      name = `${base}_${n}`;
+    }
+
+    taken.add(name);
+    named.set(text, name);
+  }
+
+  return named;
+}
+
+/** No constants at all: what a node the emitter cannot type is written with. */
+const NO_CONSTANTS: ReadonlyMap<string, string> = new Map();
+
+/** Every name the module binds, which a constant's may not be. */
+function boundNames(doc: SceneDocument): Set<string> {
+  const bound = new Set<string>([
+    'ReactElement',
+    'ReactNode',
+    ...doc.definitions.map(({ name }) => name),
+  ]);
+  const visit = (nodes: readonly DocNode[]): void => {
+    for (const node of nodes) {
+      if (node.type.kind !== 'children') {
+        bound.add(tagOf(node.type));
+      }
+
+      visit(node.children);
+    }
+  };
+
+  for (const { body } of doc.definitions) {
+    visit(body);
+  }
+
+  return bound;
 }
 
 /**
@@ -499,9 +509,10 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
 
     const tag = tagOf(node.type);
     // A value that cannot be written says which one, and where it is.
+    const usable = node.type.kind === 'core' ? constants : NO_CONSTANTS;
     const written = (name: string, value: unknown): string => {
       try {
-        return attribute(name, value, constants);
+        return attribute(name, value, usable);
       } catch (error) {
         throw new Error(
           `Cannot write '${name}' on <${tag}> at ${rangeKey(definition, path)}: ` +
