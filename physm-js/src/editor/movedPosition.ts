@@ -11,6 +11,17 @@ import type { Vec3 } from './../Vec3';
  */
 const GRID_REACH = 4;
 
+/**
+ * ...and never more of a unit than this, however far the view has zoomed out.
+ *
+ * A reach in pixels alone was right while the scale was fixed. Every
+ * coordinate is within half a unit of a whole one, so a four-pixel window
+ * covers the entire unit at eight pixels to it and below -- and a drag there
+ * could land on nothing but whole numbers, which is precisely the range a
+ * person reaches by zooming out to see a large rig.
+ */
+const GRID_REACH_UNITS = 0.25;
+
 /** A value to the nearest hundredth. */
 function rounded(value: number): number {
   return Math.round(value * 100) / 100 || 0;
@@ -94,10 +105,15 @@ export function griddedPosition(
   to: ScreenPoint,
 ): [number, number] {
   const pixelsPerUnit = mat3.scaleFactor(parentXform);
+  // In pixels, so the snap feels the same at every zoom -- but never more than
+  // a quarter of a unit, so that a zoomed-out drag can still land between two
+  // whole numbers. At the scale the pane opens at the pixel reach is the
+  // smaller of the two, so nothing about the usual case moves.
+  const reach = Math.min(GRID_REACH, GRID_REACH_UNITS * pixelsPerUnit);
   const snapped = (value: number): number => {
     const whole = Math.round(value);
 
-    return Math.abs(value - whole) * pixelsPerUnit <= GRID_REACH
+    return Math.abs(value - whole) * pixelsPerUnit <= reach
       ? whole || 0
       : rounded(value);
   };

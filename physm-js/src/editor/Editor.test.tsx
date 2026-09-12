@@ -4081,6 +4081,143 @@ describe('Editor, moving the view', () => {
       container.querySelector('.editor__grid [data-y="0"]')!.getAttribute('y1'),
     );
 
+  test('the wheel does not scroll the page along with the zoom', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      const svg = container.querySelector('.editor__scene svg')!;
+
+      // A passive listener cannot cancel an event, so a prevented default is
+      // what says this one is not passive -- and `fireEvent` hands back what
+      // `dispatchEvent` returned, which is false when the default was stopped.
+      expect(
+        fireEvent.wheel(svg, { deltaY: -320, clientX: 290, clientY: 150 }),
+      ).toBe(false);
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('a notch is the same zoom whatever unit the browser reports it in', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      const svg = container.querySelector('.editor__scene svg')!;
+
+      // Firefox on Windows and Linux reports lines rather than pixels, at
+      // sixteen pixels to the line -- so twenty lines is the 320 pixels the
+      // test below uses, and both have to mean one notch.
+      fireEvent.wheel(svg, {
+        deltaY: -20,
+        deltaMode: 1,
+        clientX: 200,
+        clientY: 150,
+      });
+      const byLines = drawnX(container, 1) - drawnX(container, 0);
+
+      expect(byLines).toBeCloseTo(18 * Math.E, 6);
+
+      fireEvent.click(control('Reset view'));
+      fireEvent.wheel(svg, {
+        deltaY: -320,
+        deltaMode: 0,
+        clientX: 200,
+        clientY: 150,
+      });
+
+      expect(drawnX(container, 1) - drawnX(container, 0)).toBeCloseTo(
+        byLines,
+        6,
+      );
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('the wheel does nothing while a drag is under way', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      const svg = container.querySelector('.editor__scene svg')!;
+
+      // A drag holds its parent's transform, its origin and its snap targets
+      // as they were at the press, so a view that moved under it would leave
+      // the scene no longer following the pointer.
+      dragScene(container, [200, 150], [218, 150]);
+      const plain = code();
+      fireEvent.click(undoButton());
+
+      fireEvent.mouseDown(svg, { clientX: 200, clientY: 150 });
+      fireEvent.wheel(svg, { deltaY: -320, clientX: 200, clientY: 150 });
+      fireEvent.mouseMove(window, { clientX: 218, clientY: 150, buttons: 1 });
+      fireEvent.mouseUp(window, { clientX: 218, clientY: 150 });
+
+      expect(drawnX(container, 1) - drawnX(container, 0)).toBe(18);
+      expect(code()).toBe(plain);
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('the cursor says grabbing for as long as a pan lasts', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      const svg = container.querySelector<SVGSVGElement>('.editor__scene svg')!;
+      fireEvent.mouseDown(svg, { clientX: 30, clientY: 30 });
+      fireEvent.mouseMove(window, { clientX: 70, clientY: 55, buttons: 1 });
+
+      // The pointer passing over the scene mid-pan: the cursor answers what a
+      // press would do, and during a gesture that is already settled. With the
+      // button still down -- a move without it means the release went unseen,
+      // which ends the pan.
+      fireEvent.mouseMove(svg, { clientX: 200, clientY: 150, buttons: 1 });
+
+      expect(svg.style.cursor).toBe('grabbing');
+
+      fireEvent.mouseUp(window, { clientX: 200, clientY: 150 });
+
+      expect(svg.style.cursor).toBe('');
+    } finally {
+      pane.restore();
+    }
+  });
+
+  test('a press in the scene aims the history keys back at the editor', () => {
+    const pane = paneOf400By300();
+    try {
+      const { container } = render(<Editor />);
+      dragScene(container, [200, 150], [218, 150]);
+      const edited = code();
+
+      // The tree's search box owns z and y while it holds the focus. A press
+      // in the scene prevents its own default, which cancels the focus change
+      // that would otherwise have taken them back -- so the pane moves the
+      // focus by hand, on both of the presses that prevent: one that takes
+      // hold of the scene, and one on empty space that pans.
+      const find = screen.getByRole('searchbox', { name: 'Find a node' });
+      for (const [x, y] of [
+        [200, 150],
+        [30, 30],
+      ]) {
+        find.focus();
+
+        expect(document.activeElement).toBe(find);
+
+        // Two pixels, so the press lands without the drag writing anything.
+        dragScene(container, [x!, y!], [x! + 2, y! + 1]);
+
+        expect(document.activeElement).not.toBe(find);
+      }
+
+      fireEvent.keyDown(document.activeElement!, { key: 'z', ctrlKey: true });
+
+      expect(code()).not.toBe(edited);
+    } finally {
+      pane.restore();
+    }
+  });
+
   test('the wheel zooms about the pointer, not about the pane', () => {
     const pane = paneOf400By300();
     try {
@@ -4127,12 +4264,17 @@ describe('Editor, moving the view', () => {
     try {
       const { container } = render(<Editor />);
 
+      select('Box');
+
       // Two pixels of slop, which is a click. Panning on that would swallow
-      // the release, and a click on empty space is how the selection clears.
+      // the release, and a click on empty space is how the selection clears --
+      // so the release's click is raised here, as a browser would.
       dragScene(container, [30, 30], [32, 31]);
+      clickScene(container, [32, 31]);
 
       expect(drawnX(container, 0)).toBe(200);
       expect(control('Reset view')).toBeDisabled();
+      expect(shown()).toBe(null);
     } finally {
       pane.restore();
     }

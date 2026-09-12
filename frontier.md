@@ -6,25 +6,14 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**The view can move.** The scene pane draws at a fixed 18 pixels to the world
-unit, centred on the world origin, so a rig larger than the pane cannot be
-edited at all -- every gesture built so far is confined to whatever happens to
-fit. Taken from the standing invitation to pick (_Karl, 2026-09-11_) as the
-candidate the editing work kept running into.
-
-Smaller than it sounds: `getViewXformMatrix` already takes a translation and a
-scale, and every consumer -- the scene, the gizmos, the handles, hit-testing,
-the snap points -- is handed the matrix rather than building one. Only the call
-site pins the two arguments, so this is making them state.
-
-The wheel zooms about the pointer, dragging empty space pans -- the one gesture
-the pane had spare -- and a control returns the view home. The scale is
-clamped, and that bound is a rule rather than a taste: the grid draws a line at
-every whole unit and a drag snaps to those units, so an unbounded zoom-out
-either floods the pane with lines or forces the grid to step, and a stepped
-grid still snapping to whole units would put the rule back out of sight of the
-mark standing for it. A decade-stepped grid, snapping to the step it draws, is
-what would let the clamp widen.
+**A grid that steps, and snaps to the step it draws.** The grid puts a line at
+every whole unit and a drag snaps to whole units, which is why the view's
+zoom-out is clamped: further out, the lines either flood the pane or the grid
+has to step, and a stepped grid still snapping to units it no longer draws
+would put the rule out of sight of its mark -- the thing hiding the marks was
+built to stop. Stepping by powers of ten, with the snap following the step, is
+what lets the clamp widen. The snap's reach is already capped in world units as
+well as pixels, which is the same argument met from the other side.
 
 ## Next — the MVP
 
@@ -84,6 +73,16 @@ was built while gizmos were in review.
   targets" rather than "all of them go" -- a change to `snapPoints` with its
   own tests. Whether that, a third control, or the current pairing is right is
   Karl's call.
+- Reaching the view from the keyboard. The wheel and a button-held drag are
+  the only ways to zoom or pan, and `Reset view` -- the one keyboard-reachable
+  control -- is disabled precisely while it is all someone has. The view is
+  also the first piece of editor state with no typed surface: a frame that
+  cannot be dragged can still be reached by typing into the properties pane,
+  and there is no equivalent for scale or origin. `App.jsx` has carried a
+  keyboard scheme all along, but it leans on a held-key loop with a
+  `deltaTime`, and four of its six keys are letters the tree's type-ahead owns;
+  `-` and `=` are free. Whether navigation is owed a keyboard path at all, and
+  where those keys would live, is Karl's call.
 - What a drag does while the scene plays. The frame drifts from the pointer,
   since its own coordinate and its parents' keep moving: pause while a drag is
   held, refuse one during play, or keep the live nudge. Karl's call.
@@ -320,6 +319,15 @@ was built while gizmos were in review.
   that needs nothing drawn. With the grid off a drag no longer snaps to whole
   units. Hiding the marks alone would have left those rules deciding presses
   invisibly.
+- **The view can move** — the wheel zooms about the pointer, dragging empty
+  space pans, and a control returns the view home; before this the scene pane
+  drew at a fixed eighteen pixels to the unit centred on the world origin, so a
+  rig larger than the pane could not be edited at all. `getViewXformMatrix`
+  always took a translation and a scale and every consumer is handed the
+  matrix, so the change was those two arguments becoming state -- except in the
+  drag, which caches values derived from the matrix across frames and so
+  refuses the wheel while it runs. The zoom-out is clamped by the grid argument
+  above; the zoom-in bound is a pick.
 - **Constants for repeated values** — a compound value written three times or
   more anywhere in the module is declared once, above the definitions, and
   used by name: the starter's bob becomes `const POSITION = [4, 0]`. The name

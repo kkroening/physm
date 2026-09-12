@@ -21,7 +21,7 @@ import movedPosition, {
 } from './movedPosition';
 import placeGizmos, { HANDLE_REACH, placePoint } from './placeGizmos';
 import snapPoints, { nearestSnap } from './snapPoints';
-import { HOME, isHome, pannedBy, zoomedAbout } from './viewChange';
+import { HOME, isHome, pannedBy, pixelsOf, zoomedAbout } from './viewChange';
 import starterDocument from './starterDocument';
 import useElementSize from './../useElementSize';
 import useSimulation from './useSimulation';
@@ -1332,6 +1332,11 @@ function ScenePane({
   const [showMarks, setShowMarks] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
 
+  // Whether a pan is under way. `hover` has to know, as it already knows about
+  // a drag: the cursor answers "what would a press do here", and during a
+  // gesture that question is already settled.
+  const panning = useRef(false);
+
   /** Where a mouse event lands, in the pane's own coordinates. */
   const pointOf = (event: {
     clientX: number;
@@ -1354,13 +1359,24 @@ function ScenePane({
 
     const zoom = (event: WheelEvent): void => {
       event.preventDefault();
+
+      // Not while a drag is under way. A drag keeps screen-space values taken
+      // under the view it began in -- its parent's transform, its origin, its
+      // snap targets and its grid -- so moving the view beneath it would write
+      // the motion back at the wrong scale, measured from a pixel that has
+      // stopped meaning what it meant. Refusing is better than re-deriving all
+      // four mid-gesture, and leaves no trap for the next thing that caches.
+      if (drag.current) {
+        return;
+      }
+
       const bounds = element.getBoundingClientRect();
       const at: ScreenPoint = [
         event.clientX - bounds.left,
         event.clientY - bounds.top,
       ];
-      const { deltaY } = event;
-      setView((current) => zoomedAbout(current, at, deltaY, size));
+      const travel = pixelsOf(event);
+      setView((current) => zoomedAbout(current, at, travel, size));
     };
 
     element.addEventListener('wheel', zoom, { passive: false });
@@ -1635,7 +1651,7 @@ function ScenePane({
   };
 
   const hover = (event: MouseEvent<SVGSVGElement>): void => {
-    if (drag.current) {
+    if (drag.current || panning.current) {
       return;
     }
 
@@ -1647,6 +1663,23 @@ function ScenePane({
         ? 'not-allowed'
         : 'grab',
     );
+  };
+
+  /**
+   * Move the focus out of whatever holds it, as a press itself would have.
+   *
+   * A press in the scene calls `preventDefault` to stop a native
+   * text-selection drag across the pane, and that also cancels the focus
+   * change which is a press's own default. Undo and redo belong to a text
+   * field while one has the focus, so without this a press in the scene would
+   * leave them aimed at the tree's search box, with nothing on screen to say
+   * the keyboard was still pointed somewhere else.
+   */
+  const blurAway = (): void => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement) {
+      focused.blur();
+    }
   };
 
   /**
@@ -1664,6 +1697,8 @@ function ScenePane({
     from: ScreenPoint,
   ): void => {
     event.preventDefault();
+    blurAway();
+    panning.current = true;
     setCursor('grabbing');
     const listening = new AbortController();
     let last = from;
@@ -1671,6 +1706,7 @@ function ScenePane({
 
     const end = (): void => {
       listening.abort();
+      panning.current = false;
       setCursor('');
     };
 
@@ -1719,6 +1755,7 @@ function ScenePane({
     }
 
     event.preventDefault();
+    blurAway();
     drags.current += 1;
     const position = vec3.coerce(
       (nodeAt(doc, focus, target.path).props[target.prop] ?? [0, 0]) as
@@ -2317,9 +2354,12 @@ export default function Editor({
   };
 
   // Undo and redo from the keyboard, wherever the focus is -- except in a text
-  // field, whose own they are. On the window, because a click in the scene
-  // leaves the focus on the page's body, outside the editor; through a ref, so
-  // the one listener always reaches this render's history.
+  // field, whose own they are. On the window, because a press in the scene is
+  // *made* to leave the focus on the page's body, outside the editor: the
+  // pane calls `preventDefault` on a press and so moves the focus by hand.
+  // That is a rule the pane keeps rather than a default it inherits, which
+  // matters because the two read alike right up until someone prevents one.
+  // Through a ref, so the one listener always reaches this render's history.
   const onHistoryKey = useRef<(event: KeyboardEvent) => void>(() => {});
   onHistoryKey.current = (event) => {
     const { target } = event;

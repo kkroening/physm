@@ -72,6 +72,18 @@ describe('griddedPosition', () => {
     ]);
   });
 
+  test('but never so much of a unit that a drag can land only on whole ones', () => {
+    // Four pixels to the unit, the far end of the view's zoom. A four-pixel
+    // reach there is a whole unit wide, and nothing is further than half a
+    // unit from a whole one, so every drag would snap to an integer.
+    const far = getViewXformMatrix([0, 0], 4, [400, 300]);
+
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [2, 0])).toEqual([0.5, 0]);
+
+    // The capped reach is a quarter of a unit, which is still in reach here.
+    expect(griddedPosition(vec3.ORIGIN, far, [0, 0], [3.5, 0])).toEqual([1, 0]);
+  });
+
   test('its reach is in pixels, so in units it is finer the nearer the view', () => {
     const near = getViewXformMatrix([0, 0], 36, [400, 300]);
 
