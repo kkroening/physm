@@ -69,6 +69,15 @@ was built while gizmos were in review.
   point. Neither is a target yet -- Karl's call -- though a frame at the top
   whose origin sits at its position reaches the origin as a crossing of the
   grid: any rotational frame, and a track frame at a coordinate of zero.
+- `clickScene` should press and release, as `dragScene` now does. It fires a
+  bare `click` with no `mousedown`, so it cannot spend the `dragged` flag the
+  way a real click does -- which is why a click straight after a drag used to
+  be swallowed, an artifact of the helper rather than anything a browser does.
+  The trap is latent rather than gone: a dozen hand-rolled drags in the file
+  still end at `mouseup` with the flag set, none of them yet followed by a
+  `clickScene`, and the first one that is will swallow a click no browser
+  would. Closing it for clicks is the same fix this did for drags, across
+  forty-odd call sites.
 - Which snap targets survive the marks being hidden. Point snapping goes with
   *Marks* today because the ring reporting it is drawn there, but the targets
   are a mixed bag: another frame's origin is invisible once the marks are off,
@@ -336,10 +345,13 @@ was built while gizmos were in review.
 - **The drag helper raises the click a browser does** — `dragScene`, which
   nearly every scene test goes through, fired mouse down, move and up and
   stopped. A browser also raises a `click`, and picking listens to that and to
-  nothing else, so any assertion about the selection after a drag asserted
-  nothing at all: three tests reached `master` that way, each found by a mutant
-  rather than by the suite. Four places had hand-rolled the missing click, and
-  their comments show the gap was understood each time it was met.
+  nothing else, so any assertion about what a drag's *release* does to the
+  selection asserted nothing at all -- picking where the drag did not, cycling
+  in the same place, clearing on empty space. A drag that moved was never among
+  them: it picks from its own move handler. Three tests reached `master` that
+  way, each found by a mutant rather than by the suite, and four places had
+  hand-rolled the missing click with comments showing the gap was understood
+  each time it was met.
 - **A grid that steps** — the grid draws a line at every multiple of a power of
   ten, the smallest whose lines stay at least twelve pixels apart, so it keeps
   its shape however far the view pulls back instead of flooding the pane. A

@@ -1732,7 +1732,19 @@ describe('Editor, undo', () => {
   });
 });
 
-/** Press at `from` in the scene pane, move through each of `to`, and let go at the last. */
+/**
+ * Press at `from` in the scene pane, move through each of `to`, let go at the
+ * last, and raise the click a browser would.
+ *
+ * A browser raises that click on the nearest ancestor the press and the
+ * release have in common, so one released off the pane never reaches the
+ * pane's own handler; this always raises it on the svg. Nothing can read the
+ * difference: `startDrag` clears `dragged` on the next press, so a flag left
+ * behind cannot survive into a later pick, and every call site where the
+ * raised click decides anything releases within `SAME_PLACE` of its press --
+ * the same element by construction. Exact where it is load-bearing, and
+ * approximate only where the result goes unread.
+ */
 function dragScene(
   container: HTMLElement,
   from: readonly [number, number],
@@ -1747,11 +1759,12 @@ function dragScene(
 
   fireEvent.mouseUp(window, { clientX: endX, clientY: endY });
 
-  // The click a browser raises when a press and its release land on the same
-  // element. Picking listens to that and to nothing else, so a helper stopping
-  // at `mouseup` leaves every assertion about the selection after a drag
-  // asserting nothing at all -- which is how three such tests reached `master`
-  // before mutants found them, one at a time.
+  // Picking listens to `click` and to nothing else, so a helper stopping at
+  // `mouseup` leaves every assertion about what a drag's *release* does to the
+  // selection asserting nothing at all -- three such tests reached `master`
+  // that way, each found by a mutant rather than by the suite. A drag that
+  // moved is not among them: it picks from its own move handler, before any
+  // release, so what it selects was never in question.
   fireEvent.click(svg, { clientX: endX, clientY: endY });
 }
 
@@ -4290,6 +4303,10 @@ describe('Editor, moving the view', () => {
 
       expect(shown()).toBe('Box');
 
+      // The release's click is `dragScene`'s. Raised, the pan swallows it and
+      // the selection stands; not raised, there is nothing to swallow and the
+      // assertion below passes having exercised nothing -- so the dependency
+      // is named here, because the test itself cannot notice it going away.
       dragScene(container, [30, 30], [70, 55]);
 
       expect(shown()).toBe('Box');
