@@ -11,7 +11,6 @@ import type LineDecal from './../LineDecal';
 import type { Mat3 } from './../Mat3';
 import type { PoseMap } from './../Scene';
 import type { ScreenPoint } from './placeGizmos';
-import type { StateMap } from './../Frame';
 import type { Vec3 } from './../Vec3';
 
 /**
@@ -139,14 +138,17 @@ function drawnUnder(
  * `DecalView` draws them, with a few pixels' reach -- and frames on their
  * gizmo, the cross and its +x pointer, which the editor draws over everything. Screen space throughout,
  * because a gizmo is a fixed size on screen and a shape's reach should be too.
+ *
+ * The poses rather than the state they were made from: a caller asking this on
+ * every pointer move has already solved the scene's pose for the marks it
+ * draws, and solving it again here would answer one question with two poses.
  */
 export default function hitsAt(
   scene: CoreScene,
-  stateMap: StateMap,
+  poses: PoseMap,
   xformMatrix: Mat3,
   point: ScreenPoint,
 ): (Frame | Decal)[] {
-  const poses = scene.getPosMatrixMap(stateMap);
   const frames = placeGizmos(scene, poses, xformMatrix)
     .filter(
       (placement) =>

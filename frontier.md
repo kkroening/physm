@@ -9,13 +9,16 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 **Editing in the scene.** Most gestures in the scene pane are met with a
 refusal rather than an effect (_Karl, 2026-09-11_). Three parts:
 
-1. **A press drags the nearest thing that can move**, rather than being
-   blocked by something on top that cannot. A press anywhere in a component's
-   instance drags the frame that places the instance.
-2. **Shapes can be edited at all.** A selected box, circle or weight drags its
-   `position`; a selected line's ends drag independently; and selecting any of
-   them shows handles, so the picture says what can be moved.
+1. ~~**A press drags the nearest thing that can move**~~ — done.
+2. ~~**Shapes can be edited at all**~~ — done.
 3. **The crosshairs and the grid can be hidden**, from a control in the pane.
+   Hiding the marks alone would leave the rules they stand for deciding
+   presses invisibly -- a frame's gizmo is placed from the pose whether or not
+   anything drew it, and a handle's reach is a ring around a point. So the
+   control turns off the *editing overlays as a group*, rules included:
+   hidden, a press takes the nearest frame above whatever it points at, which
+   is the one rule that needs nothing drawn, because it starts from the shapes
+   the scene itself paints.
 
 ## Next — the MVP
 

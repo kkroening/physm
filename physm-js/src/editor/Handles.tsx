@@ -1,8 +1,6 @@
+import { HANDLE_SIZE } from './placeGizmos';
 import type { ReactElement } from 'react';
 import type { ScreenPoint } from './placeGizmos';
-
-/** How far a handle reaches from the point it marks, in pixels. */
-const HANDLE_SIZE = 4;
 
 export interface HandlesProps {
   readonly handles: readonly { prop: string; at: ScreenPoint }[];

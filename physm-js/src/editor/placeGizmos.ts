@@ -10,6 +10,23 @@ import type { Vec3 } from './../Vec3';
 /** How far each arm of a gizmo's cross reaches from its origin, in pixels. */
 export const ARM_LENGTH = 6;
 
+/**
+ * How far a handle's square reaches from the point it marks, in pixels.
+ *
+ * Here beside the placement, as `ARM_LENGTH` is, so that what is drawn and
+ * what can be grabbed cannot drift apart: `Handles` draws to it and the pane
+ * takes hold within `HANDLE_REACH` of it.
+ */
+export const HANDLE_SIZE = 4;
+
+/**
+ * How near a press must land to a handle to take hold of it, in pixels.
+ *
+ * A shade beyond the square's corner, which sits `HANDLE_SIZE * √2` out, so
+ * that every part of the mark is grabbable and little else is.
+ */
+export const HANDLE_REACH = Math.ceil(HANDLE_SIZE * Math.SQRT2);
+
 export type ScreenPoint = readonly [number, number];
 
 /** One frame's gizmo, placed on screen. */

@@ -1,3 +1,4 @@
+import Anchor from './../react/Anchor';
 import Box from './../react/Box';
 import Circle from './../react/Circle';
 import Coincidence from './../react/Coincidence';
@@ -3616,6 +3617,106 @@ describe('Editor, dragging a shape', () => {
     dragScene(container, [18, 0], [61, 0]);
 
     expect(code()).toMatch(/<Box[^/]*position=\{\[3\.4, 0\]\}/);
+  });
+
+  test('a constraint offers no handles: its points are not read here', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <>
+            <TrackFrame id="left" />
+            <TrackFrame id="right" position={[2, 0]} />
+            <Coincidence frame1="left" frame2="right" position1={[1, 0]} />
+          </>,
+        )}
+      />,
+    );
+    pick('Coincidence');
+
+    // `position1` is read in `frame1`'s coordinates, which this places
+    // against no frame it knows; and `position2` is absent because it is
+    // solved for, so writing a value would stop the scene building.
+    expect(handles(container)).toEqual([]);
+  });
+
+  test('an anchor offers no handle: its point is solved for', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <TrackFrame id="cart">
+            <Anchor id="hitch" />
+          </TrackFrame>,
+        )}
+      />,
+    );
+    pick('Anchor');
+
+    // `Anchor.position` carries no default on purpose -- an anchor without one
+    // has its point solved for, and no pair of numbers says that. A handle
+    // would write a value and freeze what the solver is there to find.
+    expect(handles(container)).toEqual([]);
+  });
+
+  test('the nearer of two handles takes the press', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <TrackFrame id="cart">
+            <Line startPos={[0, 0]} endPos={[0.3, 0]} lineWidth={0.2} />
+          </TrackFrame>,
+        )}
+      />,
+    );
+    pick('Line');
+
+    // The ends are 0.3 of a unit apart, so both are inside one press. The
+    // nearer must win: first-declared would always take `endPos`, and
+    // `startPos` could never be grabbed at all.
+    dragScene(container, [1, 0], [19, 0]);
+
+    expect(code()).toMatch(/startPos=\{\[1, 0\]\}/);
+    expect(code()).toMatch(/endPos=\{\[0\.3, 0\]\}/);
+  });
+
+  test('a shape snaps to points in the frame drawing it, which does not move', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <TrackFrame id="cart">
+            <Box width={1} height={1} position={[1, 0]} />
+            <RotationalFrame id="pivot" position={[3.4, 0]} />
+          </TrackFrame>,
+        )}
+      />,
+    );
+    pick('Box');
+
+    // The pivot shares the box's own frame. Excluding what moves with the
+    // drag used to exclude that whole frame, so the points nearest to hand
+    // were the ones left out; a shape moves nothing but itself.
+    dragScene(container, [18, 0], [61, 0]);
+
+    expect(code()).toMatch(/<Box[^/]*position=\{\[3\.4, 0\]\}/);
+  });
+
+  test('a click on a handle keeps what has nothing else to be clicked', () => {
+    const { container } = render(<Editor />);
+    pick('Weight');
+
+    // A weight draws nothing but its handle, so a click reaching past it
+    // would dismiss the only mark it has.
+    clickScene(container, [0, 0]);
+
+    expect(shown()).toBe('Weight');
+    expect(handles(container)).toEqual(['position']);
+
+    // A box has geometry of its own, so clicking it selects it again and the
+    // click is left alone -- which is what lets a scene click still close a
+    // name being typed.
+    pick('Box');
+    clickScene(container, [0, -3]);
+
+    expect(shown()).not.toBe('Box');
   });
 
   test("a shape moves along its own frame's axes, not its parent's", () => {
