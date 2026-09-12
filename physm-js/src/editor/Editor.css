@@ -243,6 +243,14 @@
 /* Every frame's origin, over the scene: slate on the scene's blue, with the
    line back to the parent's origin fainter than the cross. The halo keeps a
    gizmo readable over a solid shape, which is often where a frame sits. */
+/* A shape has no gizmo, so its handles are what say it can be moved -- and
+   for a weight, which draws nothing at all, they are the only mark it has. */
+.editor__handle {
+  fill: #fff;
+  stroke: #3d6fa8;
+  stroke-width: 1.5;
+}
+
 .editor__gizmo {
   filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);
 }

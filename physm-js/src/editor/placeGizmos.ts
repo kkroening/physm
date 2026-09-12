@@ -44,6 +44,27 @@ function screenAxis(xformMatrix: Mat3, axis: Vec3): ScreenPoint {
   return vec3.toPlanar(vec3.scale(onScreen, 1 / vec3.planarLength(onScreen)));
 }
 
+/**
+ * Where a point written in `frame`'s coordinates lands on screen -- or in the
+ * world's, for no frame.
+ *
+ * Here rather than in the editor's pane, which holds no matrix maths of its
+ * own: this is the same composition `placeAll` makes, the view transform over
+ * the pose the scene computed.
+ */
+export function placePoint(
+  poses: PoseMap,
+  frame: Frame | null,
+  viewXform: Mat3,
+  point: Vec3,
+): ScreenPoint {
+  const xform = frame
+    ? mat3.multiply(viewXform, poseIn(poses, frame.id))
+    : viewXform;
+
+  return vec3.toPlanar(mat3.apply(xform, point));
+}
+
 /** Every frame from `frames` down, placed, each before its children. */
 function placeAll(
   frames: readonly Frame[],
