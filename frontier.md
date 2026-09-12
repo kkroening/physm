@@ -6,11 +6,16 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**Constants for repeated values in the code.** A value used across a rig -- a
-rod's length by its line, its circle and its weight -- is written out at each
-one, so changing it means finding every copy. Written once, as a named
-constant the rest refer to, it would change in one place. Naming them is most
-of the problem.
+**An imported component's tag, from its module rather than its function.** The
+document records an imported composite by `Function.name`, and the emitter
+writes both its tag and its import path from that -- so a production build,
+which minifies those names, would emit a file naming the wrong component and
+importing from the wrong path.
+[0014 page 6](docs/issues/0014/06-codegen.md) says the document holds function
+identities "so the emitter knows exactly which module each component came
+from", but a function carries no module path at runtime: something has to
+supply that map. A registry the host passes to the editor, or a build-time
+convention -- which of the two is the question to settle before building it.
 
 ## Next — the MVP
 
@@ -58,15 +63,19 @@ was built while gizmos were in review.
 - What a drag does while the scene plays. The frame drifts from the pointer,
   since its own coordinate and its parents' keep moving: pause while a drag is
   held, refuse one during play, or keep the live nudge. Karl's call.
-- Take an imported component's tag from the module lookup
-  [0014 page 6](docs/issues/0014/06-codegen.md) describes, not from
-  `Function.name`, which a production build minifies. Dev builds and the tests
-  keep real names, so nothing shows it yet.
 - Types first or schema first, for components the editor declares? The core
   nine are types-first, forced by their core option classes, while
   [0014 page 5](docs/issues/0014/05-metadata.md) argues schema-first. Declared
   components take no props until promote-to-prop, so it stays open -- Karl's
   call.
+- Whether an emitted constant is the answer or a placeholder. What page 6's
+  first row loses is not the constant but *the fact that the uses were one
+  value*, and no count recovers that: three values can coincide as easily as
+  two, and a rod used by a line and a weight without a circle is a real repeat
+  left inline. The threshold trades a false positive for a false negative
+  rather than removing the guess. What would end it is the document recording
+  that several props hold one value -- which is close to what promote-to-prop
+  implies -- and whether that is where this goes is Karl's call.
 - Promote to prop, or scope ids per instance: either makes a component that
   names an id reusable. Which comes first is Karl's call. A promoted prop that
   sets a count -- page 8's `segmentCount` -- changes the structure but arrives
@@ -265,3 +274,12 @@ was built while gizmos were in review.
   exp(q^k ζ̂_k)` on its own way down the tree. `poseOf` is gone, and the rule
   that a frame absent from the state map is read at its `initialState` is
   stated once.
+- **Constants for repeated values** — a compound value written three times or
+  more anywhere in the module is declared once, above the definitions, and
+  used by name: the starter's bob becomes `const POSITION = [4, 0]`. The name
+  comes from the prop that carries it, the most common one where they differ,
+  because the name a person wrote is gone with the rest of how the file was
+  written -- [0014 page 6](docs/issues/0014/06-codegen.md) says so in its
+  table, and asks for the mechanical recovery anyway. Three rather than twice,
+  because a drag landing one frame on another's point made a coincidence look
+  like a shared value.

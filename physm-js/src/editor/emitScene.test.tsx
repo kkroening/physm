@@ -35,6 +35,25 @@ function Gantry({
   );
 }
 
+/**
+ * An imported composite taking a tuple, which is the shape a hoisted literal
+ * would stop satisfying: a `const` is inferred on its own and widens to
+ * `number[]`, where inline the prop's own type named it.
+ */
+function Strut({ at }: { at: readonly [number, number] }): ReactElement {
+  return <Weight mass={1} position={at} />;
+}
+
+/** `./Strut` as `tsc` sees it. */
+const STRUT_MODULE = `import type { ReactElement } from 'react';
+
+export default function Strut(_props: {
+  at: readonly [number, number];
+}): ReactElement {
+  throw new Error('declared for type-checking only');
+}
+`;
+
 /** `./Gantry` as `tsc` sees it: its type, for an emitted import to check against. */
 const GANTRY_MODULE = `import type { ReactElement } from 'react';
 
@@ -57,6 +76,7 @@ const MODULES: Record<string, unknown> = {
   './react': binding,
   './CartAndRope': cartAndRopeModule,
   './Gantry': { default: Gantry },
+  './Strut': { default: Strut },
 };
 
 /**
@@ -254,6 +274,32 @@ function demo(): SceneDocument {
   return documentFrom(<CartAndRope />);
 }
 
+/** One point, under three tuple-typed props of an imported composite. */
+function struts(): SceneDocument {
+  return documentFrom(
+    <TrackFrame id="cart">
+      <Strut at={[4, 0]} />
+      <Strut at={[4, 0]} />
+      <Strut at={[4, 0]} />
+    </TrackFrame>,
+  );
+}
+
+/**
+ * One point carried three times by building blocks and once by an imported
+ * component -- so the constant exists, and one use of it must not take it.
+ */
+function shared(): SceneDocument {
+  return documentFrom(
+    <RotationalFrame id="arm">
+      <Line endPos={[4, 0]} lineWidth={0.15} />
+      <Circle position={[4, 0]} radius={0.5} />
+      <Weight mass={10} position={[4, 0]} />
+      <Strut at={[4, 0]} />
+    </RotationalFrame>,
+  );
+}
+
 /** A component the document defines, listed after the scene that uses it. */
 function definedLater(): SceneDocument {
   const [arm] = nodesFrom(
@@ -351,13 +397,18 @@ describe('emitScene', () => {
     // `undefined` that `exactOptionalPropertyTypes` refuses, would fail to
     // build -- so every module they emit is checked here, in one program.
     const modules = Object.fromEntries(
-      Object.entries({ everything, demo, definedLater }).map(([name, doc]) => [
-        `Emitted_${name}.tsx`,
-        emitScene(doc()).source,
-      ]),
+      Object.entries({ everything, demo, definedLater, struts, shared }).map(
+        ([name, doc]) => [`Emitted_${name}.tsx`, emitScene(doc()).source],
+      ),
     );
 
-    expect(typeCheck({ ...modules, 'Gantry.tsx': GANTRY_MODULE })).toEqual([]);
+    expect(
+      typeCheck({
+        ...modules,
+        'Gantry.tsx': GANTRY_MODULE,
+        'Strut.tsx': STRUT_MODULE,
+      }),
+    ).toEqual([]);
   }, 60_000);
 
   test('refuses components that instantiate each other in a cycle', () => {
@@ -496,6 +547,130 @@ describe('emitScene', () => {
     expect(text([0, 0])).toBe('<Weight mass={2} />');
     expect(text([0, 1])).toBe('<Weight mass={3} />');
     expect(text([0])).toMatch(/^<TrackFrame id="cart">[\s\S]*<\/TrackFrame>$/);
+  });
+});
+
+describe('emitScene, repeated values', () => {
+  test('a value written more than once is named, and used by name', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <RotationalFrame id="arm">
+          <Line endPos={[4, 0]} lineWidth={0.15} />
+          <Circle position={[4, 0]} radius={0.5} />
+          <Weight mass={10} position={[4, 0]} />
+        </RotationalFrame>,
+      ),
+    );
+
+    // The name a person wrote is gone with the rest of how the file was
+    // written, so it comes from the prop that carries the value -- the most
+    // common of them, which is `position` here rather than `endPos`.
+    expect(source).toContain('const POSITION = [4, 0];');
+    expect(source).toContain('endPos={POSITION}');
+    expect(source).toContain('position={POSITION}');
+    expect(source).not.toContain('[4, 0]}');
+  });
+
+  test('what is written once, and what is not compound, stays where it is', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <TrackFrame id="cart">
+          <Weight mass={2} position={[1, 0]} />
+          <Weight mass={2} />
+          <Weight mass={2} />
+        </TrackFrame>,
+      ),
+    );
+
+    // Two weights of the same mass are two masses that agree, not one value
+    // written twice -- and a point written once is not worth a name.
+    expect(source).not.toContain('const ');
+    expect(source).toContain('mass={2}');
+    expect(source).toContain('position={[1, 0]}');
+  });
+
+  test('a compound value written twice is left where it is', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <TrackFrame id="cart" position={[12, -0.5]}>
+          <Line startPos={[-12, -0.5]} endPos={[12, -0.5]} lineWidth={0.05} />
+        </TrackFrame>,
+      ),
+    );
+
+    // The demo's own coincidence: a cart dragged onto the ground line's end.
+    // Two uses is where the threshold sits, so it is stated here rather than
+    // borrowed from tests about snapping that name the literal in passing.
+    expect(source).not.toContain('const ');
+    expect(source).toContain('position={[12, -0.5]}');
+    expect(source).toContain('endPos={[12, -0.5]}');
+  });
+
+  test('what an imported component is given is left alone', () => {
+    const source = expectRoundTrip(struts());
+
+    // Three uses, and still inline: the emitter cannot see `Strut`'s types,
+    // and a hoisted `const AT = [4, 0]` widens to `number[]`, which its
+    // tuple-typed prop would refuse. The type-check test emits this one too.
+    expect(source).not.toContain('const ');
+    expect(source).toContain('at={[4, 0]}');
+  });
+
+  test('a constant stops at the components whose types are known', () => {
+    const source = expectRoundTrip(shared());
+
+    // The building blocks take the name; the imported component keeps the
+    // literal, because `const POSITION = [4, 0]` is inferred on its own and
+    // widens to `number[]`, which its tuple-typed prop would refuse. The
+    // type-check test emits this document too, which is where that would show.
+    expect(source).toContain('const POSITION = [4, 0];');
+    expect(source).toContain('endPos={POSITION}');
+    expect(source).toContain('position={POSITION}');
+    expect(source).toContain('at={[4, 0]}');
+  });
+
+  test('a tie between prop names goes the same way every time', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <>
+          <RotationalFrame id="a">
+            <Line endPos={[2, 0]} lineWidth={0.1} />
+            <Circle position={[2, 0]} radius={0.3} />
+          </RotationalFrame>
+          <RotationalFrame id="b">
+            <Line endPos={[2, 0]} lineWidth={0.1} />
+            <Weight mass={1} position={[2, 0]} />
+          </RotationalFrame>
+        </>,
+      ),
+    );
+
+    // Counted across the whole module, this point is two `endPos` and two
+    // `position`. A tie goes alphabetically, so the same document emits the
+    // same file rather than whichever name the walk reached first.
+    expect(source).toContain('const END_POS = [2, 0];');
+    expect(source).toContain('position={END_POS}');
+  });
+
+  test('the name steps aside for one the module already binds', () => {
+    // The root is the one definition nothing instantiates, so a walk of the
+    // tags never meets its name -- and a module declaring `const POSITION`
+    // beside `function POSITION()` would not even evaluate.
+    const [arm] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={[4, 0]} lineWidth={0.15} />
+        <Circle position={[4, 0]} radius={0.5} />
+        <Weight mass={10} position={[4, 0]} />
+      </RotationalFrame>,
+    );
+    const source = expectRoundTrip({
+      root: 'POSITION',
+      definitions: [{ name: 'POSITION', body: [arm!] }],
+    });
+
+    expect(source).toContain('function POSITION(');
+    expect(source).toContain('const POSITION_2 = [4, 0];');
+    expect(source).toContain('position={POSITION_2}');
   });
 });
 

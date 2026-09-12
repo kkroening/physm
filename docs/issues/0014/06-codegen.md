@@ -58,17 +58,19 @@ reattaches to the wrong frame.
 import { Circle, Line, RotationalFrame, TrackFrame, Weight } from './react';
 import type { ReactElement } from 'react';
 
+const POSITION = [8, 0];
+
 function Pendulum(): ReactElement {
   return (
-    <RotationalFrame position={[0, 0]} initialState={[-1.5707963267948966, 0]}>
-      <Line endPos={[8, 0]} lineWidth={0.22} />
-      <Circle position={[8, 0]} radius={0.65} />
-      <Weight mass={15} position={[8, 0]} />
+    <RotationalFrame initialState={[-Math.PI / 2, 0]}>
+      <Line endPos={POSITION} lineWidth={0.22} />
+      <Circle position={POSITION} radius={0.65} />
+      <Weight mass={15} position={POSITION} />
     </RotationalFrame>
   );
 }
 
-export function SomeScene(): ReactElement {
+export default function SomeScene(): ReactElement {
   return (
     <TrackFrame id="cart">
       <Pendulum />
@@ -84,11 +86,13 @@ sort of "who instantiates whom", which terminates because
 Only the root is exported; the rest are file-local, because nothing outside the
 file refers to them.
 
-⚠️ **That is what the emitter actually produces today**, decimals and all:
-`-1.5707963267948966` is what `-Math.PI / 2` evaluated to, and the *What is lost*
-table below says so. The round-number mitigation would print the nicer form; it
-is not built, and showing its output here would have made the export look better
-than the design admits.
+⚠️ **That is what the emitter actually produces today** — printed from it
+rather than written by hand, which is the only way this block stays true. Four
+things in it are worth naming, because an earlier version of this page showed
+none of them: the repeated point is declared once and used by name; the angle
+prints as `-Math.PI / 2` rather than the `-1.5707963267948966` it evaluated to;
+`position={[0, 0]}` is absent, because a prop equal to its declared default is
+not written; and the scene is the module's `default` export.
 
 Imports are derived from what the file actually uses, split by where it came
 from: the core vocabulary from `./react`, prefabs from their own modules, and
@@ -127,15 +131,24 @@ rig out, emit it, and then the source is the source. Re-emitting over a
 hand-refined file is not a supported operation, and the editor should say so
 plainly at the moment of export rather than letting someone discover it.
 
-## Two mitigations worth building, neither urgent
+## Two mitigations, both built
 
-- **Emit a named constant when a value repeats.** `[1.4, 0]` appearing six times
-  becomes `const TIP = [1.4, 0]`. Mechanical, and it recovers a good part of what
-  the first row loses.
-- **Round-number formatting.** `-1.5707963267948966` should be emitted as
-  `-Math.PI / 2` when it matches to within float64. A small table of recognized
-  constants covers most of what a scene contains, and the alternative is a file
-  full of seventeen-digit decimals.
+- **A named constant when a value repeats.** `[1.4, 0]` written three times
+  becomes `const TIP = [1.4, 0]` — except for the name, which cannot be `TIP`:
+  the first row above is exactly the loss of it, so the name comes from the
+  prop that carries the value. Three uses rather than two, because two can be
+  a coincidence of layout rather than one value used twice; and only on the
+  building blocks, whose prop types are known to accept a value inferred on
+  its own, where an imported component's are not.
+- **Round-number formatting.** `-1.5707963267948966` is emitted as
+  `-Math.PI / 2`: a multiple of π over a small denominator, when one matches
+  the value exactly.
+
+What the first of them recovers is a good part of the first row, not the row
+itself. What is lost there is the *fact* that several uses were one value, and
+counting cannot tell that from a coincidence -- which is why the threshold is a
+judgement rather than a rule, and why a document that recorded the sharing
+would end the guessing rather than tune it.
 
 ## Highlighting
 
