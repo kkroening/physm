@@ -80,6 +80,42 @@ describe('SceneView', () => {
     expect(Number(circle!.getAttribute('cx'))).toBeCloseTo(13, 9);
   });
 
+  test('a frame draws at the pose the scene itself computes', () => {
+    const scene = new Scene({
+      frames: [
+        new TrackFrame({
+          id: 'outer',
+          initialState: [10, 0],
+          frames: [
+            new TrackFrame({
+              id: 'inner',
+              initialState: [3, 0],
+              decals: [new CircleDecal({ radius: 1 })],
+            }),
+          ],
+        }),
+      ],
+    });
+    const stateMap = new Map([['outer', [4, 0]]]) as StateMap;
+    const view = mat3.translation(5, -5);
+    const { container } = render(
+      <svg>
+        <SceneView scene={scene} stateMap={stateMap} xformMatrix={view} />
+      </svg>,
+    );
+    const circle = container.querySelector('g.frame > g.frame > circle')!;
+
+    // No number written out here: the pose is the one the scene computes,
+    // carried through the view transform. A walk of the drawing's own would
+    // have to agree with this by luck rather than by construction.
+    const [x, y] = mat3.translationOf(
+      mat3.multiply(view, scene.getPosMatrixMap(stateMap).get('inner')!),
+    );
+
+    expect(Number(circle.getAttribute('cx'))).toBeCloseTo(x, 9);
+    expect(Number(circle.getAttribute('cy'))).toBeCloseTo(y, 9);
+  });
+
   test('the view transform carries the whole scene', () => {
     const scene = new Scene({ decals: [new CircleDecal({ radius: 2 })] });
     const { container } = render(

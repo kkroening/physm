@@ -28,6 +28,10 @@ export default function SceneView({
   stateMap,
   xformMatrix = mat3.IDENTITY,
 }: SceneViewProps): ReactElement {
+  // One walk from state to pose, made by the scene itself; every frame below
+  // reads its own out of it rather than composing one on the way down.
+  const poses = scene.getPosMatrixMap(stateMap);
+
   return (
     <g className="scene">
       {scene.decals.map((decal, index) => (
@@ -40,7 +44,7 @@ export default function SceneView({
       {scene.frames.map((frame, index) => (
         <FrameView
           frame={frame}
-          stateMap={stateMap}
+          poses={poses}
           xformMatrix={xformMatrix}
           key={`frame${index}`}
         />

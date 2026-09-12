@@ -29,6 +29,22 @@ function mapGet<K, V>(map: Map<K, V>, key: K, what: string): V {
   return value;
 }
 
+/** Every frame's pose, local -> world, as `getPosMatrixMap` reads a state. */
+export type PoseMap = Map<FrameId, Mat3>;
+
+/**
+ * One frame's pose out of a map `getPosMatrixMap` made.
+ *
+ * Exported because the drawing and the editor read that map rather than
+ * composing a pose of their own: the walk from state to pose happens here,
+ * once, and what draws it multiplies in the view transform. A miss means the
+ * map was made from another scene, which is worth saying rather than passing
+ * an `undefined` on.
+ */
+export function poseIn(poses: PoseMap, frameId: FrameId): Mat3 {
+  return mapGet(poses, frameId, 'pose');
+}
+
 /**
  * An index into an array this class sized itself.
  *

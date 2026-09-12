@@ -1,13 +1,15 @@
 import * as mat3 from './../Mat3';
 import * as vec3 from './../Vec3';
-import placeGizmos, { ARM_LENGTH, poseOf } from './placeGizmos';
+import placeGizmos, { ARM_LENGTH } from './placeGizmos';
 import type BoxDecal from './../BoxDecal';
 import type CircleDecal from './../CircleDecal';
+import { poseIn } from './../Scene';
 import type CoreScene from './../Scene';
 import type Decal from './../Decal';
 import type Frame from './../Frame';
 import type LineDecal from './../LineDecal';
 import type { Mat3 } from './../Mat3';
+import type { PoseMap } from './../Scene';
 import type { ScreenPoint } from './placeGizmos';
 import type { StateMap } from './../Frame';
 import type { Vec3 } from './../Vec3';
@@ -116,15 +118,15 @@ function isHit({ decal, xformMatrix }: Drawn, point: ScreenPoint): boolean {
 /** Every decal from `frames` down, bottom first, as `FrameView` draws them. */
 function drawnUnder(
   frames: readonly Frame[],
-  stateMap: StateMap,
-  parentXform: Mat3,
+  poses: PoseMap,
+  viewXform: Mat3,
 ): Drawn[] {
   return frames.flatMap((frame) => {
-    const xformMatrix = poseOf(frame, stateMap, parentXform);
+    const xformMatrix = mat3.multiply(viewXform, poseIn(poses, frame.id));
 
     return [
       ...frame.decals.map((decal) => ({ decal, xformMatrix })),
-      ...drawnUnder(frame.frames, stateMap, xformMatrix),
+      ...drawnUnder(frame.frames, poses, viewXform),
     ];
   });
 }
@@ -144,7 +146,8 @@ export default function hitsAt(
   xformMatrix: Mat3,
   point: ScreenPoint,
 ): (Frame | Decal)[] {
-  const frames = placeGizmos(scene, stateMap, xformMatrix)
+  const poses = scene.getPosMatrixMap(stateMap);
+  const frames = placeGizmos(scene, stateMap, xformMatrix, poses)
     .filter(
       (placement) =>
         distance(point, placement.origin) <= ARM_LENGTH + REACH ||
@@ -154,7 +157,7 @@ export default function hitsAt(
     .map((placement) => placement.frame);
   const decals = [
     ...scene.decals.map((decal) => ({ decal, xformMatrix })),
-    ...drawnUnder(scene.frames, stateMap, xformMatrix),
+    ...drawnUnder(scene.frames, poses, xformMatrix),
   ]
     .filter((drawn) => isHit(drawn, point))
     .map((drawn) => drawn.decal);

@@ -6,10 +6,11 @@ teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
 
 ## In view
 
-**One walk from state to pose.** `FrameView`, the gizmos and
-`Scene.getPosMatrixMap` each compose a frame's pose from the state map, and
-agree because tests hold them to it. Reading the core's map everywhere,
-composed with the view, would make the agreement structural.
+**Constants for repeated values in the code.** A value used across a rig -- a
+rod's length by its line, its circle and its weight -- is written out at each
+one, so changing it means finding every copy. Written once, as a named
+constant the rest refer to, it would change in one place. Naming them is most
+of the problem.
 
 ## Next — the MVP
 
@@ -50,9 +51,6 @@ was built while gizmos were in review.
   the scene's own tab, and a component's tab draws it as authored -- so undoing
   an edit made in a component's tab, which returns there, pauses the run.
   Whether undo should stay on the scene's tab while it runs is Karl's call.
-- Constants for repeated values in the code: a value used across a rig -- a
-  rod's length by its line, its circle and its weight -- written once, as a
-  named constant the rest refer to. Naming them is most of the problem.
 - Snapping to a box's corners and centre, and to the world's origin as a
   point. Neither is a target yet -- Karl's call -- though a frame at the top
   whose origin sits at its position reaches the origin as a crossing of the
@@ -260,3 +258,10 @@ was built while gizmos were in review.
   sits. A drop is held to the rules of adding there, and to two of its own: a
   node cannot go inside itself, and one dropped where it already stands is
   refused rather than recorded as a step that changes nothing.
+- **One walk from state to pose** — `Scene.getPosMatrixMap` is the only place
+  a state map becomes a pose. The drawing, the gizmos, hit-testing and the
+  snap points read a frame's pose out of that map through `poseIn` and
+  multiply in the view transform, rather than each composing `M_i = ∏ C_k
+  exp(q^k ζ̂_k)` on its own way down the tree. `poseOf` is gone, and the rule
+  that a frame absent from the state map is read at its `initialState` is
+  stated once.
