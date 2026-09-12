@@ -1,13 +1,15 @@
 import * as mat3 from './../Mat3';
 import * as vec3 from './../Vec3';
-import placeGizmos, { poseOf } from './placeGizmos';
+import placeGizmos from './placeGizmos';
 import type BoxDecal from './../BoxDecal';
 import type CircleDecal from './../CircleDecal';
+import { poseIn } from './../Scene';
 import type CoreScene from './../Scene';
 import type Decal from './../Decal';
 import type Frame from './../Frame';
 import type LineDecal from './../LineDecal';
 import type { Mat3 } from './../Mat3';
+import type { PoseMap } from './../Scene';
 import type { ScreenPoint } from './placeGizmos';
 import type { StateMap } from './../Frame';
 import type { Vec3 } from './../Vec3';
@@ -42,8 +44,8 @@ function decalPoints(decal: Decal, xformMatrix: Mat3): ScreenPoint[] {
 /** The points of every decal from `frames` down, but for what `skip` moves. */
 function decalPointsUnder(
   frames: readonly Frame[],
-  stateMap: StateMap,
-  parentXform: Mat3,
+  poses: PoseMap,
+  viewXform: Mat3,
   skip: Frame,
 ): ScreenPoint[] {
   return frames.flatMap((frame) => {
@@ -51,11 +53,11 @@ function decalPointsUnder(
       return [];
     }
 
-    const xformMatrix = poseOf(frame, stateMap, parentXform);
+    const xformMatrix = mat3.multiply(viewXform, poseIn(poses, frame.id));
 
     return [
       ...frame.decals.flatMap((decal) => decalPoints(decal, xformMatrix)),
-      ...decalPointsUnder(frame.frames, stateMap, xformMatrix, skip),
+      ...decalPointsUnder(frame.frames, poses, viewXform, skip),
     ];
   });
 }
@@ -102,12 +104,13 @@ export default function snapPoints(
   dragged: Frame,
 ): ScreenPoint[] {
   const moving = movingWith(dragged);
+  const poses = scene.getPosMatrixMap(stateMap);
 
   return [
-    ...placeGizmos(scene, stateMap, xformMatrix)
+    ...placeGizmos(scene, poses, xformMatrix)
       .filter(({ frame }) => !moving.has(frame))
       .map(({ origin }) => origin),
     ...scene.decals.flatMap((decal) => decalPoints(decal, xformMatrix)),
-    ...decalPointsUnder(scene.frames, stateMap, xformMatrix, dragged),
+    ...decalPointsUnder(scene.frames, poses, xformMatrix, dragged),
   ];
 }

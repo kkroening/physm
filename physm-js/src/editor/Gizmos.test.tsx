@@ -1,3 +1,4 @@
+import * as mat3 from './../Mat3';
 import Circle from './../react/Circle';
 import Gizmos from './Gizmos';
 import ParentAxes from './ParentAxes';
@@ -133,6 +134,39 @@ describe('Gizmos', () => {
     });
   });
 
+  test('every gizmo sits where the scene says its frame is', () => {
+    const scene = buildScene(
+      <TrackFrame id="cart" initialState={[2, 0]}>
+        <RotationalFrame id="arm" position={[1, 0]} initialState={[0.4, 0]}>
+          <Circle radius={0.5} />
+        </RotationalFrame>
+      </TrackFrame>,
+    );
+    const stateMap = new Map([['cart', [3, 0]]]) as StateMap;
+    const xformMatrix = view(18);
+    const poses = scene.getPosMatrixMap(stateMap);
+
+    // Exactly, not nearly: the gizmos multiply the view into the same pose the
+    // scene computed, rather than composing one of their own that would have
+    // to agree with it by luck. Keyed by id, since the two are ordered for
+    // different reasons -- drawing order here, the solver's order there.
+    const placed = Object.fromEntries(
+      placeGizmos(scene, poses, xformMatrix).map(({ frame, origin }) => [
+        frame.id,
+        origin,
+      ]),
+    );
+
+    expect(placed).toEqual(
+      Object.fromEntries(
+        [...poses].map(([id, pose]) => [
+          id,
+          mat3.translationOf(mat3.multiply(xformMatrix, pose)),
+        ]),
+      ),
+    );
+  });
+
   test("the line runs back to the parent's origin, the world's at the top", () => {
     const scene = buildScene(arm);
     const container = draw(scene, moved, view(18));
@@ -216,7 +250,7 @@ function drawParentAxes(
 ): Element[] {
   const placement = placeGizmos(
     scene,
-    scene.getInitialStateMap(),
+    scene.getPosMatrixMap(),
     xformMatrix,
   ).find(({ frame }) => frame.id === id)!;
 

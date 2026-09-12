@@ -72,9 +72,11 @@ export default function Gizmos({
   stateMap,
   xformMatrix,
 }: GizmosProps): ReactElement {
+  const poses = scene.getPosMatrixMap(stateMap);
+
   return (
     <g className="editor__gizmos">
-      {placeGizmos(scene, stateMap, xformMatrix).map((placement) => (
+      {placeGizmos(scene, poses, xformMatrix).map((placement) => (
         <GizmoView placement={placement} key={placement.frame.id} />
       ))}
     </g>

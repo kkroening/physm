@@ -8,7 +8,7 @@ import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint } from './Constraint';
 import { DimensionError, SingularMatrixError } from './solveLinearSystem';
-import { DEFAULT_GRAVITY } from './Scene';
+import { DEFAULT_GRAVITY, poseIn } from './Scene';
 
 describe('Scene queries', () => {
   // `TrackFrame` and `RotationalFrame`, not the base `Frame`, whose
@@ -48,6 +48,16 @@ describe('Scene queries', () => {
     expect(() => scene.getSeparation('root', [0, 0], 'nope')).toThrow(
       /No such frame/,
     );
+  });
+
+  test('a pose is asked for by a frame the map was made from', () => {
+    // `poseIn` is how the drawing, the gizmos, hit-testing and the snap points
+    // read a pose, so a map made from another scene is a bug worth a name
+    // rather than a frame silently drawn at the world's origin.
+    const poses = build().getPosMatrixMap();
+
+    expect(poseIn(poses, 'child')).toBe(poses.get('child'));
+    expect(() => poseIn(poses, 'nope')).toThrow(/No pose for/);
   });
 
   test('getSeparation measures frame origins when given two ids', () => {

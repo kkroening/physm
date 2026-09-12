@@ -29,6 +29,22 @@ function mapGet<K, V>(map: Map<K, V>, key: K, what: string): V {
   return value;
 }
 
+/** Every frame's pose, local -> world, as `getPosMatrixMap` reads a state. */
+export type PoseMap = Map<FrameId, Mat3>;
+
+/**
+ * One frame's pose out of a map `getPosMatrixMap` made.
+ *
+ * Exported because the drawing and the editor read that map rather than
+ * composing a pose of their own: the walk from state to pose happens here,
+ * once, and what draws it multiplies in the view transform. A miss means the
+ * map was made from another scene, which is worth saying rather than passing
+ * an `undefined` on.
+ */
+export function poseIn(poses: PoseMap, frameId: FrameId): Mat3 {
+  return mapGet(poses, frameId, 'pose');
+}
+
 /**
  * An index into an array this class sized itself.
  *
@@ -77,7 +93,7 @@ export interface AddConstraintOptions {
    * tick.
    */
   allowInitialViolation?: boolean;
-  posMatMap?: Map<FrameId, Mat3> | null;
+  posMatMap?: PoseMap | null;
 }
 
 /** A point, as any of the shapes the query API accepts for one. */
@@ -91,7 +107,7 @@ export interface Separation {
 
 export interface PoseQueryOptions {
   stateMap?: StateMap | null;
-  posMatMap?: Map<FrameId, Mat3> | null;
+  posMatMap?: PoseMap | null;
 }
 
 /**
@@ -216,7 +232,7 @@ export default class Scene {
     }
   }
 
-  getPosMatrixMap(stateMap: StateMap | null = null): Map<FrameId, Mat3> {
+  getPosMatrixMap(stateMap: StateMap | null = null): PoseMap {
     /**
      * The local->global position transformation matrix of every frame, indexed
      * by frame id — the scene's pose, as a function of its state.
@@ -433,7 +449,7 @@ export default class Scene {
     return this;
   }
 
-  getInvPosMatrixMap(posMatMap: Map<FrameId, Mat3>): Map<FrameId, Mat3> {
+  getInvPosMatrixMap(posMatMap: PoseMap): Map<FrameId, Mat3> {
     /**
      * The global->local ("inverse") transformation of every frame.
      *
@@ -453,7 +469,7 @@ export default class Scene {
   }
 
   getVelMatrixMap(
-    posMatMap: Map<FrameId, Mat3>,
+    posMatMap: PoseMap,
     invPosMatMap: Map<FrameId, Mat3>,
     stateMap: StateMap | null = null,
   ): Map<FrameId, Mat3> {
@@ -503,7 +519,7 @@ export default class Scene {
     };
   }
 
-  getWeightPosMap(posMatMap: Map<FrameId, Mat3>): Map<FrameId, Vec3[]> {
+  getWeightPosMap(posMatMap: PoseMap): Map<FrameId, Vec3[]> {
     /**
      * Every point mass in world coordinates, grouped by the frame carrying it.
      */

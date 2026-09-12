@@ -1,9 +1,10 @@
 import * as mat3 from './../Mat3';
 import * as vec3 from './../Vec3';
+import { poseIn } from './../Scene';
 import type CoreScene from './../Scene';
 import type Frame from './../Frame';
 import type { Mat3 } from './../Mat3';
-import type { StateMap } from './../Frame';
+import type { PoseMap } from './../Scene';
 import type { Vec3 } from './../Vec3';
 
 /** How far each arm of a gizmo's cross reaches from its origin, in pixels. */
@@ -31,21 +32,6 @@ export interface GizmoPlacement {
 }
 
 /**
- * The transform a frame is drawn under: its parent's, then its own at the
- * coordinate `stateMap` gives it, or at its `initialState` where the map has
- * none. `FrameView`'s rule, so what uses this agrees with the drawing.
- */
-export function poseOf(
-  frame: Frame,
-  stateMap: StateMap,
-  parentXform: Mat3,
-): Mat3 {
-  const [q] = stateMap.get(frame.id) ?? frame.initialState;
-
-  return mat3.multiply(parentXform, frame.getLocalPosMatrix(q));
-}
-
-/**
  * Which way `axis` points on screen under a transform, as a unit vector.
  *
  * Unit length rather than the transformed axis itself, which carries the view's
@@ -61,11 +47,12 @@ function screenAxis(xformMatrix: Mat3, axis: Vec3): ScreenPoint {
 /** Every frame from `frames` down, placed, each before its children. */
 function placeAll(
   frames: readonly Frame[],
-  stateMap: StateMap,
+  poses: PoseMap,
+  viewXform: Mat3,
   parentXform: Mat3,
 ): GizmoPlacement[] {
   return frames.flatMap((frame) => {
-    const xform = poseOf(frame, stateMap, parentXform);
+    const xform = mat3.multiply(viewXform, poseIn(poses, frame.id));
     const origin = mat3.translationOf(xform);
     const x = screenAxis(xform, vec3.direction(1, 0));
     const placement: GizmoPlacement = {
@@ -84,7 +71,7 @@ function placeAll(
       ],
     };
 
-    return [placement, ...placeAll(frame.frames, stateMap, xform)];
+    return [placement, ...placeAll(frame.frames, poses, viewXform, xform)];
   });
 }
 
@@ -92,13 +79,17 @@ function placeAll(
  * Where every frame's gizmo goes on screen, each frame before its children:
  * the order they are drawn in, so the last is on top.
  *
+ * The poses rather than the state they were made from, so that one call
+ * cannot say where the frames are twice and disagree with itself -- and so
+ * that a map made from another scene is not a thing this can be handed.
+ *
  * Its own module because two things need it -- `Gizmos`, which draws them, and
  * `hitsAt`, which finds the ones under a click.
  */
 export default function placeGizmos(
   scene: CoreScene,
-  stateMap: StateMap,
+  poses: PoseMap,
   xformMatrix: Mat3,
 ): GizmoPlacement[] {
-  return placeAll(scene.frames, stateMap, xformMatrix);
+  return placeAll(scene.frames, poses, xformMatrix, xformMatrix);
 }
