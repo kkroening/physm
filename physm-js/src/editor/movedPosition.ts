@@ -6,9 +6,10 @@ import type { ScreenPoint } from './placeGizmos';
 import type { Vec3 } from './../Vec3';
 
 /**
- * How near a whole unit a dragged coordinate has to come to snap to it, in
- * pixels. Half a point's reach, since the grid has a line at every unit: at
- * eight pixels, a coordinate would be snapped most of the way across one.
+ * How near a line of the grid a dragged coordinate has to come to snap to it,
+ * in pixels. Half a point's reach: at eight, the window either side of a line
+ * would be wider than the closest the grid ever draws two of them, and nothing
+ * could be placed between.
  */
 const GRID_REACH = 4;
 

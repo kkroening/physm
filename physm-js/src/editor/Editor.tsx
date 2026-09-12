@@ -1078,7 +1078,7 @@ interface Drag {
   readonly origin: ScreenPoint;
   readonly targets: readonly ScreenPoint[];
 
-  /** The grid it snaps to, whole units of `position` on screen: `null` for none. */
+  /** The grid it snaps to, a step of `position` on screen: `null` for none. */
   readonly grid: Mat3 | null;
 
   /** Names the drag to the history, so all of it is one step. */
@@ -1200,7 +1200,9 @@ function useBuiltScene(
  * would do with no world around it is a question it leaves open. So a
  * component's tab draws it as authored, and the scene's run waits for its tab.
  *
- * Under the scene, a faint grid marks every whole unit of the world -- or,
+ * Under the scene, a faint grid marks every step of the world -- a whole unit
+ * while the lines are readable, tens or hundreds of them once the view has
+ * pulled back far enough that they would not be -- or,
  * while a drag that snaps lasts, of the dragged frame's `position`, which is
  * the grid it snaps to.
  *
@@ -1215,7 +1217,8 @@ function useBuiltScene(
  * says whether a press will move anything, before it. Held within a few
  * pixels of another frame's origin, a line's end or a circle's centre, the
  * origin snaps to it exactly; short of that, each coordinate within a few
- * pixels of a whole unit snaps to it; Alt places it freely instead. While it moves,
+ * pixels of one of the grid's lines snaps to it; Alt places it freely instead.
+ * While it moves,
  * its parent's axes -- the ones `position` is read along -- go through it.
  *
  * Two controls turn off what the editor draws: the marks over the scene --
@@ -1791,7 +1794,7 @@ function ScenePane({
               target.shape ? null : target.frame,
             ).filter((at) => distance(at, target.origin) > 0.5)
           : [],
-      // And none while the grid is hidden: a coordinate pulled to a whole unit
+      // And none while the grid is hidden: a coordinate pulled to a line
       // nothing drew would land where the picture does not account for it.
       grid:
         showGrid && authored

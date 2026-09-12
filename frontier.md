@@ -69,6 +69,14 @@ was built while gizmos were in review.
   point. Neither is a target yet -- Karl's call -- though a frame at the top
   whose origin sits at its position reaches the origin as a crossing of the
   grid: any rotational frame, and a track frame at a coordinate of zero.
+- A grid that steps 1-2-5 rather than by decades. A pure decade ladder swings
+  the spacing tenfold within each step -- 12 pixels at one end, 119 at the
+  other -- and since the snap now rides the same ladder, that is not only a
+  look: one wheel notch takes a person from placing on multiples of ten to
+  multiples of a hundred, with no rung between, and that decides the number
+  written into the code. A 1-2-5 ladder holds both swings to 2.5x. It wants its
+  own tests at the new rungs and a look on screen, which is why it is a step
+  rather than a tweak.
 - Which snap targets survive the marks being hidden. Point snapping goes with
   *Marks* today because the ring reporting it is drawn there, but the targets
   are a mixed bag: another frame's origin is invisible once the marks are off,
@@ -330,8 +338,9 @@ was built while gizmos were in review.
   always took a translation and a scale and every consumer is handed the
   matrix, so the change was those two arguments becoming state -- except in the
   drag, which caches values derived from the matrix across frames and so
-  refuses the wheel while it runs. The zoom-out is clamped by the grid argument
-  above; the zoom-in bound is a pick.
+  refuses the wheel while it runs. Its zoom-out was clamped by the grid drawing
+  a line at every unit -- see the entry above, which is what lifted that -- and
+  the zoom-in bound is a pick.
 - **A grid that steps** — the grid draws a line at every multiple of a power of
   ten, the smallest whose lines stay at least twelve pixels apart, so it keeps
   its shape however far the view pulls back instead of flooding the pane. A

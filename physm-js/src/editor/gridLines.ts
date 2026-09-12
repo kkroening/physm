@@ -13,10 +13,17 @@ export interface GridLine {
 /**
  * How near each other the grid's lines may be drawn, in pixels.
  *
- * Twelve, because the pane opens at eighteen pixels to the unit and a line at
- * every whole unit there is the grid this editor has always drawn. A larger
- * minimum would step the grid at the view it opens at, which is not a change
- * to make by picking a round number.
+ * Two things bound this, and twelve is a pick inside both rather than a value
+ * either of them forces.
+ *
+ * **At most eighteen**, which is what the pane opens at: any minimum above it
+ * steps the grid at the default view, and a line at every whole unit there is
+ * the grid this editor has always drawn.
+ *
+ * **Under sixteen**, or `griddedPosition`'s cap on its reach stops existing.
+ * That cap is a quarter of a step, and a step's spacing is never below this
+ * minimum -- so from sixteen up, a quarter of the spacing always clears the
+ * four-pixel reach and the cap can never be the smaller of the two.
  */
 const MIN_SPACING = 12;
 

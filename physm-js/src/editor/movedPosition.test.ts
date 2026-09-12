@@ -91,10 +91,24 @@ describe('griddedPosition', () => {
     ]);
   });
 
-  test('the reach shrinks where the lines are closest, leaving half of each gap', () => {
-    // Thirteen pixels to the unit is the crowded end of a step of one: four
-    // pixels from either side would leave only five of the thirteen free, so
-    // the reach is held to a quarter of a step -- 3.25 pixels.
+  test('the cap follows the step rather than the unit', () => {
+    // 1.3 pixels to the unit is the one regime where both rules are live at
+    // once: the step is ten, its lines are thirteen pixels apart, and the
+    // reach is a quarter of that -- 3.25 pixels rather than the full four.
+    const wide = getViewXformMatrix([0, 0], 1.3, [400, 300]);
+
+    // 8.5 units is 1.95 pixels from the line at ten, so it lands there. A cap
+    // that ignored the step would allow only 0.325 pixels and leave this at
+    // 8.5; a snap to whole units would give 9. One case, both rules out.
+    expect(griddedPosition(vec3.ORIGIN, wide, [0, 0], [11.05, 0])).toEqual([
+      10, 0,
+    ]);
+  });
+
+  test('the reach is capped where the lines are closest, leaving half of each gap', () => {
+    // Thirteen pixels to the unit, where the step is one -- so this pins the
+    // cap in the regime the rule did *not* change: a quarter of the spacing,
+    // 3.25 pixels, rather than the full four. (Twelve is the crowded end.)
     const close = getViewXformMatrix([0, 0], 13, [400, 300]);
 
     expect(griddedPosition(vec3.ORIGIN, close, [0, 0], [9.75, 0])).toEqual([

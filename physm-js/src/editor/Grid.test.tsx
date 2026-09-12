@@ -33,12 +33,12 @@ describe('gridStep', () => {
   test('a decade at a time as the view pulls back', () => {
     expect(gridStep(11)).toBe(10);
     expect(gridStep(4)).toBe(10);
-    expect(gridStep(1.2)).toBe(10);
+    expect(gridStep(1.21)).toBe(10);
     expect(gridStep(1)).toBe(100);
   });
 
   test('never finer than a unit, however near the view', () => {
-    expect(gridStep(120)).toBe(1);
+    expect(gridStep(121)).toBe(1);
     expect(gridStep(10000)).toBe(1);
   });
 
