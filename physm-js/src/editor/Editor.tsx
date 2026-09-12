@@ -1224,8 +1224,10 @@ function useBuiltScene(
  * grid under it. Each takes with it the rule its marks stood for, so nothing
  * decides a press invisibly: a gizmo's reach and a handle's are rings around
  * points that would no longer be drawn, and a grid nobody can see is not one
- * to snap to. With the marks off a press falls to the rule that needs nothing
- * drawn -- the nearest frame above whatever it points at -- because that one
+ * to snap to. What no mark made discoverable stays: the selected shape is
+ * still dragged by its body, which the scene paints and the properties pane
+ * names. A press anywhere else falls to the rule that needs nothing drawn --
+ * the nearest frame above whatever it points at -- because that one, too,
  * starts from the shapes the scene itself paints.
  *
  * A scene that fails to build shows why instead of taking the editor down with
@@ -1401,17 +1403,13 @@ function ScenePane({
    * and so is moved an end at a time; a weight draws nothing whatever, which
    * is why it needs one most.
    *
-   * None while the marks are off, which takes the handle rule, the selected
-   * shape's own drag and the click guard with them: all three read this list.
+   * These exist whether or not anything draws them. A shape's body is painted
+   * by the scene and named in the properties pane, so hiding the marks takes
+   * away nothing that said it could be dragged -- see `handles` below for what
+   * hiding them does take.
    */
-  const handles = ((): { prop: string; at: ScreenPoint }[] => {
-    if (
-      !showMarks ||
-      !selectedPath ||
-      !('scene' in built) ||
-      !drawn ||
-      !poses
-    ) {
+  const points = ((): { prop: string; at: ScreenPoint }[] => {
+    if (!selectedPath || !('scene' in built) || !drawn || !poses) {
       return [];
     }
 
@@ -1453,6 +1451,16 @@ function ScenePane({
         }))
     );
   })();
+
+  /**
+   * The points a mark is drawn on, which is also the reach a press has to one.
+   *
+   * Both go with the marks, because here the mark *is* the rule: a ring around
+   * a point nothing drew decides presses invisibly, and a weight -- which
+   * draws nothing else -- would swallow clicks meant for what lies under it.
+   * The bodily drag reads `points` instead, and so survives.
+   */
+  const handles = showMarks ? points : [];
 
   /** The nearest node at or above `path` whose position this body can move. */
   const movable = (path: NodePath): NodePath | null => {
@@ -1561,8 +1569,9 @@ function ScenePane({
 
     // The selected shape itself, anywhere on it -- but only where it declares
     // a position to move: a line is its two ends, and has no `position` to
-    // take it by bodily.
-    const whole = handles.find(({ prop }) => prop === 'position');
+    // take it by bodily. From `points`, not `handles`, so hiding the marks
+    // does not quietly send this press to the frame underneath instead.
+    const whole = points.find(({ prop }) => prop === 'position');
     const onSelected =
       selectedPath &&
       whole &&

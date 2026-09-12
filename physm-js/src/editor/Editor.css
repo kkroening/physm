@@ -637,6 +637,7 @@
    state that draws something, so both sit pressed at rest. */
 .editor__overlays {
   position: absolute;
+  z-index: 1;
   top: 0.6rem;
   left: 0.6rem;
   display: flex;
@@ -677,11 +678,14 @@
   gap: 0.3rem;
 }
 
-/* Darker than a hint elsewhere: it sits on the scene's blue, not on white. */
+/* Darker than a hint elsewhere: it sits on the scene's blue, not on white --
+   and takes no clicks, since it can reach across the pane to the view controls
+   on a tab that cannot play, and sits over the rig everywhere else. */
 .editor__playback .editor__hint {
   margin-right: 0.3rem;
   color: #4d6275;
   text-align: right;
+  pointer-events: none;
 }
 
 .editor__playback button {

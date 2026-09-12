@@ -66,6 +66,14 @@ was built while gizmos were in review.
   point. Neither is a target yet -- Karl's call -- though a frame at the top
   whose origin sits at its position reaches the origin as a crossing of the
   grid: any rotational frame, and a track frame at a coordinate of zero.
+- Which snap targets survive the marks being hidden. Point snapping goes with
+  *Marks* today because the ring reporting it is drawn there, but the targets
+  are a mixed bag: another frame's origin is invisible once the marks are off,
+  while a line's end and a circle's centre are painted by the scene and stay
+  visible. So the principled rule is probably "the targets still drawn stay
+  targets" rather than "all of them go" -- a change to `snapPoints` with its
+  own tests. Whether that, a third control, or the current pairing is right is
+  Karl's call.
 - What a drag does while the scene plays. The frame drifts from the pointer,
   since its own coordinate and its parents' keep moving: pause while a drag is
   held, refuse one during play, or keep the live nudge. Karl's call.
@@ -295,9 +303,11 @@ was built while gizmos were in review.
 - **The marks and the grid can be hidden** — two controls in the scene pane
   turn off what the editor draws over the scene and under it, and each takes
   with it the rule its marks stood for: with the marks off there is no gizmo
-  to drag by, no handle to catch a press, no ring to snap to, and a press
-  falls to the nearest frame above whatever it points at -- the one rule that
-  needs nothing drawn. With the grid off a drag no longer snaps to whole
+  to drag by, no handle to catch a press, and no ring to snap to. What no mark
+  made discoverable stays: the selected shape is still dragged by its body,
+  which the scene itself paints and the properties pane names, and a press
+  anywhere else falls to the nearest frame above what it points at -- the rule
+  that needs nothing drawn. With the grid off a drag no longer snaps to whole
   units. Hiding the marks alone would have left those rules deciding presses
   invisibly.
 - **Constants for repeated values** — a compound value written three times or

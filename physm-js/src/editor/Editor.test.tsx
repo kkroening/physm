@@ -3968,20 +3968,36 @@ describe('Editor, hiding the marks and the grid', () => {
   test('with the marks off, a press falls to the frame above what it points at', () => {
     const { container } = render(<Editor />);
 
-    // The box's handle sits on the cart's origin, so it takes the press.
-    select('Box');
+    // A weight draws nothing whatever, so its handle is the only thing there
+    // is to press -- and with the marks off there is nothing there at all.
+    select('Weight');
     dragScene(container, [0, 0], [18, 0]);
 
-    expect(code()).toMatch(/<Box width=\{2\}[^/]*position=\{\[1, 0\]\}/);
+    expect(code()).toMatch(/<Weight mass=\{50\} position=\{\[1, 0\]\}/);
 
     fireEvent.click(undoButton());
     fireEvent.click(control('Marks'));
     dragScene(container, [0, 0], [18, 0]);
 
-    // No handle to catch it and no gizmo to drag by: the press leads back
-    // through the box -- which the scene itself paints -- to the cart.
-    expect(code()).toMatch(/<Box width=\{2\} \/>/);
+    // The press leads back through the box -- which the scene itself paints --
+    // to the cart above it, and the weight stays where it was.
+    expect(code()).toMatch(/<Weight mass=\{50\} \/>/);
     expect(code()).toMatch(/<TrackFrame id="cart"[^>]*position=\{\[1, 0\]\}/);
+  });
+
+  test('with the marks off, the selected shape is still dragged by its body', () => {
+    const { container } = render(<Editor />);
+
+    // Nothing about hiding the marks makes this drag undiscoverable: the box
+    // is painted by the scene and named in the properties pane. Sending the
+    // press to the frame underneath would move the box on screen -- it rides
+    // on that frame -- while writing a node nobody was looking at.
+    select('Box');
+    fireEvent.click(control('Marks'));
+    dragScene(container, [0, 0], [18, 0]);
+
+    expect(code()).toMatch(/<Box width=\{2\}[^/]*position=\{\[1, 0\]\}/);
+    expect(code()).toMatch(/<TrackFrame id="cart" resistance=\{5\}>/);
   });
 
   test('with the marks off, a click reaches the shape under the gizmo', () => {
