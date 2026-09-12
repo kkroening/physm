@@ -1739,15 +1739,20 @@ function dragScene(
   ...to: (readonly [number, number])[]
 ): void {
   const [endX, endY] = to[to.length - 1] ?? from;
-  fireEvent.mouseDown(container.querySelector('.editor__scene svg')!, {
-    clientX: from[0],
-    clientY: from[1],
-  });
+  const svg = container.querySelector('.editor__scene svg')!;
+  fireEvent.mouseDown(svg, { clientX: from[0], clientY: from[1] });
   for (const [x, y] of to) {
     fireEvent.mouseMove(window, { clientX: x, clientY: y, buttons: 1 });
   }
 
   fireEvent.mouseUp(window, { clientX: endX, clientY: endY });
+
+  // The click a browser raises when a press and its release land on the same
+  // element. Picking listens to that and to nothing else, so a helper stopping
+  // at `mouseup` leaves every assertion about the selection after a drag
+  // asserting nothing at all -- which is how three such tests reached `master`
+  // before mutants found them, one at a time.
+  fireEvent.click(svg, { clientX: endX, clientY: endY });
 }
 
 /**
@@ -2136,9 +2141,8 @@ describe('Editor, dragging', () => {
     const { container } = render(<Editor />);
     dragScene(container, onCart, [18, -3]);
 
-    // The first click is the release's own. Swallowed, it leaves the next to
-    // be a first click there, on the cart's gizmo, rather than a second.
-    clickScene(container, [18, -3]);
+    // The drag's own release click is swallowed, which leaves this one to be
+    // a first click there, on the cart's gizmo, rather than a second.
     clickScene(container, [18, -3]);
 
     expect(shown()).toBe('TrackFrame');
@@ -2149,8 +2153,8 @@ describe('Editor, dragging', () => {
     const before = code();
     dragScene(container, onCart, [1, -3]);
 
-    // The first click is the release's own, which picks as any click does.
-    clickScene(container, onCart);
+    // The drag never moved, so its release click picks as any click does,
+    // and this one is the second in the same place.
     clickScene(container, onCart);
 
     expect(code()).toBe(before);
@@ -4267,10 +4271,8 @@ describe('Editor, moving the view', () => {
       select('Box');
 
       // Two pixels of slop, which is a click. Panning on that would swallow
-      // the release, and a click on empty space is how the selection clears --
-      // so the release's click is raised here, as a browser would.
+      // the release, and a click on empty space is how the selection clears.
       dragScene(container, [30, 30], [32, 31]);
-      clickScene(container, [32, 31]);
 
       expect(drawnX(container, 0)).toBe(200);
       expect(control('Reset view')).toBeDisabled();
@@ -4289,11 +4291,6 @@ describe('Editor, moving the view', () => {
       expect(shown()).toBe('Box');
 
       dragScene(container, [30, 30], [70, 55]);
-
-      // The click a browser raises when the press and its release land on one
-      // element: without it this asserts nothing, since picking is what that
-      // click does and a drag alone never raises one.
-      clickScene(container, [70, 55]);
 
       expect(shown()).toBe('Box');
     } finally {
