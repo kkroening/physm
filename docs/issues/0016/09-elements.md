@@ -4,8 +4,19 @@
 · **Previous:** [Metadata](08-metadata.md)
 · **Next:** [Staging](10-staging.md)
 
-The additive part of the list. These need no new document machinery, which makes
-them the useful thing to build while the rest is being designed.
+The additive part of the list — and the one part that is *not* the document
+becoming a program. These need no new document machinery at all, which is what
+makes them the useful thing to build while the rest is being designed, and also
+what keeps them out of [page 1](01-overview.md)'s reduction.
+
+**Additive does not mean small, because physm has two solvers.** `RsSolver`
+serializes the scene with `Scene.toJsonObj` and hands the JSON to wasm, which
+`physm-rs` parses; the demo runs that path rather than `JsSolver`; and
+`CLAUDE.md` names the cross-validation between the two — the same scene through
+both, trajectories required to agree — as a deliberate invariant. So a new
+force-contributing element is a core class, a case on each side of the JSON
+boundary, a Rust force term, and a cross-validated test. A scene only one solver
+can run is worse than not having the feature.
 
 ## Springs
 
@@ -41,16 +52,29 @@ drawn between two anchors in different frames, whose separation is a function of
 the pose. There is no frame in which that line has fixed endpoints, so it is not
 `LineDecal` with better props.
 
-**This settles [0003](../0003.md).** That RFC observes that every decal
-transforms itself twice by two routes, that `Decal.xform(m)` returns a decal in
-transformed coordinates, and that *nothing outside the test suite calls it* — so
-the question of which of the two is the real API has no evidence to decide it.
+**What this says about [0003](../0003.md), and what it does not.** That RFC
+observes that every decal transforms itself twice by two routes, that
+`Decal.xform(m)` returns a decal in transformed coordinates, and that *nothing
+outside the test suite calls it* — so the question of which is the real API has
+little evidence to decide it.
 
-A world-space decal is that evidence. It is a decal whose geometry is computed
-per tick from the pose and then drawn without a frame's transform applied, which
-is exactly `xform`'s job and exactly the case the inline-transforming decal views
-cannot serve. The feature gives the unused API its caller, and the answer to 0003
-stops being a matter of taste.
+A world-space decal is some evidence, and it is worth being precise about which
+kind. It is **not** a caller for `xform`: [page 2](02-values.md) argues that such
+a line has no frame in which its endpoints are fixed, which is the same as saying
+there is no frame-local geometry to carry through a matrix. Its endpoints come
+out of the pose map already in world coordinates, and what remains is the *view*
+transform, which the decal views already apply inline.
+
+Nor does it touch 0003's stated blocker, which is about correctness rather than
+about callers: `BoxDecal.xform` reconstructs a box from a transformed `angle`
+while the renderer carries precomputed `corners` through the matrix, and those
+agree only under rotation and uniform scale. A y-down screen transform is a
+reflection. A world-space decal is drawn through that same transform, so it
+inherits the problem rather than resolving it.
+
+What it does supply is one more consumer of "geometry through a matrix", which is
+evidence about whether the operation earns its keep at all — the question 0003 is
+actually weighing, and which [0004](../0004.md) sharpened toward deleting.
 
 Worth noting the ordering consequence: a world-space decal is drawn from the pose
 map, so it is produced *after* the walk rather than during assembly. Paint order

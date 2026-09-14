@@ -11,19 +11,21 @@ diverge from this page as the work teaches things — that is the method working
 not the plan failing.
 
 Two principles produced the order. **Prep that is invisible goes first**, because
-the alternative is doing it twice with a migration in between. And **the two
-independent tracks start early**, because they buy schedule room for everything
-that is not independent.
+each of these gets more expensive with every site built before it — the
+alternative is migrating that site too. And **the two independent tracks start
+early**, because they buy schedule room for everything that is not independent.
 
 ## Prep — invisible, and worth its own steps
 
 1. **A prop value becomes a tagged thing.** One variant today, `literal`. No
    behaviour changes, nothing renders differently, and every prop site is touched
    exactly once instead of once now and once when expressions arrive.
-2. **Addressing carries slots and iteration** — [page 5](05-addressing.md). The
-   single most invasive change here, entirely invisible, and the only one whose
-   cost doubles if it is split. Slot components are unused and iteration is
-   `null` everywhere when it lands.
+2. **Addressing carries slots** — [page 5](05-addressing.md). The single most
+   invasive change here, entirely invisible, and the one whose cost grows with
+   every site built before it: each one has to learn that a node's children are
+   no longer one list. Slot components are unused when it lands. The
+   *instantiation trail* that carries an iteration index is designed alongside it
+   but is additive, and lands with repetition.
 
 ## The independent tracks
 
@@ -31,9 +33,12 @@ These depend on nothing above and block nothing below, so they can run whenever
 there is appetite — and the second is the one I would start sooner than it
 appears to deserve.
 
-- **Springs**, linear and rotary — [page 9](09-elements.md). Additive, exercises
-  the force-assembly path that external force channels will need later, and keeps
-  something visible moving while the document work is still design.
+- **Springs**, linear and rotary — [page 9](09-elements.md). Additive to the
+  document, which is what makes them independent, but real work in the core: each
+  is a class, a JSON case on each side of the `physm-rs` boundary, a Rust force
+  term and a cross-validated test. That is a feature, not a warm-up — and it
+  exercises the force-assembly path external force channels will need later,
+  while keeping something visible moving during the document design.
 - **Hand-written components** — [page 7](07-handwritten.md). Argued there as the
   pressure valve: it converts everything below from a blocker into an
   inconvenience, and it takes the schedule pressure off the language design,
@@ -50,16 +55,17 @@ appears to deserve.
    and constants, stored as a DAG ([page 4](04-expressions.md)). `PendulumCart`
    can compute. `emitScene`'s constants heuristic is deleted rather than tuned.
 5. **Signals.** The second evaluation context, hanging off the pose map, plus
-   world-space decals — which is the wish list's line between two anchors, and
-   which settles [0003](../0003.md).
-6. **Named slots** — [page 6](06-structure.md). Cheap once addressing is done,
-   awkward before.
-7. **[0005](../0005.md), sibling order.** Resolved *before* repetition rather than
-   discovered through it.
-8. **Repetition.** Chain and repeat, with the emitted form decided before the
+   world-space decals — the wish list's line between two anchors. Says which
+   solver a per-tick value is specified against ([page 2](02-values.md)).
+6. **Named slots** — [page 6](06-structure.md). Cheaper once addressing is done,
+   awkward before, and it needs emitter *and* reader work for element-valued
+   props, which neither supports today.
+7. **Repetition.** Chain and repeat, with the emitted form decided before the
    editor work — the round-trip constraint is what decides what the node can be.
-9. **The port surface.** Outputs and instance names first, then manipulators and
-   force channels, then key bindings. [0011](../0011.md) closes here.
+8. **The port surface.** Outputs and instance names first, then manipulators and
+   force channels, then key bindings. [0011](../0011.md) closes here, and the
+   round-trip rule has to be settled for it before step 3 fixes the declaration
+   block's shape.
 
 ## Later
 
@@ -80,6 +86,14 @@ the editor:
 |---|---|
 | parameters | a definition with parameters emits a function with a signature, and reads back |
 | expressions | a computed prop emits as an expression and parses back to the same graph, sharing included |
-| slots | an instance with named slots emits as element-valued props and reads back |
+| signals | a world-space decal emits as an element whose endpoint props hold expressions, and reads back as that decal rather than as two frozen numbers |
+| slots | an instance with named slots emits as element-valued props and reads back — new work in both the emitter and the reader |
 | repetition | a chain of N emits as a construct, **not** as N unrolled literals |
 | hand-written | the definition's source is its own emitted form, trivially — but the whole-document guarantee weakens to per-definition |
+| the port surface | **unsettled, and the one step the rule has not been applied to.** `function Pendulum({ length }): ReactElement` cannot express `bobPosition`; a manipulator is editor-only metadata with no runtime meaning; a key binding routed into `cart.trackForce` is a scene-level construct that does not exist. Each needs an invented form the emitter writes and the reader reads |
+
+**That last row is a real hole rather than a formality.** The rule's own answer,
+if outputs and channels turn out not to round-trip, is that they belong in the
+escape hatch — which would mean [0011](../0011.md) closes by hand-writing a
+component rather than by declaring a surface. That is a large enough difference
+to want settled before step 3 fixes the shape of the declaration block.

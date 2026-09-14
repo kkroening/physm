@@ -50,11 +50,23 @@ resolving a path. That is a small map, and it doubles as the definition of what
 a hand-written component is allowed to reach: the binding, and other definitions
 in the same document.
 
-**A worker and a timeout.** The hazard is not malice — it is the author's own
-code, so there is nothing to defend against that they could not do more easily in
-the console. The hazard is a `while (true)` that hangs the editor with no way
-back. Compiling and calling inside a worker with a deadline turns that into an
-error message.
+**A worker for the compile — and an unsolved hazard for the call.** The hazard is
+not malice: it is the author's own code, and there is nothing to defend against
+that they could not do more easily in the console. The hazard is a `while (true)`
+that hangs the editor with no way back.
+
+Compiling in a worker under a deadline is straightforward, because `esbuild-wasm`
+produces a *string* and a string crosses the boundary happily. **Calling the
+component there does not work.** Its return value is an element tree whose `type`
+fields are function references handed back by the registry above, and structured
+clone throws on a function — so nothing resembling that tree can be posted back.
+
+The call therefore happens on the main thread, which is precisely where the hang
+is: the worker would be protecting the step that was never at risk. The ways out
+(building inside the worker and posting serialized scene data, reviving a
+plain-data element description against the registry, or accepting the hazard and
+making it recoverable some other way) are each larger than this bullet, and
+[page 11](11-risks.md) carries it as open rather than as handled.
 
 **An error surface.** A compile error and a runtime throw are both ordinary
 states for a definition being typed into, and they should read like the existing

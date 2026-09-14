@@ -14,15 +14,22 @@ The wish list worries that a globally unique name for a direction would be
 "playing with fire, just like relying on globals in general". That worry is
 confirmed by this codebase's own history, twice over.
 
-`<Anchor id="...">` names a point so a constraint end can reference it by id.
-That is a global namespace — the core `Scene` refuses two frames sharing an id —
-and the consequence is already recorded on the frontier: a component that names
-an id **cannot be instantiated twice**. Two pendulums, one `Anchor`, one id, and
-the scene refuses to build. The recorded options are *promote to prop* or *scope
-ids per instance*, and they are the same question this page answers.
+**Ids are scene-wide, and not only an anchor's.** Every frame takes one:
+`FixedFrame`, `RotationalFrame` and `TrackFrame` each declare an `id` prop of
+kind `name` alongside `Anchor`, the starter document opens with
+`<TrackFrame id="cart">`, and the editor's refusal to insert a duplicate reads
+`props.id` off any node regardless of which component carries it. One namespace,
+spanning the whole scene, with the core `Scene` refusing two frames that share an
+id.
 
-[0011](../0011.md) is the second run of the experiment, from the other side: the
-demo needs to push the cart from outside the scene, so it reaches in by id, and
+The consequence is already recorded on the frontier: a component that names an id
+**cannot be instantiated twice**. Two pendulums, one `Anchor`, one id, and the
+scene refuses to build. The recorded options are *promote to prop* or *scope ids
+per instance*, and they are the same question this page answers.
+
+[0011](../0011.md) is the second run of the experiment, from the other side — and
+it is a *frame* id rather than an anchor's, which is the harder half. `CartAndRope`
+exports `CART_FRAME_ID`, `App.jsx` imports it to key the external force map, and
 the rig "has to break its own story exactly once, and the app has to hold the
 string it broke it with". That is not a naming inconvenience — it is a missing
 surface. A scene that wanted to expose a push had no way to say so, so the app
@@ -70,9 +77,29 @@ The same applies to the other node kinds the wish list wants to reference: a
 manipulator named `armHandle` is referenced by that name in the sibling
 expressions that consume it.
 
-This is also what finally makes an `Anchor`'s id an implementation detail: an
-anchor inside a definition gets a scoped name, and the emitter generates a unique
-id per instantiation rather than asking the author to.
+This is also what finally makes an id an implementation detail: a node inside a
+definition gets a scoped name, and the emitter generates a unique id per
+instantiation rather than asking the author to.
+
+**With one constraint that is easy to get wrong, and that the code already
+knows.** A generated id has to be *derived from the instantiation path*, never
+freshly minted — `TrackFrame` carries a comment saying why, and it is not a
+stylistic preference: the scene is rebuilt on every registration change, and an
+id that regenerated would silently stop matching a caller's state map.
+
+That comment also marks the real division. Generation is safe for names used
+**within** the scene, where a constraint end and the frame it names are
+regenerated together and nothing outside notices. It is exactly wrong for names
+used **from outside** it: the state map and the external force map are keyed on
+frame ids and live in the caller, so scoping alone would *break* 0011's case
+rather than fix it.
+
+Which is the argument for the port surface arriving from a second direction. The
+demo holds the string `'cart'` because there is nothing else to hold — and a
+declared port is the something else, which is what makes generating the id
+underneath it safe. The two halves are one design: **a name inside a definition
+becomes private and generated; anything a caller needs to name becomes a declared
+port.**
 
 ## Parameters and ports as tree nodes
 

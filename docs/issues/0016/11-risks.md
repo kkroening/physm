@@ -2,6 +2,7 @@
 
 **Parent:** <a href="../0016.md" title="0016 — Make the document a program rather than a drawing">0016</a>
 · **Previous:** [Staging](10-staging.md)
+· **Next:** [The wish list](12-wishlist.md)
 
 What could sink this, roughly in order of how much I would worry.
 
@@ -38,14 +39,57 @@ repetition count that reads state gets written, works in the editor, and
 re-assembles the scene every tick once it runs.
 
 Retrofitting the distinction means re-typing every expression already authored.
-It is cheap at step 4 and expensive at step 8.
+It is cheap at step 4 and expensive at step 7.
 
-## Addressing changed twice
+## Addressing designed for slots alone
 
-[Page 5](05-addressing.md) is the whole argument. The risk is not that it is
-hard — it is that slots feel urgent and repetition feels distant, so the slot
-half lands alone and the iteration half arrives as a second migration through the
-same dozen files.
+[Page 5](05-addressing.md) is the whole argument. The risk is *not* that the two
+halves land separately — the iteration index is additive, and landing it with
+repetition is correct. It is that the slot migration is designed without the
+trail in mind, and the two then do not fit: an iteration index folded into the
+path as another segment, say, which interleaves "which node" with "which copy of
+it" and has to be unpicked later by everything that reads a path.
+
+The cheap protection is to design both now and land one, which costs a page of
+thinking and no code.
+
+## The hand-written component that hangs the editor
+
+[Page 7](07-handwritten.md)'s call cannot be moved off the main thread the easy
+way: a component returns an element tree whose `type` fields are functions, and
+structured clone refuses a function, so nothing resembling that tree crosses a
+worker boundary. Compiling in a worker is fine and protects nothing that was at
+risk.
+
+The routes out are all real work. Running `buildScene` in the worker and posting
+serialized scene data runs into `Scene.toJsonObj` omitting decals and
+`Decal.toJsonObj` throwing, and — worse — into `origins`, the `WeakMap` keyed by
+element *identity* that the editor's picking depends on, which cannot cross a
+boundary at all. Reviving a plain-data element description against the registry
+works, at the cost of a second element representation kept in step with the
+first. Or the hazard is accepted and made recoverable some other way.
+
+**This matters more than a detail, because the escape hatch is argued as worth
+starting earlier than it looks** — partly on the grounds that its costs are small
+and bounded. This one is not, and it should be picked before the feature is
+scheduled rather than during it.
+
+## A force expression that reads the state mid-batch
+
+[Page 2](02-values.md) splits signals into those that draw, which never enter the
+tick loop, and those that feed a force, which are evaluated per *batch* on the
+Rust path because `tick_mut` holds its external-force slice constant across one.
+
+The wish list asks for exactly the case that does not fit: a cart force that
+varies with how fast the cart is already moving, which is the difference between
+a responsive rig and a sluggish one, and which wants the state as it evolves
+*within* the batch. The options are evaluation moved into Rust — a second
+expression evaluator, in a second language, held to agreeing with the first — or
+`tickCount = 1`, which gives up the batching the fast path exists for.
+
+Neither is chosen here. It is on this page because it is the one place where "the
+solver is untouched" is not quite true, and finding that out while building key
+bindings would be the expensive way.
 
 ## The emitted form for repetition
 

@@ -44,9 +44,10 @@ drawn as a node graph.**
 - Literals of each port type.
 - References: to parameters, to a named instance's outputs, to named
   intermediates.
-- Arithmetic on scalars and angles; vector construction and component access;
-  the handful of geometric operations that already exist in `Mat3` and `Vec3` —
-  add, scale, rotate, normalise, dot, perpendicular.
+- Arithmetic on scalars and angles; vector construction and component access; a
+  handful of geometric operations — add, scale, rotate and dot, which `Vec3` and
+  `Mat3` already have, plus normalise and perpendicular, which they do not and
+  which are a few lines each.
 - Comparison and selection, for enum discriminants and conditional structure.
 
 Not in it: statements, loops, user-defined functions, recursion, string

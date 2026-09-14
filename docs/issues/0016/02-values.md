@@ -44,8 +44,8 @@ cleverer props — **it is a decal drawn in world space, whose endpoints are
 signals**, rendered after the pose walk rather than carried inside a frame.
 
 That is a new category of element rather than a new kind of prop, and
-[page 9](09-elements.md) takes it up — including that it gives
-[0003](../0003.md)'s `Decal.xform` the caller it has never had.
+[page 9](09-elements.md) takes it up — including what it does and does not say
+about [0003](../0003.md)'s uncalled `Decal.xform`.
 
 ## Why "keep the pole horizontal" is a signal
 
@@ -90,6 +90,32 @@ So outputs are not the React mistake, **provided they are typed**. An output
 declared structural is a constant the caller can compute with anywhere; an output
 declared as a signal may only be consumed where signals are allowed.
 
+## Which solver a signal is evaluated against
+
+"Per tick" names a moment, and physm has that moment in two places. `JsSolver`
+ticks in JavaScript. `RsSolver` serializes the scene, hands a *batch* of ticks to
+wasm, and the loop runs inside Rust — and that is the path the demo runs. So a
+signal evaluated per tick in JavaScript is not automatically available where the
+simulation actually happens.
+
+Splitting the two uses answers most of it:
+
+- **Signals that draw** — a world-space decal's endpoints — are evaluated at
+  render time from the pose map, *after* the batch, once per animation frame.
+  They never enter the tick loop, and the fast path is untouched.
+- **Signals that feed a force** meet the batch boundary. `RsSolver.tick` fills its
+  external-force buffer once and `tick_mut` holds that slice constant for the
+  whole batch, so such an expression is evaluated per batch rather than per tick.
+
+That is the granularity the demo already ships with — `App.jsx` computes its cart
+force once per animation frame — so a key binding routed through an expression
+inherits what exists rather than needing something new.
+
+What does not fit is a force expression reading the state *evolving within* a
+batch, which is exactly the responsive-cart case the wish list asks for. Its
+options are evaluation moved into Rust, or `tickCount = 1` and a slower path;
+[page 11](11-risks.md) records it as open rather than picking now.
+
 ## Where each kind is admitted
 
 | position | kind | why |
@@ -98,7 +124,7 @@ declared as a signal may only be consumed where signals are allowed.
 | a decal's frame-local geometry | structural | it lives in a frame; the frame moves, the geometry does not |
 | a repetition count, an enum discriminant | structural | decides the tree's shape |
 | a world-space decal's endpoints | signal | no frame contains them |
-| an external force's magnitude | signal | that is what a force is |
+| an external force's magnitude | signal | that is what a force is — per batch on the Rust path, above |
 | a spring's rest direction, when world-referenced | signal | depends on accumulated pose |
 | a key binding's routing expression | signal | reads current state by design |
 

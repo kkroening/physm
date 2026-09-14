@@ -33,11 +33,22 @@ mechanical but wide: `insertion.ts`'s holder and insertion-point logic, `moveNod
 and `movedPath`, the tree pane's row keys and drag targets, `dragTargetAt` and
 the pick cycling, `emitScene`'s range keys, and every history step.
 
-Doing that twice — once for slots, once for iteration — is the main avoidable
-cost in this RFC. The two changes are independent in what they express and
-identical in what they touch, so the cheap move is to design both now and land a
-single migration that carries them, even if repetition itself arrives much later
-and the iteration component is `null` everywhere in the meantime.
+**The two halves are not the same size, and only one of them is this migration.**
+Everything in the list above addresses an *authored* node, so it is the slot
+component that touches all of it. The iteration index reaches selection, picking
+and the drag path, and nothing else — because, as above, addressing the authored
+template is unchanged by repetition.
+
+So the ordering argument is about slots rather than about both:
+
+- **The slot component is invasive whenever it lands.** Every site that walks a
+  path has to learn that a node's children are no longer one list, and each one
+  built before it lands is one more site to migrate. That is the case for doing
+  it once, and early, while the number of such sites is as small as it will ever
+  be.
+- **The instantiation trail is additive**, and can land with the only feature
+  that produces more than one copy to address. Designing it now is worth doing —
+  the shapes have to fit together — but landing it early buys nothing.
 
 ## What already exists to build on
 

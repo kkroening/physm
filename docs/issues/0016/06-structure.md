@@ -25,8 +25,14 @@ reason named arguments are generally better: positional binding silently
 re-targets everything when the author adds a slot, and a slot is exactly the kind
 of thing that gets added. In the tree view an instance with named slots shows its
 slots as grouping rows, with children beneath each; in the emitted TSX they are
-props holding elements, which is how React expresses the same thing and is
-already round-trippable.
+props holding elements, which is how React expresses the same thing.
+
+**That form is new work in both directions**, not something already supported.
+`emitScene`'s `literal()` walks a plain object's entries and would reach a React
+element's `$$typeof`, which it refuses as a symbol; and the reader descends into
+`children` only, so an element-valued prop would come back as opaque data rather
+than as nodes. This is the widening [page 1](01-overview.md) promises at every
+step, and it is most of what step 6 costs.
 
 The real cost is not here — it is that a node's children stop being one list,
 which is [page 5](05-addressing.md)'s subject.
@@ -57,18 +63,24 @@ beneath it; the scene holds N pendulums; a click on the fourth selects — by
 default — the authored `Pendulum`, with Shift reaching the expansion, which is
 the behaviour that already exists for instances.
 
-### Repetition makes [0005](../0005.md) blocking
+### What [0005](../0005.md) does and does not have to do with this
 
-Sibling order in an authored scene is *first-registration* order, which equals
-JSX order only for a tree whose shape never changes. A repetition node changes
-the shape by construction: raising the count appends, and the newcomer takes
-registration order rather than the position it occupies in the tree.
+The tempting claim is that repetition makes 0005 blocking: sibling order is
+*first-registration* order, which equals JSX order only for a tree whose shape
+never changes, and a repetition node changes the shape by construction.
 
-For decals that is paint order; for frames it is more than cosmetic. So 0005
-stops being a latent question about conditional mounting and becomes a
-prerequisite for this feature behaving predictably. Worth resolving *before*
-repetition rather than discovering it through a rig whose pendulums draw in the
-wrong order.
+**It does not hold for the path repetition will run in.** The editor builds
+through `buildScene`, whose docstring lists this as the first of its deliberate
+differences from mounting — sibling order is JSX order, always, because a walk
+has no registration to go by. There is no registry to race and no newcomer to
+mis-order; a re-walk reads the whole tree in order every time.
+
+What is real is narrower. Emitted TSX is meant to be mounted by a consumer, and a
+consumer that mounts it under `<Scene>` and changes a count prop at run time gets
+first-registration order for the newcomers. That is the pre-existing
+conditional-mounting case, and repetition supplies one more way to reach it
+rather than creating it. So 0005 stays worth fixing, on its own schedule, and
+this feature does not wait for it.
 
 ### What it emits
 

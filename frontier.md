@@ -27,16 +27,17 @@ mechanical while there is nothing to get wrong.
 ## Next — 0016
 
 **Where it stands: nothing of 0016 built yet, and the two prep steps come first
-because both cost double if they land after what depends on them.** Roughly one
+because each grows more expensive with every site built before it.** Roughly one
 PR each, ordered by risk rather than appetite; the
 [staging page](docs/issues/0016/10-staging.md) argues the order.
 
 1. **A prop value becomes a tagged thing** — in view above.
-2. **Addressing carries slots and iteration.** The one genuinely invasive change:
-   `NodePath` gains a slot component and an instantiation trail gains an
-   iteration index, both unused on arrival. Everything that travels as a path --
-   insertion, dragging, picking, codegen ranges, undo -- learns the new shape
-   once instead of twice.
+2. **Addressing carries slots.** The one genuinely invasive change: `NodePath`
+   gains a slot component, unused on arrival, and everything that travels as a
+   path -- insertion, dragging, picking, codegen ranges, undo -- learns that a
+   node's children are no longer one list. The *instantiation trail* carrying an
+   iteration index is designed alongside it so the two fit, but it is additive
+   and lands with step 7.
 3. **Parameters, literal values only.** A definition declares typed parameters, an
    instance passes literals, a child prop may be a parameter reference and
    nothing more. This is promote-to-prop, and it forces the scope and
@@ -45,17 +46,20 @@ PR each, ordered by risk rather than appetite; the
    is deleted rather than tuned, since expression identity is what it was
    guessing at.
 5. **Signals**, hanging off the pose map, and with them decals drawn in world
-   space -- which settles [0003](docs/issues/0003.md).
-6. **Named slots**, cheap once step 2 has landed.
-7. **[0005](docs/issues/0005.md), sibling order** -- resolved before repetition
-   rather than discovered through it.
-8. **Repetition**, with the emitted form decided first.
-9. **The port surface** -- outputs and instance names, then manipulators, force
-   channels and key bindings. [0011](docs/issues/0011.md) closes here.
+   space. Says which solver a per-tick value is specified against, since the
+   Rust path hands external forces across once per batch.
+6. **Named slots**, cheaper once step 2 has landed -- and new work in both the
+   emitter and the reader, neither of which handles an element-valued prop.
+7. **Repetition**, with the emitted form decided first.
+8. **The port surface** -- outputs and instance names, then manipulators, force
+   channels and key bindings. [0011](docs/issues/0011.md) closes here. Whether
+   any of it can round-trip is the one open question in the plan, and it is owed
+   an answer before step 3 fixes the declaration block's shape.
 
-**Running alongside, blocked by nothing:** springs (additive, and it exercises
-the force path the channels in step 9 will need) and **hand-written components**
-(the escape hatch, argued on
+**Running alongside, blocked by nothing:** springs (additive to the document, and
+they exercise the force path the channels in step 8 will need -- though each
+spring is core work on both sides of the `physm-rs` boundary, not a warm-up) and
+**hand-written components** (the escape hatch, argued on
 [page 7](docs/issues/0016/07-handwritten.md) as worth starting earlier than it
 looks, because it turns every unbuilt step above from a blocker into an
 inconvenience).
@@ -109,7 +113,9 @@ inconvenience).
   nine are types-first, forced by their core option classes, while
   [0014 page 5](docs/issues/0014/05-metadata.md) argues schema-first. Declared
   components take no props until promote-to-prop, so it stays open -- Karl's
-  call.
+  call. Note that the deferral expires by its own terms at 0016's step 3, which
+  *is* promote-to-prop; [0016 page 8](docs/issues/0016/08-metadata.md) argues an
+  answer for user-declared parameters and leaves the core nine types-first.
 - Whether an emitted constant is the answer or a placeholder. What page 6's
   first row loses is not the constant but *the fact that the uses were one
   value*, and no count recovers that: three values can coincide as easily as
@@ -117,12 +123,20 @@ inconvenience).
   left inline. The threshold trades a false positive for a false negative
   rather than removing the guess. What would end it is the document recording
   that several props hold one value -- which is close to what promote-to-prop
-  implies -- and whether that is where this goes is Karl's call.
+  implies -- and whether that is where this goes is Karl's call. 0016's step 4
+  *proposes* deleting the heuristic rather than tuning it, on the grounds that
+  expression identity is what it was guessing at; the call is still owed.
 - Promote to prop, or scope ids per instance: either makes a component that
-  names an id reusable. Which comes first is Karl's call. A promoted prop that
-  sets a count -- page 8's `segmentCount` -- changes the structure but arrives
-  as a prop edit, which carries the run over; whether it resets instead, and
-  how the editor tells, is part of the same call.
+  names an id reusable. Which comes first is Karl's call, and
+  [0016 page 3](docs/issues/0016/03-scope.md) proposes a third answer -- *both*,
+  as one design: a name inside a definition becomes private and generated from
+  the instantiation path, and anything a caller needs to name becomes a declared
+  port. Which matters because the ids are not only anchors': a frame id is what
+  [0011](docs/issues/0011.md) is about, and the state map and external force map
+  are keyed on it, so scoping alone would break that case rather than fix it. A
+  promoted prop that sets a count -- page 8's `segmentCount` -- changes the
+  structure but arrives as a prop edit, which carries the run over; whether it
+  resets instead, and how the editor tells, is part of the same call.
 - The focused component's definition marked in the code on a change of tab,
   as [0014 page 3](docs/issues/0014/03-focus.md#what-is-global-and-what-belongs-to-a-tab)
   has it. A tab change clears the selection, so after one nothing is marked
