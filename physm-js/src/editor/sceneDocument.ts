@@ -4,7 +4,7 @@ import { canContain } from './../react/componentMeta';
 import { literalProps, plainProps } from './propValue';
 import type { ComponentMeta } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
-import type { PropValue, Props } from './propValue';
+import type { DocProps, PropValue } from './propValue';
 
 /** Any component, as the document holds it: a function of some props. */
 type AnyComponent = (props: never) => ReactNode;
@@ -46,7 +46,7 @@ export interface DocNode {
   readonly type: ComponentRef;
 
   /** Everything but `children`, which are structure and live below. */
-  readonly props: Props;
+  readonly props: DocProps;
 
   /** The element's `key`, when it has one -- its identity among siblings. */
   readonly key?: string;
