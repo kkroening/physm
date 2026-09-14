@@ -14,7 +14,7 @@ use crate::Weight;
 /// acceleration matrices are the trait's zeros. Its coordinate moves nothing:
 /// nothing acts on it, `get_coefficient_matrix` gives it an inertia of its own,
 /// and it stays at rest -- which is `physm-js`'s `FixedFrame` too. It has no
-/// resistance.
+/// resistance, and no spring: both act on a coordinate that moves nothing.
 #[derive(Debug)]
 pub struct FixedFrame {
     pub angle: f64,
@@ -77,6 +77,10 @@ impl Frame for FixedFrame {
     }
 
     fn get_resistance(&self) -> f64 {
+        0.
+    }
+
+    fn get_stiffness(&self) -> f64 {
         0.
     }
 

@@ -304,11 +304,12 @@ describe('Scene class', () => {
           frames: [],
           type: 'Frame',
           resistance: 0,
+          stiffness: 0,
         },
       ],
     });
     expect(JSON.stringify(obj)).toEqual(
-      '{"frames":[{"frames":[],"id":"d34db33f","initialState":[0,0],"position":[0,0],"resistance":0,"type":"Frame","weights":[]}],"gravity":10}',
+      '{"frames":[{"frames":[],"id":"d34db33f","initialState":[0,0],"position":[0,0],"resistance":0,"stiffness":0,"type":"Frame","weights":[]}],"gravity":10}',
     );
   });
 });

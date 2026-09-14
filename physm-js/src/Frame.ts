@@ -19,6 +19,7 @@ export interface FrameOptions {
   weights?: Weight[];
   frames?: Frame[];
   resistance?: number;
+  stiffness?: number;
   initialState?: number | readonly number[] | null;
   id?: FrameId | null;
   typeName?: string | null;
@@ -44,6 +45,20 @@ export default class Frame {
   readonly weights: Weight[];
   readonly frames: Frame[];
   readonly resistance: number;
+
+  /**
+   * A spring on this frame's own coordinate, slack at zero: the restoring force
+   * is `-stiffness * q`.
+   *
+   * Local by construction -- it reads the frame's coordinate and nothing else,
+   * so it needs no pose at all. A spring pulling toward a direction defined in
+   * *another* frame is a different thing, and needs the accumulated pose from
+   * the world down -- `docs/issues/0016/09-elements.md` keeps the two apart on
+   * purpose, because writing the second as though it were the first goes wrong
+   * silently the moment anything above it rotates.
+   */
+  readonly stiffness: number;
+
   initialState: State;
 
   constructor({
@@ -52,6 +67,7 @@ export default class Frame {
     weights = [],
     frames = [],
     resistance = 0,
+    stiffness = 0,
     initialState = ZERO_STATE,
     id = null,
     typeName = null,
@@ -63,6 +79,7 @@ export default class Frame {
     this.weights = weights;
     this.frames = frames;
     this.resistance = resistance;
+    this.stiffness = stiffness;
     this.initialState = coerceState(initialState);
   }
 
@@ -106,6 +123,7 @@ export default class Frame {
       initialState: this.initialState,
       position: vec3.toPlanar(this.position),
       resistance: this.resistance,
+      stiffness: this.stiffness,
       type: this.typeName,
       weights: this.weights.map((weight) => weight.toJsonObj()),
     };

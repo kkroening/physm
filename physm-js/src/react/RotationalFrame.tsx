@@ -13,10 +13,11 @@ export interface RotationalFrameProps {
   position?: number | readonly number[];
   initialState?: number | readonly number[];
   resistance?: number;
+  stiffness?: number;
 }
 
 function describeRotationalFrame(
-  { id, position, initialState, resistance }: RotationalFrameProps,
+  { id, position, initialState, resistance, stiffness }: RotationalFrameProps,
   { key }: SceneNodeContext,
 ): FrameNode {
   const frameId = id ?? key;
@@ -39,6 +40,7 @@ function describeRotationalFrame(
         ...(position === undefined ? {} : { position }),
         ...(initialState === undefined ? {} : { initialState }),
         ...(resistance === undefined ? {} : { resistance }),
+        ...(stiffness === undefined ? {} : { stiffness }),
       }),
   };
 }
@@ -80,5 +82,6 @@ RotationalFrame.meta = {
       default: [0, 0],
     },
     resistance: { kind: 'number', label: 'Resistance', default: 0 },
+    stiffness: { kind: 'number', label: 'Stiffness', default: 0 },
   },
 } satisfies ComponentMeta<RotationalFrameProps>;

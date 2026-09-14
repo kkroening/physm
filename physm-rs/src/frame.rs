@@ -12,6 +12,10 @@ pub trait Frame: Debug {
 
     fn get_resistance(&self) -> f64;
 
+    /// A spring on the frame's own coordinate, slack at zero: the restoring
+    /// force is `-stiffness * q`. Local -- it reads `q` and nothing else.
+    fn get_stiffness(&self) -> f64;
+
     fn get_weights(&self) -> &[Weight];
 
     fn get_local_pos_matrix(&self, _q: f64) -> Mat3 {

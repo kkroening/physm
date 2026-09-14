@@ -14,17 +14,33 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**Addressing carries slots.** A `NodePath` is an index path, and it is the
-editor's universal handle: selection, insertion, drag and drop, prop edits, undo
-steps, the code pane's mark, and the map from a scene hit back to the node that
-authored it all travel as one. Named slots make a node's children stop being one
-list, so every site that walks a path has to learn the new shape.
+**A frame's coordinate gets a spring.** `stiffness` on a joint, slack at the
+frame's own zero, so the restoring force is `-stiffness * q`. This is the case
+[page 9](docs/issues/0016/09-elements.md) calls local: it reads the frame's own
+coordinate and nothing else, so it needs no pose, no signals and no expressions
+-- which is what makes it buildable now, ahead of everything the document work
+is waiting on.
 
-Invisible on arrival -- the slot component is unused until there is a component
-with two slots to point at. The reason to do it now is that its cost is the
-number of sites that address a node, and that number only grows:
-[page 5](docs/issues/0016/05-addressing.md) is the argument, and it is the one
-piece of [0016](docs/issues/0016.md) that is genuinely invasive.
+It is also the first exercise of what a core element actually costs, which the
+RFC was corrected to say out loud: a term in `JsSolver`, a term in `physm-rs`, a
+field on each side of the JSON boundary, the written-down mathematics in
+`docs/algorithm.md`, and a test that pins the *physics* rather than only the
+agreement between the two -- a sign error in both solvers would pass
+cross-validation, and did, when it was tried.
+
+**One field, not two.** A spring could take a rest coordinate as well as a
+stiffness, and it does not: fusing "where the spring is slack" with "where the
+coordinate reads zero" is the *less* expressive shape, and that is the argument
+for it first -- separating them lets a rig be authored at a pose that is not its
+equilibrium in two different ways. If a rest offset does arrive it should arrive
+with the rotary-toward-another-frame spring, which crosses those same six
+surfaces anyway.
+
+**Addressing is parked, not skipped.** Step 2 below is in question:
+[#76](https://github.com/kkroening/physm/pull/76) argues the slot belongs on the
+child node rather than in the path, which would retire the migration entirely.
+That is Karl's call, and taking it by building would be the wrong way to settle
+it.
 
 ## Next — 0016
 
@@ -34,9 +50,11 @@ site built before it. Roughly one PR each, ordered by risk rather than appetite;
 the [staging page](docs/issues/0016/10-staging.md) argues the order.
 
 1. ~~**A prop value becomes a tagged thing**~~ — done.
-2. **Addressing carries slots** — in view above. The *instantiation trail*
-   carrying an iteration index is designed alongside it so the two fit, but it
-   is additive and lands with step 7.
+2. **Addressing carries slots** — **in question**, see
+   [#76](https://github.com/kkroening/physm/pull/76). If the slot goes on the
+   child rather than in the path there is no migration here and this step goes
+   away; the *instantiation trail* carrying an iteration index was never a path
+   change either way, and lands with step 7.
 3. **Parameters, literal values only.** A definition declares typed parameters, an
    instance passes literals, a child prop may be a parameter reference and
    nothing more. This is promote-to-prop, and it forces the scope and
@@ -58,7 +76,9 @@ the [staging page](docs/issues/0016/10-staging.md) argues the order.
 
 **Running alongside, blocked by nothing:** springs (additive to the document, and
 they exercise the force path the channels in step 8 will need -- though each
-spring is core work on both sides of the `physm-rs` boundary, not a warm-up) and
+spring is core work on both sides of the `physm-rs` boundary, not a warm-up; the
+local joint spring is in view above, and the ones that reference another frame's
+direction wait on signals) and
 **hand-written components** (the escape hatch, argued on
 [page 7](docs/issues/0016/07-handwritten.md) as worth starting earlier than it
 looks, because it turns every unbuilt step above from a blocker into an

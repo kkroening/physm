@@ -5,7 +5,7 @@ import type { Mat3 } from './Mat3';
 
 export interface FixedFrameOptions extends Omit<
   FrameOptions,
-  'initialState' | 'resistance'
+  'initialState' | 'resistance' | 'stiffness'
 > {
   angle?: number;
 }
@@ -19,7 +19,11 @@ export interface FixedFrameOptions extends Omit<
  * as every frame does in a state map, but that coordinate moves nothing:
  * nothing acts on it, and the mass matrix gives it an inertia of its own, so
  * it stays at rest and the frame stays where it was put (`docs/algorithm.md`
- * §2). Its initial state is always zero, and it has no resistance to speak of.
+ * §2). Its initial state is always zero, and it has neither resistance nor a
+ * spring: both act on a coordinate that moves nothing. The `Omit` above is what
+ * enforces that, and it is the mechanism rather than a flourish -- `physm-rs`
+ * reports zero for both, so a prop the type allowed here would describe a scene
+ * the other solver cannot represent.
  */
 export default class FixedFrame extends Frame {
   readonly angle: number;
