@@ -13,7 +13,9 @@ import emitScene, { rangeKey } from './emitScene';
 import starterDocument from './starterDocument';
 import { InvalidStateMapError } from './../Solver';
 import { documentFrom, nodesFrom } from './sceneDocument';
+import { literalOf } from './propValue';
 import type { DocNode, SceneDocument } from './sceneDocument';
+import type { PropValue } from './propValue';
 import { vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
@@ -58,6 +60,31 @@ describe('Editor', () => {
       expect(within(library).getByText(meta.name)).toBeInTheDocument();
     }
     expect(within(library).getByText('Pendulum')).toBeInTheDocument();
+  });
+
+  test('a summary shows the props with values, not the props that are there', () => {
+    // A prop can be present and hold nothing -- untyped JSX states one, which
+    // `exactOptionalPropertyTypes` stops the typed kind from doing. Holding
+    // props as tagged values makes "is it there" and "does it have a value"
+    // two different questions, and the row answers the second: a person wrote
+    // a value for it. So the second of these is not `id=undefined`.
+    const [frame] = nodesFrom(<TrackFrame id="cart" />);
+    const stating = (id: PropValue): SceneDocument => ({
+      root: 'Scene',
+      definitions: [{ name: 'Scene', body: [{ ...frame!, props: { id } }] }],
+    });
+    const treeOf = (doc: SceneDocument): HTMLElement => {
+      const { container } = render(<Editor initialDocument={doc} />);
+
+      return within(container).getByRole('tree', { name: 'Scene' });
+    };
+
+    expect(
+      within(treeOf(stating(literalOf('cart')))).getByText('id="cart"'),
+    ).toBeInTheDocument();
+    expect(
+      within(treeOf(stating(literalOf(undefined)))).queryByText(/id=/),
+    ).toBeNull();
   });
 
   test('a scene with no consistent start says why, and the editor stays up', () => {
@@ -1294,8 +1321,9 @@ describe('Editor, picking', () => {
     expect(pane.textContent).toContain('Written in Pendulum');
     expect(within(pane).queryAllByRole('textbox')).toHaveLength(0);
 
-    // Its props as the component writes them.
+    // Its props as the component writes them, values and all.
     expect(pane.textContent).toContain('resistance');
+    expect(within(pane).getByText('0.4')).toBeVisible();
 
     // Nothing in this body is selected, so the tree's actions stay out.
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
@@ -3127,6 +3155,35 @@ describe('Editor, finding a node', () => {
     expect(foundStatus()).toBe('2 of 2');
   });
 
+  test('find reads the props that have values, not the props that are there', () => {
+    // The same distinction the tree row's summary makes: a prop can be present
+    // and hold nothing, and find matches what a person wrote a value for. It
+    // is a separate filter from the summary's, so it is pinned separately.
+    const [frame] = nodesFrom(<TrackFrame id="cart" />);
+    render(
+      <Editor
+        initialDocument={{
+          root: 'Scene',
+          definitions: [
+            {
+              name: 'Scene',
+              body: [{ ...frame!, props: { id: literalOf(undefined) } }],
+            },
+          ],
+        }}
+      />,
+    );
+    find('undefined');
+
+    expect(foundStatus()).toBe('No match');
+
+    // The tag is not matched against either -- searching its shape finds
+    // nothing, the same as searching for a value nobody wrote.
+    find('literal');
+
+    expect(foundStatus()).toBe('No match');
+  });
+
   test('a search that turns up nothing says so, and leaves the selection', () => {
     render(<Editor />);
     select('Box');
@@ -3708,6 +3765,32 @@ describe('Editor, dragging a shape', () => {
     // `Anchor.position` carries no default on purpose -- an anchor without one
     // has its point solved for, and no pair of numbers says that. A handle
     // would write a value and freeze what the solver is there to find.
+    expect(handles(container)).toEqual([]);
+  });
+
+  test('resetting an anchor position takes its handle away again', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <TrackFrame id="cart">
+            <Anchor id="hitch" position={[1, 0]} />
+          </TrackFrame>,
+        )}
+      />,
+    );
+    pick('Anchor');
+
+    expect(handles(container)).toEqual(['position']);
+
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'Properties' })).getByLabelText(
+        'Reset Position',
+      ),
+    );
+
+    // Removed, not set to nothing. The handle is offered to a prop that is
+    // *there*, so a prop left present and holding nothing would keep one --
+    // on a point the solver is meant to find, which the test above is about.
     expect(handles(container)).toEqual([]);
   });
 
