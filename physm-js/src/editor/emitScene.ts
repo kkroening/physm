@@ -1,4 +1,5 @@
 import { definitionOf, placeholderPath } from './sceneDocument';
+import { plainProps } from './propValue';
 import type {
   ComponentRef,
   Definition,
@@ -180,7 +181,7 @@ function writtenProps(node: DocNode): [string, unknown][] {
 
   // `undefined` is absent to every component, and writing it would say
   // something different under `exactOptionalPropertyTypes`.
-  return Object.entries(node.props).filter(([name, value]) => {
+  return Object.entries(plainProps(node.props)).filter(([name, value]) => {
     const spec = (specs as Record<string, { default?: unknown } | undefined>)[
       name
     ];

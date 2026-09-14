@@ -1,8 +1,10 @@
 import coreComponents from './../react/coreComponents';
 import { Fragment, createElement, isValidElement } from 'react';
 import { canContain } from './../react/componentMeta';
+import { literalProps, plainProps } from './propValue';
 import type { ComponentMeta } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
+import type { PropValue, Props } from './propValue';
 
 /** Any component, as the document holds it: a function of some props. */
 type AnyComponent = (props: never) => ReactNode;
@@ -44,7 +46,7 @@ export interface DocNode {
   readonly type: ComponentRef;
 
   /** Everything but `children`, which are structure and live below. */
-  readonly props: Readonly<Record<string, unknown>>;
+  readonly props: Props;
 
   /** The element's `key`, when it has one -- its identity among siblings. */
   readonly key?: string;
@@ -185,7 +187,7 @@ function flatten(children: ReactNode): DocNode[] {
   return [
     {
       type: refOf(children.type),
-      props,
+      props: literalProps(props),
       ...(children.key === null ? {} : { key: children.key }),
       children: nodesFrom(grandchildren),
     },
@@ -293,9 +295,10 @@ export function elementOf(
       );
     }
 
+    const plain = plainProps(node.props);
     const element = createElement(
       typeOf(node.type),
-      node.key === undefined ? node.props : { ...node.props, key: node.key },
+      node.key === undefined ? plain : { ...plain, key: node.key },
       ...node.children.map((child, index) =>
         render(definition, child, [...path, index], given),
       ),
@@ -427,7 +430,7 @@ export function setProp(
   definition: string,
   path: NodePath,
   prop: string,
-  value: unknown,
+  value: PropValue | undefined,
 ): SceneDocument {
   const [list, index] = splitPath(path);
   nodeAt(doc, definition, path);

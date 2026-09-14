@@ -14,30 +14,29 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**A prop value becomes a tagged thing.** Today a prop holds plain data, and the
-emitter refuses anything else. Everything in [0016](docs/issues/0016.md) needs a
-prop to be able to hold an *expression* instead — so the first step is the
-indirection alone, with exactly one variant (`literal`) and no behaviour change
-anywhere.
+**Addressing carries slots.** A `NodePath` is an index path, and it is the
+editor's universal handle: selection, insertion, drag and drop, prop edits, undo
+steps, the code pane's mark, and the map from a scene hit back to the node that
+authored it all travel as one. Named slots make a node's children stop being one
+list, so every site that walks a path has to learn the new shape.
 
-Invisible on purpose. The value is that every prop site is touched once, now,
-rather than once now and again when expressions arrive; and the diff is
-mechanical while there is nothing to get wrong.
+Invisible on arrival -- the slot component is unused until there is a component
+with two slots to point at. The reason to do it now is that its cost is the
+number of sites that address a node, and that number only grows:
+[page 5](docs/issues/0016/05-addressing.md) is the argument, and it is the one
+piece of [0016](docs/issues/0016.md) that is genuinely invasive.
 
 ## Next — 0016
 
-**Where it stands: nothing of 0016 built yet, and the two prep steps come first
-because each grows more expensive with every site built before it.** Roughly one
-PR each, ordered by risk rather than appetite; the
-[staging page](docs/issues/0016/10-staging.md) argues the order.
+**Where it stands: the first prep step has landed, and the second is the
+invasive one.** Both come first because each grows more expensive with every
+site built before it. Roughly one PR each, ordered by risk rather than appetite;
+the [staging page](docs/issues/0016/10-staging.md) argues the order.
 
-1. **A prop value becomes a tagged thing** — in view above.
-2. **Addressing carries slots.** The one genuinely invasive change: `NodePath`
-   gains a slot component, unused on arrival, and everything that travels as a
-   path -- insertion, dragging, picking, codegen ranges, undo -- learns that a
-   node's children are no longer one list. The *instantiation trail* carrying an
-   iteration index is designed alongside it so the two fit, but it is additive
-   and lands with step 7.
+1. ~~**A prop value becomes a tagged thing**~~ — done.
+2. **Addressing carries slots** — in view above. The *instantiation trail*
+   carrying an iteration index is designed alongside it so the two fit, but it
+   is additive and lands with step 7.
 3. **Parameters, literal values only.** A definition declares typed parameters, an
    instance passes literals, a child prop may be a parameter reference and
    nothing more. This is promote-to-prop, and it forces the scope and
@@ -404,3 +403,14 @@ inconvenience).
   table, and asks for the mechanical recovery anyway. Three rather than twice,
   because a drag landing one frame on another's point made a coincidence look
   like a shared value.
+- **A prop value is a tagged thing** — a document's props hold
+  `{ kind: 'literal', value }` rather than the value itself, which is the
+  indirection [0016](docs/issues/0016.md) needs before a prop can hold an
+  expression. One variant, no behaviour change: the reader wraps what JSX
+  states, the builder and the emitter unwrap, and `setProp` takes a tagged
+  value so the caller is where the choice will eventually be made. The tag is
+  already doing its work -- reaching for `.value` is what marks a caller that
+  can only handle a literal, so a second variant makes the compiler name every
+  one of them. It also separated two questions a plain value had run together:
+  a summary row now shows the props that have a *value*, not the props that are
+  *there*, which untyped JSX can tell apart.

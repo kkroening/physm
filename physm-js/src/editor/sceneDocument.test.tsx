@@ -7,6 +7,7 @@ import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
 import starterDocument from './starterDocument';
+import { literalOf } from './propValue';
 import {
   definitionOf,
   deletionRefusal,
@@ -99,7 +100,7 @@ describe('sceneDocument', () => {
     const [node] = nodesFrom(<Weight mass={3} />);
 
     expect(node!.type).toEqual({ kind: 'core', component: Weight });
-    expect(node!.props).toEqual({ mass: 3 });
+    expect(node!.props).toEqual({ mass: literalOf(3) });
   });
 
   test('keeps keys, and keeps children out of props', () => {
@@ -114,7 +115,7 @@ describe('sceneDocument', () => {
     );
 
     expect(node!.key).toBe('k');
-    expect(node!.props).toEqual({ id: 'cart' });
+    expect(node!.props).toEqual({ id: literalOf('cart') });
 
     // The fragment and the array flatten into siblings, and the holes vanish.
     expect(node!.children.map((child) => child.key ?? '-')).toEqual([
@@ -175,10 +176,20 @@ describe('sceneDocument', () => {
 
   test('setProp returns a new document and leaves the old one alone', () => {
     const before = twoPoles();
-    const after = setProp(before, 'Scene', [0, 0], 'position', [-4, 0]);
+    const after = setProp(
+      before,
+      'Scene',
+      [0, 0],
+      'position',
+      literalOf([-4, 0]),
+    );
 
-    expect(nodeAt(after, 'Scene', [0, 0]).props.position).toEqual([-4, 0]);
-    expect(nodeAt(before, 'Scene', [0, 0]).props.position).toEqual([-1, 0]);
+    expect(nodeAt(after, 'Scene', [0, 0]).props.position).toEqual(
+      literalOf([-4, 0]),
+    );
+    expect(nodeAt(before, 'Scene', [0, 0]).props.position).toEqual(
+      literalOf([-1, 0]),
+    );
 
     // And the edit reaches the scene it builds.
     expect(buildScene(elementOf(after)).frameMap.get('left')!.position).toEqual(
@@ -319,7 +330,7 @@ describe('sceneDocument', () => {
 
   test('setProp keeps an edited prop where it was', () => {
     const doc = documentFrom(<TrackFrame id="cart" resistance={5} />);
-    const next = setProp(doc, 'Scene', [0], 'id', 'wagon');
+    const next = setProp(doc, 'Scene', [0], 'id', literalOf('wagon'));
 
     expect(Object.keys(nodeAt(next, 'Scene', [0]).props)).toEqual([
       'id',

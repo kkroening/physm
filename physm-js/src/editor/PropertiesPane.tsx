@@ -1,4 +1,5 @@
 import { Fragment, useId, useRef, useState } from 'react';
+import { literalOf } from './propValue';
 import { nodeAt, nodeName, setProp } from './sceneDocument';
 import type { DocNode, NodePath, SceneDocument } from './sceneDocument';
 import type { PropSpec } from './../react/componentMeta';
@@ -333,7 +334,7 @@ function PropField({
 /** Every id in these nodes and their children: what a constraint end can name. */
 function idsIn(nodes: readonly DocNode[]): string[] {
   return nodes.flatMap(({ props, children }) => [
-    ...(typeof props.id === 'string' ? [props.id] : []),
+    ...(typeof props.id?.value === 'string' ? [props.id.value] : []),
     ...idsIn(children),
   ]);
 }
@@ -399,10 +400,10 @@ function NodeProps({
           they are shown here, but not edited.
         </p>
         <dl className="editor__readonly">
-          {Object.entries(node.props).map(([name, value]) => (
+          {Object.entries(node.props).map(([name, prop]) => (
             <Fragment key={name}>
               <dt>{name}</dt>
-              <dd>{JSON.stringify(value)}</dd>
+              <dd>{JSON.stringify(prop.value)}</dd>
             </Fragment>
           ))}
         </dl>
@@ -426,11 +427,17 @@ function NodeProps({
           <PropField
             key={name}
             spec={spec}
-            value={node.props[name]}
+            value={node.props[name]?.value}
             names={names}
             onChange={(value, discrete) =>
               onChange(
-                setProp(doc, selection.definition, selection.path, name, value),
+                setProp(
+                  doc,
+                  selection.definition,
+                  selection.path,
+                  name,
+                  value === undefined ? undefined : literalOf(value),
+                ),
                 discrete
                   ? null
                   : `${selection.definition}/${selection.path.join('.')}/${name}#${visit.current}`,
@@ -486,10 +493,10 @@ function ExpandedProps({
         shown as that component writes them.
       </p>
       <dl className="editor__readonly">
-        {Object.entries(node.props).map(([name, value]) => (
+        {Object.entries(node.props).map(([name, prop]) => (
           <Fragment key={name}>
             <dt>{name}</dt>
-            <dd>{JSON.stringify(value)}</dd>
+            <dd>{JSON.stringify(prop.value)}</dd>
           </Fragment>
         ))}
       </dl>

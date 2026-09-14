@@ -7,6 +7,7 @@ import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import starterDocument from './starterDocument';
 import { extractComponent, insertNode, removeNode } from './sceneDocument';
+import { literalOf, literalProps } from './propValue';
 import {
   dropPoint,
   dropRefusal,
@@ -151,7 +152,7 @@ describe('refusalOf, for ids already in use', () => {
   test('refuses even a first instance whose ids the scene already uses', () => {
     const frame = (id: string) => ({
       type: core(TrackFrame),
-      props: { id },
+      props: literalProps({ id }),
       children: [],
     });
     const doc: SceneDocument = {
@@ -177,7 +178,7 @@ function nodeOf(
   component: unknown,
   props: Record<string, unknown> = {},
 ): DocNode {
-  return { type: core(component), props, children: [] };
+  return { type: core(component), props: literalProps(props), children: [] };
 }
 
 /** An instance of a component the document defines. */
@@ -260,8 +261,8 @@ describe('refusalOf, through the expansion', () => {
 
 describe('newNode', () => {
   test('starts required props at their initial values, and nothing else', () => {
-    expect(newNode(core(Weight)).props).toEqual({ mass: 1 });
-    expect(newNode(core(Line)).props).toEqual({ endPos: [1, 0] });
+    expect(newNode(core(Weight)).props).toEqual({ mass: literalOf(1) });
+    expect(newNode(core(Line)).props).toEqual({ endPos: literalOf([1, 0]) });
     // Which two things a constraint joins is the person's to pick.
     expect(newNode(core(Coincidence)).props).toStrictEqual({});
     expect(newNode(defined('Pendulum'))).toEqual({

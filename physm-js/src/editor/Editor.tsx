@@ -40,6 +40,7 @@ import {
   setProp,
 } from './sceneDocument';
 import { historyOf, recorded, redone, undone } from './history';
+import { literalOf } from './propValue';
 import {
   dropPoint,
   dropRefusal,
@@ -103,8 +104,10 @@ function summaryOf(node: DocNode): string {
   }
 
   return Object.entries(node.type.component.meta.props)
-    .filter(([name, spec]) => spec.summary && node.props[name] !== undefined)
-    .map(([name]) => `${name}=${JSON.stringify(node.props[name])}`)
+    .filter(
+      ([name, spec]) => spec.summary && node.props[name]?.value !== undefined,
+    )
+    .map(([name]) => `${name}=${JSON.stringify(node.props[name]!.value)}`)
     .join(' ');
 }
 
@@ -263,8 +266,8 @@ function findTextOf(node: DocNode): string {
   return [
     tagOf(node.type),
     ...Object.entries(node.props)
-      .filter(([, value]) => value !== undefined)
-      .map(([name, value]) => `${name}=${JSON.stringify(value)}`),
+      .filter(([, prop]) => prop.value !== undefined)
+      .map(([name, prop]) => `${name}=${JSON.stringify(prop.value)}`),
   ]
     .join(' ')
     .toLowerCase();
@@ -1491,7 +1494,7 @@ function ScenePane({
             frame,
             xformMatrix,
             vec3.coerce(
-              (node.props[prop] ?? spec.default ?? [0, 0]) as
+              (node.props[prop]?.value ?? spec.default ?? [0, 0]) as
                 number | readonly number[],
             ),
           ),
@@ -1761,7 +1764,7 @@ function ScenePane({
     blurAway();
     drags.current += 1;
     const position = vec3.coerce(
-      (nodeAt(doc, focus, target.path).props[target.prop] ?? [0, 0]) as
+      (nodeAt(doc, focus, target.path).props[target.prop]?.value ?? [0, 0]) as
         number | readonly number[],
     );
 
@@ -1889,7 +1892,7 @@ function ScenePane({
           current.definition,
           current.path,
           current.prop,
-          position,
+          literalOf(position),
         ),
         current.field,
         current.path,

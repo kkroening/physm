@@ -13,7 +13,9 @@ import emitScene, { rangeKey } from './emitScene';
 import starterDocument from './starterDocument';
 import { InvalidStateMapError } from './../Solver';
 import { documentFrom, nodesFrom } from './sceneDocument';
+import { literalOf } from './propValue';
 import type { DocNode, SceneDocument } from './sceneDocument';
+import type { PropValue } from './propValue';
 import { vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
@@ -58,6 +60,31 @@ describe('Editor', () => {
       expect(within(library).getByText(meta.name)).toBeInTheDocument();
     }
     expect(within(library).getByText('Pendulum')).toBeInTheDocument();
+  });
+
+  test('a summary shows the props with values, not the props that are there', () => {
+    // A prop can be present and hold nothing -- untyped JSX states one, which
+    // `exactOptionalPropertyTypes` stops the typed kind from doing. Holding
+    // props as tagged values makes "is it there" and "does it have a value"
+    // two different questions, and the row answers the second: a person wrote
+    // a value for it. So the second of these is not `id=undefined`.
+    const [frame] = nodesFrom(<TrackFrame id="cart" />);
+    const stating = (id: PropValue): SceneDocument => ({
+      root: 'Scene',
+      definitions: [{ name: 'Scene', body: [{ ...frame!, props: { id } }] }],
+    });
+    const treeOf = (doc: SceneDocument): HTMLElement => {
+      const { container } = render(<Editor initialDocument={doc} />);
+
+      return within(container).getByRole('tree', { name: 'Scene' });
+    };
+
+    expect(
+      within(treeOf(stating(literalOf('cart')))).getByText('id="cart"'),
+    ).toBeInTheDocument();
+    expect(
+      within(treeOf(stating(literalOf(undefined)))).queryByText(/id=/),
+    ).toBeNull();
   });
 
   test('a scene with no consistent start says why, and the editor stays up', () => {

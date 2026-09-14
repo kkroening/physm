@@ -1,4 +1,5 @@
 import { canContain } from './../react/componentMeta';
+import { literalProps } from './propValue';
 import {
   definitionOf,
   insertNode,
@@ -121,7 +122,7 @@ function definitionsUsedBy(
 /** Every id these nodes and their children carry. */
 function idsIn(nodes: readonly DocNode[]): string[] {
   return nodes.flatMap(({ props, children }) => [
-    ...(typeof props.id === 'string' ? [props.id] : []),
+    ...(typeof props.id?.value === 'string' ? [props.id.value] : []),
     ...idsIn(children),
   ]);
 }
@@ -154,8 +155,8 @@ function expansionCounts(
   };
   const visit = (nodes: readonly DocNode[]): void => {
     for (const node of nodes) {
-      if (typeof node.props.id === 'string') {
-        bump(`id:${node.props.id}`);
+      if (typeof node.props.id?.value === 'string') {
+        bump(`id:${node.props.id.value}`);
       }
 
       if (node.type.kind === 'defined') {
@@ -177,7 +178,7 @@ function endsIn(nodes: readonly DocNode[]): string[] {
     ...(node.type.kind === 'core'
       ? Object.entries(node.type.component.meta.props)
           .filter(([, spec]) => spec.kind === 'end')
-          .map(([prop]) => node.props[prop])
+          .map(([prop]) => node.props[prop]?.value)
           .filter((end): end is string => typeof end === 'string')
       : []),
     ...endsIn(node.children),
@@ -533,10 +534,12 @@ export function outdentRefusal(
 export function newNode(ref: ComponentRef): DocNode {
   const props =
     ref.kind === 'core'
-      ? Object.fromEntries(
-          Object.entries(ref.component.meta.props)
-            .filter(([, spec]) => spec.required && spec.initial !== undefined)
-            .map(([name, spec]) => [name, spec.initial]),
+      ? literalProps(
+          Object.fromEntries(
+            Object.entries(ref.component.meta.props)
+              .filter(([, spec]) => spec.required && spec.initial !== undefined)
+              .map(([name, spec]) => [name, spec.initial]),
+          ),
         )
       : {};
 

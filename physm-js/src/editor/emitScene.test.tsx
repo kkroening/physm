@@ -10,6 +10,7 @@ import FixedFrame from './../react/FixedFrame';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
+import { literalOf } from './propValue';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
 import emitScene, { rangeKey } from './emitScene';
@@ -332,7 +333,7 @@ function withProp(prop: string, value: unknown): SceneDocument {
     definitions: [
       {
         name: 'Scene',
-        body: [{ ...box, props: { ...box.props, [prop]: value } }],
+        body: [{ ...box, props: { ...box.props, [prop]: literalOf(value) } }],
       },
     ],
   };
