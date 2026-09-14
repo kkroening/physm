@@ -1,47 +1,64 @@
 # Frontier
 
-The working plan for the scene editor ([0014](docs/issues/0014.md)): what is in
-view now, what comes next, and what is further out. Revised freely as the work
-teaches things — see [`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
+The working plan for the scene editor: what is in view now, what comes next,
+and what is further out. Revised freely as the work teaches things — see
+[`CLAUDE.md`](CLAUDE.md#the-frontier) for how it is used.
+
+**The objective.** [0014](docs/issues/0014.md) built an editor whose document is
+a drawing of one scene, and it is done to its MVP. [0016](docs/issues/0016.md)
+is the next objective: make that document a *program* that produces scenes —
+parameters, expressions, repetition, slots, a declared port surface, and
+hand-written components as the escape hatch for whatever the subset cannot say.
+Its [staging page](docs/issues/0016/10-staging.md) orders the work by risk; this
+file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**Nothing, and the next direction is Karl's to set.** The MVP below is complete
-but for promote-to-prop, and every remaining item in *Further out* is marked as
-his call -- promote-to-prop against scoping ids per instance, which snapping
-targets a shape offers, whether the view is owed a keyboard path, what a drag
-does while the scene plays, types-first against schema-first, and the
-constraint-first direction the issue's last page sketches.
+**A prop value becomes a tagged thing.** Today a prop holds plain data, and the
+emitter refuses anything else. Everything in [0016](docs/issues/0016.md) needs a
+prop to be able to hold an *expression* instead — so the first step is the
+indirection alone, with exactly one variant (`literal`) and no behaviour change
+anywhere.
 
-Six pull requests since the scene-editing work began have each surfaced the
-next, so the run stopping here is a real boundary rather than tiredness: what
-is left is not a step nobody has taken, but a choice nobody has made.
+Invisible on purpose. The value is that every prop site is touched once, now,
+rather than once now and again when expressions arrive; and the diff is
+mechanical while there is nothing to get wrong.
 
-## Next — the MVP
+## Next — 0016
 
-Roughly one PR each.
+**Where it stands: nothing of 0016 built yet, and the two prep steps come first
+because both cost double if they land after what depends on them.** Roughly one
+PR each, ordered by risk rather than appetite; the
+[staging page](docs/issues/0016/10-staging.md) argues the order.
 
-1. ~~**De-ref the demo**~~ — done
-2. ~~**Tree-walk builder**~~ — done
-3. ~~**Core metadata**~~ — done
-4. ~~**Document model**~~ — done
-5. ~~**Codegen**~~ — done
-6. ~~**Editor shell**~~ — done
-7. ~~**Selection and prop editing**~~ — done
-8. ~~**Insert, delete, reorder**~~ — done
-9. ~~**Extract to component, and tabs**~~ — done
-10. ~~**Play**~~ — done
-11. ~~**Gizmos**~~ — done
-12. ~~**Undo**~~ — done
+1. **A prop value becomes a tagged thing** — in view above.
+2. **Addressing carries slots and iteration.** The one genuinely invasive change:
+   `NodePath` gains a slot component and an instantiation trail gains an
+   iteration index, both unused on arrival. Everything that travels as a path --
+   insertion, dragging, picking, codegen ranges, undo -- learns the new shape
+   once instead of twice.
+3. **Parameters, literal values only.** A definition declares typed parameters, an
+   instance passes literals, a child prop may be a parameter reference and
+   nothing more. This is promote-to-prop, and it forces the scope and
+   declaration-block design without needing an expression language.
+4. **Structural expressions**, stored as a DAG. The emitter's constants heuristic
+   is deleted rather than tuned, since expression identity is what it was
+   guessing at.
+5. **Signals**, hanging off the pose map, and with them decals drawn in world
+   space -- which settles [0003](docs/issues/0003.md).
+6. **Named slots**, cheap once step 2 has landed.
+7. **[0005](docs/issues/0005.md), sibling order** -- resolved before repetition
+   rather than discovered through it.
+8. **Repetition**, with the emitted form decided first.
+9. **The port surface** -- outputs and instance names, then manipulators, force
+   channels and key bindings. [0011](docs/issues/0011.md) closes here.
 
-[0014 page 10](docs/issues/0014/10-staging.md#what-the-mvp-is) draws the MVP
-at its steps 1-6 plus gizmos, and one piece of those steps is left: promote to
-prop, from step 6, which waits on Karl's call below. Everything else is done:
-load a scene, see its tree, edit props, add, delete and reorder nodes, extract
-a component and reuse it -- one that names no id, for now -- export TSX that
-rebuilds to the same scene, see every frame in the scene pane, and undo any of
-it. Play came forward because the shell made it cheap, and picking because it
-was built while gizmos were in review.
+**Running alongside, blocked by nothing:** springs (additive, and it exercises
+the force path the channels in step 9 will need) and **hand-written components**
+(the escape hatch, argued on
+[page 7](docs/issues/0016/07-handwritten.md) as worth starting earlier than it
+looks, because it turns every unbuilt step above from a blocker into an
+inconvenience).
 
 ## Further out
 
