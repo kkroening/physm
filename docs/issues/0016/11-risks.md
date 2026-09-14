@@ -93,10 +93,10 @@ bindings would be the expensive way.
 
 ## The emitted form for repetition
 
-The round-trip rule says a chain of N must emit as a construct and read back as a
-chain. If no such form is found, the fallback is unrolling — at which point the
-count stops meaning anything after the first save, and the feature is a
-convenience for initial authoring rather than a parameter.
+The emission rule says a chain of N must emit as a construct rather than as an
+expansion. If no such form is found, the fallback is unrolling — at which point
+the count is gone from the emitted file, and the feature is a convenience for
+initial authoring rather than a parameter anybody reading the output can see.
 
 **This is the one I would decide before building**, because it can invalidate the
 node's design rather than merely complicate it.

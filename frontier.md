@@ -41,9 +41,10 @@ the [staging page](docs/issues/0016/10-staging.md) argues the order.
    instance passes literals, a child prop may be a parameter reference and
    nothing more. This is promote-to-prop, and it forces the scope and
    declaration-block design without needing an expression language.
-4. **Structural expressions**, stored as a DAG. The emitter's constants heuristic
-   is deleted rather than tuned, since expression identity is what it was
-   guessing at.
+4. **Structural expressions**, stored as a DAG and emitted as the host
+   language's own syntax -- `length={halfLength * 2}`, never a wrapper. The
+   emitter's constants heuristic is deleted rather than tuned, since expression
+   identity is what it was guessing at.
 5. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
    Rust path hands external forces across once per batch.
@@ -52,8 +53,8 @@ the [staging page](docs/issues/0016/10-staging.md) argues the order.
 7. **Repetition**, with the emitted form decided first.
 8. **The port surface** -- outputs and instance names, then manipulators, force
    channels and key bindings. [0011](docs/issues/0011.md) closes here. Whether
-   any of it can round-trip is the one open question in the plan, and it is owed
-   an answer before step 3 fixes the declaration block's shape.
+   any of it has a TSX spelling at all is the one open question in the plan, and
+   it is owed an answer before step 3 fixes the declaration block's shape.
 
 **Running alongside, blocked by nothing:** springs (additive to the document, and
 they exercise the force path the channels in step 8 will need -- though each
@@ -141,6 +142,11 @@ inconvenience).
   has it. A tab change clears the selection, so after one nothing is marked
   and the pane stays where it was. It needs codegen to record a range per
   definition; whether the selection's mark stands in for it is Karl's call.
+- A save format for the document ([0017](docs/issues/0017.md)). The editor has
+  never had one, and the emitted TSX cannot be it -- `documentFrom` recovers a
+  single definition, so anything with a scene *and* a component is already
+  one-way, and expressions widen that. Not blocking; wants deciding before
+  somebody loses a scene rather than after.
 - The constraint-first direction ([0014 page 9](docs/issues/0014/09-horizon.md))
 
 ## Decisions
@@ -148,6 +154,15 @@ inconvenience).
 - **A structural edit resets simulation state; a prop edit carries it over.**
   Recorded in [0014 page 8](docs/issues/0014/08-play.md#editing-while-it-runs).
   _(Karl, 2026-09-11)_
+- **An expression emits as the host language's own syntax, and nothing of the
+  graph survives compilation.** `length={halfLength * 2}`, not
+  `multiply(halfLength, 2)`: the emitted module is real TSX, and the structure
+  lives in the syntax rather than in a wrapper. Parsing a small JS subset is an
+  *input*-side job for the prop editor, which resolves symbols and types the
+  expression; recovering one from source is the bidirectional problem, still out
+  of scope. Recorded in
+  [0016 page 4](docs/issues/0016/04-expressions.md#what-the-emitter-writes).
+  _(Karl, 2026-09-14)_
 
 ## Done
 
