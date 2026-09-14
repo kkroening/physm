@@ -86,6 +86,58 @@ what storing a graph buys:
 - **As emitted code**, one-way, like everything else the editor writes. Reading
   edited code back is the bidirectional problem [page 1](01-overview.md) declines.
 
+## What the emitter writes
+
+**Host syntax, not a wrapper.** A prop holding *halfLength × 2* emits as
+`halfLength * 2` — never as `multiply(halfLength, 2)` or any other structure
+that needs physm's own machinery to mean anything. The emitted module is
+ordinary TSX: paste it into this repo and it compiles and runs like anything
+hand-written.
+
+```tsx
+function Pendulum({
+  halfLength,
+  children,
+}: {
+  halfLength: number;
+  children?: ReactNode;
+}): ReactElement {
+  return (
+    <RotationalFrame initialState={[-0.6, 0]} resistance={0.4}>
+      <Line endPos={[0, -halfLength * 2]} lineWidth={0.15} />
+      <Weight mass={10} position={[0, -halfLength * 2]} />
+      <FixedFrame position={[0, -halfLength * 2]}>{children}</FixedFrame>
+    </RotationalFrame>
+  );
+}
+```
+
+**Nothing of the graph survives compilation, and nothing needs to.** Once `tsc`
+has that source, `halfLength * 2` is arithmetic. The structure lives in the
+*syntax* — which is an AST, owned by the host language — so there is no goal of
+carrying expression identity into the built scene, and a built `Frame` stays as
+ignorant of where its numbers came from as it is today.
+
+**The parsing is one-directional, and deliberately small.** The prop editor
+accepts `halfLength * 2`, parses a tiny subset of JavaScript into the document's
+representation, and resolves `halfLength` to a symbol it knows is a parameter.
+That is what lets it type the expression, refuse a reference to something out of
+scope, and later draw the graph. **That representation is authoritative**; the
+emitter prints it.
+
+**Recovering it from emitted source is the other problem.** `documentFrom` does
+not read source — it reads an element tree the runtime has already *evaluated*,
+by which point `halfLength * 2` is a number and the expression is gone. Parsing
+source to get it back is the bidirectional problem [page 1](01-overview.md)
+declines.
+
+That costs less than it sounds, because the document was never recoverable from
+its output anyway: `documentFrom` builds a **one-definition** document, so
+anything with a scene *and* a component already needed its own save format
+([0017](../0017.md)). Expressions widen a gap rather than opening one.
+
+_(Karl, 2026-09-14, specifying the emitted form.)_
+
 ## Cycles
 
 References make cycles possible: `a` reads `b.x` while `b` reads `a.y`.

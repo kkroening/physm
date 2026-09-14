@@ -61,10 +61,10 @@ appears to deserve.
    awkward before, and it needs emitter *and* reader work for element-valued
    props, which neither supports today.
 7. **Repetition.** Chain and repeat, with the emitted form decided before the
-   editor work — the round-trip constraint is what decides what the node can be.
+   editor work — the emission constraint is what decides what the node can be.
 8. **The port surface.** Outputs and instance names first, then manipulators and
    force channels, then key bindings. [0011](../0011.md) closes here, and the
-   round-trip rule has to be settled for it before step 3 fixes the declaration
+   emission rule has to be settled for it before step 3 fixes the declaration
    block's shape.
 
 ## Later
@@ -78,22 +78,24 @@ appears to deserve.
 
 ## What each step has to prove
 
-The round-trip rule is the gate, and it is worth saying at each step what
+The emission rule is the gate, and it is worth saying at each step what
 "working" means, because for several of these the interesting failure is not in
-the editor:
+the editor. **"Emits" is the whole test** — `expectRoundTrip` builds the emitted
+module and compares scenes, and never asks for the document back
+([page 1](01-overview.md)):
 
-| step | what has to round-trip |
+| step | what has to emit |
 |---|---|
 | parameters | a definition with parameters emits a function with a signature, and reads back |
-| expressions | a computed prop emits as an expression and parses back to the same graph, sharing included |
-| signals | a world-space decal emits as an element whose endpoint props hold expressions, and reads back as that decal rather than as two frozen numbers |
-| slots | an instance with named slots emits as element-valued props and reads back — new work in both the emitter and the reader |
+| expressions | a computed prop emits as the host language's own expression — `length={halfLength * 2}`, not a wrapper — and the emitted module builds the same scene. It does **not** read back |
+| signals | a world-space decal emits as an element whose endpoint props hold expressions, and the built scene draws the same line |
+| slots | an instance with named slots emits as element-valued props — new work in the emitter, and in the reader for the import path |
 | repetition | a chain of N emits as a construct, **not** as N unrolled literals |
 | hand-written | the definition's source is its own emitted form, trivially — but the whole-document guarantee weakens to per-definition |
 | the port surface | **unsettled, and the one step the rule has not been applied to.** `function Pendulum({ length }): ReactElement` cannot express `bobPosition`; a manipulator is editor-only metadata with no runtime meaning; a key binding routed into `cart.trackForce` is a scene-level construct that does not exist. Each needs an invented form the emitter writes and the reader reads |
 
 **That last row is a real hole rather than a formality.** The rule's own answer,
-if outputs and channels turn out not to round-trip, is that they belong in the
+if outputs and channels turn out to have no TSX spelling, is that they belong in the
 escape hatch — which would mean [0011](../0011.md) closes by hand-writing a
 component rather than by declaring a surface. That is a large enough difference
 to want settled before step 3 fixes the shape of the declaration block.

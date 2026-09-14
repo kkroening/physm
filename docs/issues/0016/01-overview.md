@@ -35,9 +35,24 @@ the machine underneath it.**
 
 ## The rule
 
-- **The document is a decidable subset of TSX that round-trips.** Whatever the
-  document can express, `emitScene` must be able to write and `documentFrom` must
-  be able to read back. That is the existing discipline and it stays.
+- **The document is a decidable subset of TSX, and what it emits is real TSX.**
+  Whatever the document can express, `emitScene` writes in the host language's
+  own syntax — `length={halfLength * 2}`, not a wrapper only physm can read —
+  and **building that module produces the same scene**. That is the existing
+  discipline, and it stays: `expectRoundTrip` in the emitter's tests evaluates
+  the emitted source, builds it, and compares the scene against the document's
+  own. [Page 4](04-expressions.md) is what it looks like for an expression.
+- **It has never meant the *document* comes back, and that is worth being exact
+  about**, because the looser reading is the one that invites features which
+  cannot work. `documentFrom` turns an element tree into a **one-definition**
+  document, so a document with a scene and a `Pendulum` has never been
+  recoverable from its own output. It is the way *in* — for a hand-written rig,
+  or for a test — and it was never the way back.
+- **Expressions widen that gap rather than opening it.** `documentFrom` reads a
+  tree the runtime has already *evaluated*, so it recovers what survives
+  evaluation: a literal does, and `halfLength * 2` arrives as a number. Which
+  makes explicit what was already true — **the document needs a save format of
+  its own** ([0017](../0017.md)), because its output was never one.
 - **Hand-written components are the escape hatch.** Anything outside the subset
   is written as source, in the editor, and captured as an opaque definition that
   produces a tree when called — [page 7](07-handwritten.md).
@@ -51,9 +66,10 @@ the machine underneath it.**
   [Page 10](10-staging.md#what-each-step-has-to-prove) says what follows if they
   cannot meet it.
 
-The rule pays for itself the first time someone proposes a feature: if it
-round-trips, it belongs in the document; if it does not, it belongs in the escape
-hatch; and "we will make it round-trip later" is a design task, not a shrug.
+The rule pays for itself the first time someone proposes a feature: if it can be
+written as TSX that builds the same scene, it belongs in the document; if it
+cannot, it belongs in the escape hatch; and "we will make it emit later" is a
+design task, not a shrug.
 
 ## What is deliberately not being built
 

@@ -104,7 +104,8 @@ most visibly.
 Two consequences worth stating rather than discovering. A source definition is
 opaque to the editor's structural operations — extract-to-component, insertion
 rules, the tree's drag and drop — and its instances can still be manipulated
-because an instance is a node like any other. And the round-trip discipline
-changes shape: a source definition's TSX *is* its document, so it round-trips
-trivially, while the guarantee that the whole document is reconstructible from
-its own output now holds per definition rather than globally.
+because an instance is a node like any other. And a source definition is
+the one kind that genuinely *is* its own output — its TSX is its document, so it
+needs no save format of its own and nothing is lost in emitting it. That is the
+opposite of every other definition ([0017](../0017.md)), and it is a real point
+in the escape hatch's favour rather than a curiosity.

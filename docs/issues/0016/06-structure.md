@@ -84,11 +84,19 @@ this feature does not wait for it.
 
 ### What it emits
 
-The round-trip rule from [page 1](01-overview.md) bites hardest here, and it is a
-good filter. A chain of N has to emit as TSX that `documentFrom` can read back as
-a `Chain` node rather than as N nested literals — otherwise the first round trip
-silently unrolls the loop and the parameter stops meaning anything. That most
-likely means the emitted form is a real construct (a helper the binding exports,
-or a recursive component) rather than an expansion, and it is worth deciding
-*that* before the editor-side work, because it is the constraint that decides
-what the node can be.
+The emission rule from [page 1](01-overview.md) bites hardest here, and it is a
+good filter. A chain of N has to emit as a real construct — a helper the binding
+exports, or a recursive component — rather than as N nested literals. Unrolling
+would build the right scene on the first pass and lose the parameter, so the
+count would stop meaning anything the moment anyone read the file.
+
+It is worth deciding *that* before the editor-side work, because it is the
+constraint that decides what the node can be.
+
+Worth noting which way the reader cuts here, since it is the opposite of
+[expressions](04-expressions.md): an **element** survives being read back, because
+JSX is a data literal and a composite is not called until build, so
+`<Chain count={3}>` arrives as a `Chain` with `count: 3`. A **prop** does not,
+because the runtime evaluates it before the element exists. That asymmetry is a
+fact about where evaluation happens, not a design choice, and it is why the
+emitted *form* for repetition is worth more thought than its emitted *count*.
