@@ -82,6 +82,6 @@ RotationalFrame.meta = {
       default: [0, 0],
     },
     resistance: { kind: 'number', label: 'Resistance', default: 0 },
-    stiffness: { kind: 'number', label: 'Rotational stiffness', default: 0 },
+    stiffness: { kind: 'number', label: 'Stiffness', default: 0 },
   },
 } satisfies ComponentMeta<RotationalFrameProps>;

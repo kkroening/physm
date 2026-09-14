@@ -23,9 +23,18 @@ is waiting on.
 
 It is also the first exercise of what a core element actually costs, which the
 RFC was corrected to say out loud: a term in `JsSolver`, a term in `physm-rs`, a
-field on each side of the JSON boundary, and a test that pins the *physics*
-rather than only the agreement between the two -- a sign error in both solvers
-would pass cross-validation.
+field on each side of the JSON boundary, the written-down mathematics in
+`docs/algorithm.md`, and a test that pins the *physics* rather than only the
+agreement between the two -- a sign error in both solvers would pass
+cross-validation, and did, when it was tried.
+
+**One field, not two.** A spring could take a rest coordinate as well as a
+stiffness, and it does not: fusing "where the spring is slack" with "where the
+coordinate reads zero" is the *less* expressive shape, and that is the argument
+for it first -- separating them lets a rig be authored at a pose that is not its
+equilibrium in two different ways. If a rest offset does arrive it should arrive
+with the rotary-toward-another-frame spring, which crosses those same six
+surfaces anyway.
 
 **Addressing is parked, not skipped.** Step 2 below is in question:
 [#76](https://github.com/kkroening/physm/pull/76) argues the slot belongs on the

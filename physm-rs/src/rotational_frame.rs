@@ -170,6 +170,7 @@ mod tests {
                 56,
                 78.9
               ],
+              "stiffness": 6.25,
               "type": "RotationalFrame",
               "weights": [
                 {
@@ -186,6 +187,11 @@ mod tests {
         let frame = RotationalFrame::from_json_value(&json_value).unwrap();
         assert_eq!(frame.id, "a");
         assert_eq!(frame.position, Position([56., 78.9]));
+        assert_eq!(frame.stiffness, 6.25);
+        // The nested frame states no `stiffness`, which is how a document
+        // written before springs existed arrives: it defaults rather than
+        // failing to parse.
+        assert_eq!(frame.children[0].get_stiffness(), 0.);
         assert_eq!(
             format!("{:?}", frame.children),
             format!(

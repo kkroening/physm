@@ -365,11 +365,36 @@ describe('a frame spring', () => {
     ],
   });
 
+  // Every sample instant below is a whole number of these, so the rounding
+  // that `Math.round` would otherwise leave -- about 1e-4 of a second -- is
+  // gone, and the only error left is the integrator's, around 1e-16.
+  const DELTA_TIME = Math.PI / 2 / 4000;
+
   function coordinateAfter(solver: Solver, id: string, seconds: number) {
-    const deltaTime = 1 / 2000;
-    solver.tick(deltaTime, Math.round(seconds / deltaTime));
+    solver.tick(DELTA_TIME, Math.round(seconds / DELTA_TIME));
 
     return solver.getStateMap().get(id)![0];
+  }
+
+  /**
+   * Quarter, half, then the rest of the way round.
+   *
+   * The quarter is the sample that pins the *frequency*: the trajectory is
+   * moving fastest there, so a wrong omega shows up at first order. At the
+   * half and the full period it is stationary, and an error enters only at
+   * second order -- which is why those two alone would let a stiffness wrong
+   * by more than a percent pass unremarked.
+   *
+   * The half is the sample that pins the *sign*: a spring that pushed would
+   * have left rather than come back.
+   */
+  function expectOscillation(solver: Solver, id: string): void {
+    expect(coordinateAfter(solver, id, Math.PI / 2)).toBeCloseTo(0, 10);
+    expect(coordinateAfter(solver, id, Math.PI / 2)).toBeCloseTo(
+      -AMPLITUDE,
+      10,
+    );
+    expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(AMPLITUDE, 10);
   }
 
   const arms = [
@@ -381,11 +406,7 @@ describe('a frame spring', () => {
     test(`${name} oscillates at the frequency its stiffness sets`, async () => {
       const solver = new JsSolver(scene, { rungeKutta: true });
 
-      // Half a period back to the far side, a whole one back to where it
-      // started. Both signed, so a spring that pushed instead of pulling --
-      // and would have left rather than returned -- fails the first of them.
-      expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(-AMPLITUDE, 3);
-      expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(AMPLITUDE, 3);
+      expectOscillation(solver, id);
     });
 
     test(`${name} does the same in Rust`, async () => {
@@ -393,8 +414,7 @@ describe('a frame spring', () => {
         rungeKutta: true,
       });
 
-      expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(-AMPLITUDE, 3);
-      expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(AMPLITUDE, 3);
+      expectOscillation(solver, id);
     });
   }
 });

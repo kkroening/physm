@@ -58,6 +58,7 @@ objects were already right.
 | **`coefficient_matrix`** | **Pullback metric** $`g = \varphi^*(\bigoplus_w m_w\delta)`$ — the joint-space inertia, i.e. the mass matrix | $`g_{ij}`$ |
 | **`force_vector`** | Generalized force minus the Christoffel term: $`Q_i - \Gamma_{i,jk}\dot q^j \dot q^k`$ | $`f_i`$ |
 | `resistance`, `drag` | Rayleigh dissipation coefficients — joint-space and task-space | $`c_i`$, $`b_w`$ |
+| `stiffness` | Joint spring constant. Conservative, so it enters $`U`$ with gravity rather than $`\mathcal{F}`$ with the two above | $`k_i`$ |
 
 ---
 
@@ -232,7 +233,7 @@ which is why the composite moment below is indexed by the *column*, the deeper o
 
 ```math
 \begin{aligned}
-f_i \;=\;\; & \underbrace{\sum_{w \in D(i)} m_w\langle V_i x_w, \mathbf{g}\rangle}_{-\,\partial_i U}
+f_i \;=\;\; & \underbrace{\sum_{w \in D(i)} m_w\langle V_i x_w, \mathbf{g}\rangle \;-\; k_i q^i}_{-\,\partial_i U}
   \;\underbrace{-\sum_{w \in D(i)} b_w \langle V_i x_w, S_{f(w)}x_w\rangle \;-\; c_i\dot q^i}_{-\,\partial\mathcal{F}/\partial\dot q^i \;\text{(Rayleigh)}} \\[1.4ex]
   & +\; \underbrace{Q_i^{\text{ext}}}_{\text{external}}
   \;\underbrace{-\sum_{w \in D(i)} m_w\langle V_i x_w, A_{f(w)}x_w\rangle}_{-\,\Gamma_{i,jk}\dot q^j\dot q^k}
@@ -270,7 +271,7 @@ g_{ij} \;=\; \mathrm{tr}\!\big(V_i^{\mathsf T} V_j\, \mathcal{J}_j\big),
 ```
 
 ```math
-f_i \;=\; \big\langle V_i,\, \mathcal{K}_i \big\rangle_F \;-\; c_i\dot q^i \;+\; Q_i^{\text{ext}},
+f_i \;=\; \big\langle V_i,\, \mathcal{K}_i \big\rangle_F \;-\; c_i\dot q^i \;-\; k_i q^i \;+\; Q_i^{\text{ext}},
 \qquad
 \mathcal{K}_i \;\equiv\; \sum_{w \in D(i)} u_w\, x_w^{\mathsf T},
 \qquad
@@ -285,8 +286,15 @@ by the same **leaf-to-root** recurrence — the mirror image of sweeps 1, 3 and 
 ```
 
 Since `sort_frames` already orders parents before children, one reverse pass over that same
-array computes them. The joint-local terms $`-c_i\dot q^i`$ and $`Q_i^{\text{ext}}`$ need no
-accumulation — they belong to $i$ alone.
+array computes them. The joint-local terms $`-c_i\dot q^i`$, $`-k_i q^i`$ and
+$`Q_i^{\text{ext}}`$ need no accumulation — they belong to $i$ alone.
+
+The spring sits beside the resistance term in the code and belongs with gravity in the
+mathematics: $`\tfrac12 k_i (q^i)^2`$ is a term of $`U`$, so $`-k_i q^i`$ is part of
+$`-\partial_i U`$ and not of the Rayleigh bracket. It is conservative, and unlike the
+weight sums it needs no pose — the frame's own coordinate is the whole of its input,
+which is why a spring pulling toward a direction fixed in *another* frame is a different
+construction entirely.
 
 This is the **Composite Rigid Body Algorithm**, and the $`\mathcal{K}`$ half is the backward
 pass of **RNEA**. It reduces the mass matrix to $`O(n \cdot \mathrm{depth})`$ and the force

@@ -179,6 +179,7 @@ mod tests {
         let json = r#"
             {
               "angle": 3.5,
+              "stiffness": 2.5,
               "frames": [
                 {
                   "angle": 0.1,
@@ -214,6 +215,10 @@ mod tests {
         assert_eq!(frame.angle, 3.5);
         assert_eq!(frame.id, "a");
         assert_eq!(frame.position, Position([56., 78.9]));
+        assert_eq!(frame.stiffness, 2.5);
+        // The nested frame states none, which is how a document written before
+        // springs existed arrives: it defaults rather than failing to parse.
+        assert_eq!(frame.children[0].get_stiffness(), 0.);
         assert_eq!(
             format!("{:?}", frame.children),
             format!(
