@@ -66,7 +66,7 @@ the [staging page](docs/issues/0016/10-staging.md) argues the order.
 **Running alongside, blocked by nothing:** springs (additive to the document, and
 they exercise the force path the channels in step 8 will need -- though each
 spring is core work on both sides of the `physm-rs` boundary, not a warm-up; the
-local joint spring is in view above, and the ones that reference another frame's
+local joint spring is done, and the ones that reference another frame's
 direction wait on signals) and
 **hand-written components** (the escape hatch, argued on
 [page 7](docs/issues/0016/07-handwritten.md) as worth starting earlier than it
@@ -83,7 +83,15 @@ inconvenience).
   build-time convention -- Karl's call which.
   [0017](docs/issues/0017.md) reaches the same gap from the other side: a saved
   document cannot name an imported component's module either, for the same
-  reason. One answer serves both.
+  reason. One answer serves both -- but the two halves come apart, which is
+  worth knowing before picking one. `nameOf` already reads `displayName ?? name`
+  and nothing sets a `displayName`; one that was set would survive minification
+  and fix the *tag*, while `importsOf` writes `./${name}` from that same string
+  and would still be wrong wherever the display name is not the filename. So a
+  naming fix can look like it settled this and leave the path half standing --
+  which is the half a save format needs. That argues for the registry over the
+  build-time convention: a registry can hand back a module specifier, and a
+  convention can only ever hand back a name.
 
 - Draw a pose that does not build. Retyping a position under a stated length
   fails at nearly every keystroke, so the kept scene shows the pose from
