@@ -295,6 +295,110 @@ function getFixedFrameScene() {
 
 describeCrossValidation('fixed-frame scene', getFixedFrameScene);
 
+/**
+ * Springs on both kinds of joint, under gravity and alongside resistance, so
+ * the new force term is exercised where it has to coexist with the old ones.
+ */
+function getSpringScene() {
+  return new Scene({
+    frames: [
+      new TrackFrame({
+        id: 'cart',
+        initialState: [2, 0],
+        stiffness: 30,
+        resistance: 1.5,
+        weights: [new Weight(20)],
+        frames: [
+          new RotationalFrame({
+            id: 'arm',
+            initialState: [0.9, 0],
+            stiffness: 45,
+            weights: [new Weight(5, { position: [6, 0] })],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+describeCrossValidation('spring scene', getSpringScene);
+
+/**
+ * What the spring actually does, as distinct from the two solvers agreeing
+ * about it. A sign error in both would be invisible to the cross-validation
+ * above and is exactly what this catches: the wrong sign does not oscillate,
+ * it runs away.
+ *
+ * A point mass on a rotational frame keeps its radius, so its moment of
+ * inertia is constant and `I * qdd = -k * q` holds at *any* amplitude -- this
+ * is exact simple harmonic motion rather than a small-angle approximation. The
+ * same is true of a mass on a track, with the mass itself standing in for `I`.
+ */
+describe('a frame spring', () => {
+  async function loadRsWasmModule() {
+    return await import('../../physm-rs/nodepkg/physm_rs.js');
+  }
+
+  // Chosen so omega is exactly 1 rad/s in both cases, which makes the period
+  // 2*pi and the half-period a sign flip of the same magnitude.
+  const AMPLITUDE = 0.5;
+  const rotational = new Scene({
+    gravity: 0,
+    frames: [
+      new RotationalFrame({
+        id: 'arm',
+        initialState: [AMPLITUDE, 0],
+        stiffness: 18, // I = m r^2 = 2 * 3^2 = 18, so omega = sqrt(k/I) = 1
+        weights: [new Weight(2, { position: [3, 0] })],
+      }),
+    ],
+  });
+  const linear = new Scene({
+    gravity: 0,
+    frames: [
+      new TrackFrame({
+        id: 'slider',
+        initialState: [AMPLITUDE, 0],
+        stiffness: 4, // m = 4, so omega = sqrt(k/m) = 1
+        weights: [new Weight(4)],
+      }),
+    ],
+  });
+
+  function coordinateAfter(solver: Solver, id: string, seconds: number) {
+    const deltaTime = 1 / 2000;
+    solver.tick(deltaTime, Math.round(seconds / deltaTime));
+
+    return solver.getStateMap().get(id)![0];
+  }
+
+  const arms = [
+    { name: 'a rotational joint', scene: rotational, id: 'arm' },
+    { name: 'a track joint', scene: linear, id: 'slider' },
+  ];
+
+  for (const { name, scene, id } of arms) {
+    test(`${name} oscillates at the frequency its stiffness sets`, async () => {
+      const solver = new JsSolver(scene, { rungeKutta: true });
+
+      // Half a period back to the far side, a whole one back to where it
+      // started. Both signed, so a spring that pushed instead of pulling --
+      // and would have left rather than returned -- fails the first of them.
+      expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(-AMPLITUDE, 3);
+      expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(AMPLITUDE, 3);
+    });
+
+    test(`${name} does the same in Rust`, async () => {
+      const solver = new RsSolver(scene, await loadRsWasmModule(), {
+        rungeKutta: true,
+      });
+
+      expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(-AMPLITUDE, 3);
+      expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(AMPLITUDE, 3);
+    });
+  }
+});
+
 describe('stabilization', () => {
   async function loadRsWasmModule() {
     return await import('../../physm-rs/nodepkg/physm_rs.js');

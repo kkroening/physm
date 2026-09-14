@@ -282,11 +282,12 @@ export default class JsSolver extends Solver {
         result += kineticForce + dragForce + gravityForce;
       }
     }
-    const [, qd] = mapGet(stateMap, baseFrame.id, 'state');
+    const [q, qd] = mapGet(stateMap, baseFrame.id, 'state');
     const resistanceForce = -baseFrame.resistance * qd;
+    const springForce = -baseFrame.stiffness * q;
     const externalForce =
       (externalForceMap && externalForceMap.get(baseFrame.id)) || 0;
-    result += externalForce + resistanceForce;
+    result += externalForce + resistanceForce + springForce;
     return result;
   }
 

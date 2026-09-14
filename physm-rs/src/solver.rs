@@ -454,7 +454,8 @@ fn get_force_vector_entry(
     debug_assert_eq!(external_forces.len(), frames.len());
     let weight_force = (vel_mats[row_index].transpose() * composite_force_mats[row_index]).trace();
     let resistance_force = -states[row_index].qd * frames[row_index].get_resistance();
-    resistance_force + weight_force + external_forces[row_index]
+    let spring_force = -states[row_index].q * frames[row_index].get_stiffness();
+    resistance_force + spring_force + weight_force + external_forces[row_index]
 }
 
 fn get_force_vector(

@@ -13,6 +13,7 @@ pub struct RotationalFrame {
     pub id: FrameId,
     pub position: Position,
     pub resistance: f64,
+    pub stiffness: f64,
     pub weights: Vec<Weight>,
 }
 
@@ -23,6 +24,7 @@ impl RotationalFrame {
             id: id,
             position: Position([0.0, 0.0]),
             resistance: 0.,
+            stiffness: 0.,
             weights: Vec::new(),
         }
     }
@@ -42,6 +44,11 @@ impl RotationalFrame {
         self
     }
 
+    pub fn set_stiffness(mut self, stiffness: f64) -> Self {
+        self.stiffness = stiffness;
+        self
+    }
+
     pub fn add_weight(mut self, weight: Weight) -> Self {
         self.weights.push(weight);
         self
@@ -54,6 +61,7 @@ impl RotationalFrame {
             id: json::map_value_item(value, &"id", json::value_to_str)?.into(),
             position: json::map_obj_item_or_default(obj, "position", Position::from_json_value)?,
             resistance: json::map_obj_item_or_default(obj, "resistance", json::value_to_f64)?,
+            stiffness: json::map_obj_item_or_default(obj, "stiffness", json::value_to_f64)?,
             weights: json::map_obj_item_or_default(obj, "weights", json::value_to_weights)?,
         })
     }
@@ -70,6 +78,10 @@ impl Frame for RotationalFrame {
 
     fn get_resistance(&self) -> f64 {
         self.resistance
+    }
+
+    fn get_stiffness(&self) -> f64 {
+        self.stiffness
     }
 
     fn get_weights(&self) -> &[Weight] {
@@ -124,11 +136,11 @@ mod tests {
         assert_eq!(frame.children.len(), 2);
         assert_eq!(
             format!("{:?}", frame.children[0]),
-            "RotationalFrame { children: [], id: \"b\", position: Position([1.5, 2.6]), resistance: 0.0, weights: [] }",
+            "RotationalFrame { children: [], id: \"b\", position: Position([1.5, 2.6]), resistance: 0.0, stiffness: 0.0, weights: [] }",
         );
         assert_eq!(
             format!("{:?}", frame.children[1]),
-            "RotationalFrame { children: [], id: \"c\", position: Position([5.0, 28.0]), resistance: 0.0, weights: [] }",
+            "RotationalFrame { children: [], id: \"c\", position: Position([5.0, 28.0]), resistance: 0.0, stiffness: 0.0, weights: [] }",
         );
         assert_eq!(
             format!("{:?}", frame.weights),

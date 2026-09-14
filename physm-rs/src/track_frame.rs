@@ -14,6 +14,7 @@ pub struct TrackFrame {
     pub id: FrameId,
     pub position: Position,
     pub resistance: f64,
+    pub stiffness: f64,
     pub weights: Vec<Weight>,
 }
 
@@ -25,6 +26,7 @@ impl TrackFrame {
             id: id,
             position: Position([0., 0.]),
             resistance: 0.,
+            stiffness: 0.,
             weights: Vec::new(),
         }
     }
@@ -49,6 +51,11 @@ impl TrackFrame {
         self
     }
 
+    pub fn set_stiffness(mut self, stiffness: f64) -> Self {
+        self.stiffness = stiffness;
+        self
+    }
+
     pub fn add_weight(mut self, weight: Weight) -> Self {
         self.weights.push(weight);
         self
@@ -62,6 +69,7 @@ impl TrackFrame {
             id: json::map_value_item(value, &"id", json::value_to_str)?.into(),
             position: json::map_obj_item_or_default(obj, "position", Position::from_json_value)?,
             resistance: json::map_obj_item_or_default(obj, "resistance", json::value_to_f64)?,
+            stiffness: json::map_obj_item_or_default(obj, "stiffness", json::value_to_f64)?,
             weights: json::map_obj_item_or_default(obj, "weights", json::value_to_weights)?,
         })
     }
@@ -78,6 +86,10 @@ impl Frame for TrackFrame {
 
     fn get_resistance(&self) -> f64 {
         self.resistance
+    }
+
+    fn get_stiffness(&self) -> f64 {
+        self.stiffness
     }
 
     fn get_weights(&self) -> &[Weight] {
