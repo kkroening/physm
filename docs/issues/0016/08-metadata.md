@@ -16,8 +16,13 @@ This RFC presses on it, and it also narrows what actually has to change.
 A definition's parameters are authored *in the editor*, by someone who is not
 writing TypeScript. There is no type to reflect, because the thing declaring the
 parameter is a document node. So a parameter's name, type, default and label are
-data, are edited as data, are emitted into the generated function's signature,
-and are read back from it.
+data, are edited as data, and are emitted into the generated function's
+signature.
+
+Not read back out of it: that would be parsing TypeScript, which is the
+bidirectional problem [page 1](01-overview.md) declines. The argument does not
+need it — the point is that the parameter is *authored* as data by someone who
+is not writing TypeScript, so there is no type to reflect in the first place.
 
 That settles the question for the half that matters without touching the core
 nine at all. **The core components can stay types-first indefinitely** — their

@@ -132,9 +132,10 @@ source to get it back is the bidirectional problem [page 1](01-overview.md)
 declines.
 
 That costs less than it sounds, because the document was never recoverable from
-its output anyway: `documentFrom` builds a **one-definition** document, so
-anything with a scene *and* a component already needed its own save format
-([0017](../0017.md)). Expressions widen a gap rather than opening one.
+its output anyway — for reasons that predate expressions entirely, and that
+[page 1](01-overview.md) sets out. Anything with a scene *and* a component
+already needed a save format of its own ([0017](../0017.md)); expressions widen
+that gap rather than opening it.
 
 _(Karl, 2026-09-14, specifying the emitted form.)_
 

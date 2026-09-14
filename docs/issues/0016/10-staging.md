@@ -86,12 +86,12 @@ module and compares scenes, and never asks for the document back
 
 | step | what has to emit |
 |---|---|
-| parameters | a definition with parameters emits a function with a signature, and reads back |
-| expressions | a computed prop emits as the host language's own expression — `length={halfLength * 2}`, not a wrapper — and the emitted module builds the same scene. It does **not** read back |
+| parameters | a definition with parameters emits a function with a signature, and the emitted module builds the same scene |
+| expressions | a computed prop emits as the host language's own expression — `length={halfLength * 2}`, not a wrapper — and the emitted module builds the same scene |
 | signals | a world-space decal emits as an element whose endpoint props hold expressions, and the built scene draws the same line |
 | slots | an instance with named slots emits as element-valued props — new work in the emitter, and in the reader for the import path |
 | repetition | a chain of N emits as a construct, **not** as N unrolled literals |
-| hand-written | the definition's source is its own emitted form, trivially — but the whole-document guarantee weakens to per-definition |
+| hand-written | the definition's source *is* its own emitted form, so it is the one kind that needs no save format — [page 7](07-handwritten.md) |
 | the port surface | **unsettled, and the one step the rule has not been applied to.** `function Pendulum({ length }): ReactElement` cannot express `bobPosition`; a manipulator is editor-only metadata with no runtime meaning; a key binding routed into `cart.trackForce` is a scene-level construct that does not exist. Each needs an invented form the emitter writes and the reader reads |
 
 **That last row is a real hole rather than a formality.** The rule's own answer,

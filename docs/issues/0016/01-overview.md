@@ -44,10 +44,12 @@ the machine underneath it.**
   own. [Page 4](04-expressions.md) is what it looks like for an expression.
 - **It has never meant the *document* comes back, and that is worth being exact
   about**, because the looser reading is the one that invites features which
-  cannot work. `documentFrom` turns an element tree into a **one-definition**
-  document, so a document with a scene and a `Pendulum` has never been
-  recoverable from its own output. It is the way *in* — for a hand-written rig,
-  or for a test — and it was never the way back.
+  cannot work. Two independent reasons, neither of which needed expressions to
+  arrive: `documentFrom` turns an element tree into a **one-definition**
+  document; and `refOf` classifies any component without a `meta` as
+  `imported`, never `defined` — so a component in a read tree comes back as an
+  opaque reference however many definitions the reader could hold. It is the way
+  *in*, for a hand-written rig or for a test, and it was never the way back.
 - **Expressions widen that gap rather than opening it.** `documentFrom` reads a
   tree the runtime has already *evaluated*, so it recovers what survives
   evaluation: a literal does, and `halfLength * 2` arrives as a number. Which
