@@ -7,6 +7,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0016](0016.md) | Make the document a program rather than a drawing | RFC | Open |
 | [0015](0015.md) | Decide whether physm-js declares a surface, and run the dead-code check against it | RFC | Open |
 | [0014](0014.md) | An interactive scene editor that emits TSX | RFC | Open |
 | [0013](0013.md) | Decide whether `stabilize` should default off, rather than leaving it defaulted | RFC | Resolved |
