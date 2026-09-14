@@ -86,7 +86,84 @@ Not settled here, but the constraints are:
   with one unnamed slot should not pay for slots it does not have, or every
   existing path in the tests changes shape for nothing.
 
-The likeliest answer is a path of segments where a segment is an index plus an
-optional slot name, paired with a separate instantiation trail carrying iteration
-indices — keeping "which node" and "which copy of it" as two answers rather than
-one interleaved sequence.
+The obvious answer is a segment of *index plus optional slot name* —
+`[1, 'left', 0]` — and everything above was written toward it. **I think it is
+the wrong one**, and the third constraint is the tell: a representation that has
+to be excused for what it costs the cases not using it is usually the wrong
+shape.
+
+## Proposed: the slot belongs on the child, not in the path
+
+Put the slot on the child node. A node's children stay **one ordered list**, and
+a child carries an optional `slot` naming which of its holder's slots it sits in
+— absent meaning the only one:
+
+```ts
+export interface DocNode {
+  readonly type: ComponentRef;
+  readonly props: DocProps;
+  readonly key?: string;
+
+  /** Which of the holder's slots this sits in; absent means the only one. */
+  readonly slot?: string;
+
+  readonly children: readonly DocNode[];
+}
+```
+
+**`NodePath` then never changes.** `[1, 2]` is the third child of the second
+node, before slots and after them, because there is still exactly one list to
+index. Every existing path keeps its shape, every prefix test keeps working, and
+the migration this page opens by calling *"the only genuinely invasive change in
+the RFC"* does not happen.
+
+The premise that forces a path change is that a node's children become several
+lists. That is a consequence of the representation, not of the feature: `[1, 2]`
+is ambiguous only if there are several lists for the `2` to index into.
+
+### `movedPath` is the case that decides it
+
+```ts
+export function movedPath(from: NodePath, parent: NodePath, index: number): NodePath {
+  return [...afterRemoval(parent, from), index];
+}
+```
+
+Index arithmetic over one list. Under a slotted path it has to know *which* list
+shifted when a node left, and `afterRemoval` becomes slot-aware along with every
+caller. Under a labelled child it is untouched — moving a node between slots is
+an edit to a field, and the indices behave exactly as they do now.
+
+### What it costs, stated plainly
+
+- **An invalid state becomes representable**: a child labelled `left` under a
+  holder whose type declares no such slot. That wants validation — but an unknown
+  key in a per-slot map is the same hole, so it is a place to remember rather
+  than a regression.
+- **"The children of slot `left`" is a filter, not a lookup.** At the sizes a
+  scene tree reaches, not a cost worth pricing.
+- **Order *between* slots is representable and meaningless.** Harmless: the tree
+  view groups by slot when it draws, so nobody sees it.
+- **Appending to a slot becomes arithmetic.** `insertionPoint` appends at
+  `node.children.length` today; appending to a named slot means *after the last
+  child carrying that label*. That is the one piece of genuinely new logic, and
+  it is local to `insertion.ts`.
+- **The emitter still groups children by slot** to write them as element-valued
+  props — the same work under either shape.
+
+### What it would do to the plan
+
+[Page 10](10-staging.md) puts addressing at step 2, ahead of everything a person
+can see, because its cost grows with every site built before it. **That argument
+is about the path migration, and on this proposal there is no path migration.**
+The `slot` field arrives with named slots, in the step that introduces them, and
+costs what an optional field costs.
+
+The iteration half was never a path change either — it lives in an instantiation
+trail beside the path rather than inside it, which is what "two answers rather
+than one interleaved sequence" was reaching for above. So on this proposal
+`NodePath` is, as far as this RFC can see, finished.
+
+**Not adopted here.** This is a proposal against a section that says it is not
+settled, and it retires the RFC's most invasive scheduled step — which is worth
+a second opinion before the staging is rewritten around it.
