@@ -14,33 +14,22 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**A frame's coordinate gets a spring.** `stiffness` on a joint, slack at the
-frame's own zero, so the restoring force is `-stiffness * q`. This is the case
-[page 9](docs/issues/0016/09-elements.md) calls local: it reads the frame's own
-coordinate and nothing else, so it needs no pose, no signals and no expressions
--- which is what makes it buildable now, ahead of everything the document work
-is waiting on.
+**Nothing, and the next step is Karl's to unblock.**
 
-It is also the first exercise of what a core element actually costs, which the
-RFC was corrected to say out loud: a term in `JsSolver`, a term in `physm-rs`, a
-field on each side of the JSON boundary, the written-down mathematics in
-`docs/algorithm.md`, and a test that pins the *physics* rather than only the
-agreement between the two -- a sign error in both solvers would pass
-cross-validation, and did, when it was tried.
-
-**One field, not two.** A spring could take a rest coordinate as well as a
-stiffness, and it does not: fusing "where the spring is slack" with "where the
-coordinate reads zero" is the *less* expressive shape, and that is the argument
-for it first -- separating them lets a rig be authored at a pose that is not its
-equilibrium in two different ways. If a rest offset does arrive it should arrive
-with the rotary-toward-another-frame spring, which crosses those same six
-surfaces anyway.
-
-**Addressing is parked, not skipped.** Step 2 below is in question:
+The spine's next move turns on a question that is *open* rather than unbuilt.
 [#76](https://github.com/kkroening/physm/pull/76) argues the slot belongs on the
-child node rather than in the path, which would retire the migration entirely.
-That is Karl's call, and taking it by building would be the wrong way to settle
-it.
+child node rather than in the path, which would retire step 2 entirely and make
+step 3 next; building either answer would settle it by fait accompli, which is
+the wrong way round for a change the RFC calls its most invasive.
+
+**Hand-written components** are the other independent track and are genuinely
+unblocked by that -- but they carry an open question at the centre rather than
+at the edges. A component cannot be *called* in a worker: its return value is an
+element tree of function references, and structured clone refuses those. So the
+`while (true)` the worker was meant to contain runs on the main thread after
+all, and the three ways out
+([page 11](docs/issues/0016/11-risks.md)) are each larger than the bullet they
+replace. That wants proposing before building, on the same reasoning as #76.
 
 ## Next — 0016
 
@@ -92,6 +81,9 @@ inconvenience).
   would name the wrong component and import from the wrong path. A function
   carries no module path at runtime: a registry the host passes in, or a
   build-time convention -- Karl's call which.
+  [0017](docs/issues/0017.md) reaches the same gap from the other side: a saved
+  document cannot name an imported component's module either, for the same
+  reason. One answer serves both.
 
 - Draw a pose that does not build. Retyping a position under a stated length
   fails at nearly every keystroke, so the kept scene shows the pose from
@@ -449,3 +441,14 @@ inconvenience).
   one of them. It also separated two questions a plain value had run together:
   a summary row now shows the props that have a *value*, not the props that are
   *there*, which untyped JSX can tell apart.
+- **A joint spring** — `stiffness` on a frame, slack at the frame's own zero, so
+  the restoring force is `-stiffness * q` beside the existing
+  `-resistance * qd`. The local case: it reads the frame's coordinate and
+  nothing else, so it needs no pose. In both solvers, on both sides of the JSON
+  boundary, and in `docs/algorithm.md` -- where it groups with *gravity* under
+  `-d_i U` rather than with the Rayleigh coefficients it sits beside in the
+  code, because a spring is conservative. The test pins the physics rather than
+  the agreement: a point mass keeps its radius, so `I qdd = -k q` is exact at
+  any amplitude, and three samples a quarter period apart catch a sign flip, a
+  `qd`-for-`q` slip and a dropped term *made in both solvers at once* -- each of
+  which the cross-validation suite is blind to.
