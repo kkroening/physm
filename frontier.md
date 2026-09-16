@@ -27,6 +27,13 @@ expression and something to show when a prop holds one. The expression graph
 viewer ([0018](docs/issues/0018.md)) stops being fallback work around here and
 starts being how the representation is checked.
 
+**[0022](docs/issues/0022.md) wants deciding first, or with it.** Promoting a
+prop widens its contract -- a `length` becomes a `scalar` and stops being
+non-negative -- and an expression on a `length` prop asks the same question from
+the other side. Whether the parameter types grow toward the prop kinds, or
+promotion stays deliberately lossy and says so, is one answer for both, and
+answering it twice would leave two rules about what a prop's kind guarantees.
+
 **[0019](docs/issues/0019.md) is filed and waiting**, and nothing here depends
 on it. Its small half -- what *names* a component -- looks ready to decide; its
 large half wants evidence rather than argument, namely whether anything besides

@@ -1,5 +1,5 @@
 import { Fragment, useId, useRef, useState } from 'react';
-import { literalIn, literalOf, shownValueOf } from './propValue';
+import { literalOf, shownValueOf } from './propValue';
 import {
   definitionOf,
   demoteProp,
@@ -410,6 +410,11 @@ function NodeProps({
   onChange: (doc: SceneDocument, field: string | null) => void;
   onOpen: (name: string) => void;
 }): ReactElement {
+  // Anchor and frame ids are scene-wide, so every definition's count.
+  const names = [
+    ...new Set(doc.definitions.flatMap(({ body }) => idsIn(body))),
+  ];
+
   if (node.type.kind === 'defined') {
     const { name } = node.type;
     const { parameters = [] } = definitionOf(doc, name);
@@ -426,28 +431,65 @@ function NodeProps({
             they are edited with the same fields a building block's are --
             which is what a declared surface buys. */}
         <div className="editor__fields">
-          {parameters.map((parameter) => (
-            <PropField
-              key={parameter.name}
-              spec={specFor(parameter)}
-              value={literalIn(node.props[parameter.name])}
-              names={[]}
-              onChange={(value, discrete) =>
-                onChange(
-                  setProp(
-                    doc,
-                    selection.definition,
-                    selection.path,
-                    parameter.name,
-                    value === undefined ? undefined : literalOf(value),
-                  ),
-                  discrete
-                    ? null
-                    : `${selection.definition}/${selection.path.join('.')}/${parameter.name}#${visit.current}`,
-                )
-              }
-            />
-          ))}
+          {parameters.map((parameter) => {
+            const held = node.props[parameter.name];
+
+            // The same split a building block's props get, and for the same
+            // reason: a prop holding a reference is not a literal to edit, and
+            // the literal editor would let a keystroke replace it. An
+            // instance reaches that state through an extraction, which passes
+            // the enclosing definition's parameter straight through.
+            return held?.kind === 'parameter' ? (
+              <div className="editor__field" key={parameter.name}>
+                <span className="editor__label">{parameter.name}</span>
+                <div className="editor__inputs">
+                  <span className="editor__reference">{held.name}</span>
+                  <Carry
+                    label={`Replace ${parameter.name} with its value`}
+                    glyph="⤵"
+                    refusal={demotionRefusal(
+                      doc,
+                      selection.definition,
+                      selection.path,
+                      parameter.name,
+                    )}
+                    onCarry={() =>
+                      onChange(
+                        demoteProp(
+                          doc,
+                          selection.definition,
+                          selection.path,
+                          parameter.name,
+                        ),
+                        null,
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            ) : (
+              <PropField
+                key={parameter.name}
+                spec={specFor(parameter)}
+                value={held?.value}
+                names={names}
+                onChange={(value, discrete) =>
+                  onChange(
+                    setProp(
+                      doc,
+                      selection.definition,
+                      selection.path,
+                      parameter.name,
+                      value === undefined ? undefined : literalOf(value),
+                    ),
+                    discrete
+                      ? null
+                      : `${selection.definition}/${selection.path.join('.')}/${parameter.name}#${visit.current}`,
+                  )
+                }
+              />
+            );
+          })}
         </div>
         <button
           type="button"
@@ -495,11 +537,6 @@ function NodeProps({
   }
 
   const { meta } = node.type.component;
-
-  // Anchor and frame ids are scene-wide, so every definition's count.
-  const names = [
-    ...new Set(doc.definitions.flatMap(({ body }) => idsIn(body))),
-  ];
 
   return (
     <>

@@ -7,6 +7,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0022](0022.md) | Decide whether the parameter types grow toward the prop kinds | RFC | Open |
 | [0021](0021.md) | Let a definition's parameters be reordered | Enhancement | Open |
 | [0020](0020.md) | Carry a parameter across an extraction, instead of refusing one | Enhancement | Resolved |
 | [0019](0019.md) | Decide what names a component, and whether physm owns its element type | RFC | Open |

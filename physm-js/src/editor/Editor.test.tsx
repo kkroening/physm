@@ -873,8 +873,76 @@ describe('Editor, carrying a prop to the declaration block', () => {
     expect(carry).toBeDisabled();
     expect(carry).toHaveAttribute(
       'title',
-      expect.stringContaining('no type Scene could declare'),
+      'Solid is not something a parameter can be.',
     );
+  });
+
+  test('a point prop is carried too, which its own field has to offer', () => {
+    render(
+      <Editor
+        initialDocument={documentFrom(<Weight position={[2, 0]} mass={1} />)}
+      />,
+    );
+    fireEvent.click(
+      within(select('Weight')).getByRole('button', {
+        name: 'Promote Position to a prop',
+      }),
+    );
+
+    expect(treeRows('Scene')[0]).toHaveAccessibleName('position point = [2,0]');
+    expect(code()).toContain('position={position}');
+  });
+
+  test('an angle is declared as one, not as a plain scalar', () => {
+    // The emitted signature cannot tell the two apart -- both write `number`
+    // -- so the declaration row is where the difference is visible, and the
+    // pane edits one in degrees and the other raw.
+    render(<Editor initialDocument={referring()} />);
+    fireEvent.click(
+      within(select('TrackFrame')).getByRole('button', {
+        name: 'Promote Angle to a prop',
+      }),
+    );
+
+    expect(treeRows('Scene')[2]).toHaveAccessibleName('angle angle = 0');
+  });
+
+  test('an instance holding a reference shows it, and offers no editor', () => {
+    // Reachable only through this change: promote makes the reference, and
+    // extract threads it through the instance it leaves behind.
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame id="arm">
+            <Weight mass={3} />
+          </RotationalFrame>,
+        )}
+      />,
+    );
+    fireEvent.click(
+      within(select('Weight')).getByRole('button', {
+        name: 'Promote Mass to a prop',
+      }),
+    );
+    select('RotationalFrame');
+    extract('Arm');
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+    const props = select('Arm');
+
+    // A field here would say "this instance passes nothing", which is the
+    // opposite of what the document says -- and one keystroke would make it
+    // true.
+    expect(within(props).queryByRole('textbox')).toBeNull();
+    expect(props.querySelector('.editor__reference')).toHaveTextContent('mass');
+    expect(code()).toContain('<Arm mass={mass} />');
+
+    // The value is still the enclosing definition's to give, so demoting it
+    // here is offered -- and refused while nothing passes anything else.
+    expect(
+      within(props).getByRole('button', {
+        name: 'Replace mass with its value',
+      }),
+    ).toBeEnabled();
   });
 
   test('demoting puts the value back, and the declaration stays', () => {

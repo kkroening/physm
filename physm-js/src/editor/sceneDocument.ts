@@ -8,6 +8,7 @@ import {
   literalProps,
   parameterOf,
   resolvedProps,
+  shownValueOf,
 } from './propValue';
 import type { ComponentMeta, PropSpec } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
@@ -1052,8 +1053,17 @@ export function setParameterDefault(
  * partial where that one is total: `flag` and `state` have no parameter type
  * to become. A boolean parameter is not in [0016 page
  * 3](../../../docs/issues/0016/03-scope.md)'s set at all, and a `state` is a
- * pair of a coordinate and its rate, which no single type covers -- so those
- * two are refused rather than approximated.
+ * pair of a coordinate and its rate, which no single type covers.
+ *
+ * **Three of the entries here are deliberately lossy**, and it is worth saying
+ * so rather than letting the table imply otherwise. `length` becomes a
+ * `scalar`, which drops *non-negative*; `color` becomes a `label`, which drops
+ * *a CSS colour*; `end` becomes a `label`, which drops *an id that resolves to
+ * a frame or an anchor*. So the rule is not "refuse rather than approximate"
+ * -- it is "approximate where the approximation can hold the value at all, and
+ * refuse where it cannot". Whether the type set should instead grow toward the
+ * prop kinds is [0022](../../../docs/issues/0022.md), which expressions ask
+ * again from the other side.
  */
 const PROMOTED_TYPES: Partial<Record<PropSpec['kind'], Parameter['type']>> = {
   number: 'scalar',
@@ -1065,12 +1075,20 @@ const PROMOTED_TYPES: Partial<Record<PropSpec['kind'], Parameter['type']>> = {
   color: 'label',
 };
 
-/** What `prop` on `node` declares itself to be, for a caller that needs a type. */
-function specOf(
+/**
+ * What `prop` on `node` declares itself to be, or why nothing can.
+ *
+ * Three ways there is no answer, and each says its own: an imported component
+ * describes none of its props, a defined one describes exactly the parameters
+ * it declares, and a building block describes a kind that may have no
+ * parameter type. One message reciting all three would lead with a case the
+ * reader is not in.
+ */
+function promotable(
   doc: SceneDocument,
   node: DocNode,
   prop: string,
-): { type: Parameter['type']; value: unknown } | null {
+): { type: Parameter['type']; value: unknown } | { refusal: string } {
   const { type } = node;
 
   // A defined component's props *are* its parameters, so one passed to an
@@ -1086,21 +1104,29 @@ function specOf(
           type: declared.type,
           value: literalIn(node.props[prop]) ?? declared.default,
         }
-      : null;
+      : { refusal: `${type.name} does not take ${prop}.` };
   }
 
   if (type.kind !== 'core') {
-    return null;
+    return {
+      refusal:
+        `${nodeName(type)} comes from its own module, which does not say ` +
+        `what ${prop} is -- so there is no type to declare it at.`,
+    };
   }
 
   const spec = (
     type.component.meta.props as Record<string, PropSpec | undefined>
   )[prop];
-  const promoted = spec && PROMOTED_TYPES[spec.kind];
+  if (!spec) {
+    return { refusal: `${nodeName(type)} has no prop called ${prop}.` };
+  }
+
+  const promoted = PROMOTED_TYPES[spec.kind];
 
   return promoted
     ? { type: promoted, value: literalIn(node.props[prop]) ?? spec.default }
-    : null;
+    : { refusal: `${spec.label} is not something a parameter can be.` };
 }
 
 /**
@@ -1118,18 +1144,24 @@ export function promotionRefusal(
     return `${prop} already refers to ${held.name}.`;
   }
 
-  const promotable = specOf(doc, node, prop);
-  if (!promotable) {
-    return (
-      `${prop} has no type ${definition} could declare: a component from ` +
-      'another module states none, and a flag or an initial state is not ' +
-      'something a parameter can be.'
-    );
+  const carried = promotable(doc, node, prop);
+  if ('refusal' in carried) {
+    return carried.refusal;
   }
 
-  return promotable.value === undefined
-    ? `${prop} holds no value to carry into a parameter's default.`
-    : null;
+  if (carried.value === undefined) {
+    return `${prop} holds no value to carry into a parameter's default.`;
+  }
+
+  // The same check `setParameterDefault` makes, for the same reason: the
+  // emitted signature writes the default *at* the declared type, so a value
+  // that does not fit emits a module that will not compile. Unreachable from
+  // the editor, where a field yields what its kind takes -- and reachable by a
+  // document built in code, which is what the refusal below is for too.
+  return fitsType(carried.type, carried.value)
+    ? null
+    : `${JSON.stringify(carried.value)} is not a ${carried.type}, which ` +
+        `${prop} would be declared as.`;
 }
 
 /**
@@ -1156,7 +1188,10 @@ export function promoteProp(
     throw new Error(refusal);
   }
 
-  const { type, value } = specOf(doc, nodeAt(doc, definition, path), prop)!;
+  const carried = promotable(doc, nodeAt(doc, definition, path), prop) as {
+    type: Parameter['type'];
+    value: unknown;
+  };
   let name = prop;
   for (
     let n = 2;
@@ -1168,7 +1203,7 @@ export function promoteProp(
 
   const declared = withParameters(doc, definition, (parameters) => [
     ...parameters,
-    { name, type, default: value } as Parameter,
+    { name, type: carried.type, default: carried.value } as Parameter,
   ]);
 
   return setProp(declared, definition, path, prop, parameterOf(name));
@@ -1193,7 +1228,44 @@ function referredParameter(
     : null;
 }
 
-/** Why `prop` on the node at `path` cannot go back to a value, or `null`. */
+/** What each instance of `definition` passes for the parameter `name`. */
+function argumentsFor(
+  doc: SceneDocument,
+  definition: string,
+  name: string,
+): PropValue[] {
+  return doc.definitions.flatMap(({ body }) =>
+    everyNode(body).flatMap((node) => {
+      const passed = node.props[name];
+
+      return instantiates(node, definition) && passed ? [passed] : [];
+    }),
+  );
+}
+
+/**
+ * Whether two prop values read as the same.
+ *
+ * By what they print as, which is how the tree row and the emitter's constants
+ * already decide it: prop values are plain data, so two that stringify alike
+ * resolve alike.
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Why `prop` on the node at `path` cannot go back to a value, or `null`.
+ *
+ * What demoting writes is the *declaration's* default, which is what the
+ * reference resolved to only for instances that pass nothing. For one passing
+ * something else it is a value that prop never held, which is what
+ * `parameterRemovalRefusal` refuses next door and for the same reason: an edit
+ * here does not change the scene without saying so.
+ *
+ * That is why demoting is safe straight after promoting and not in general --
+ * nothing can be passing a parameter that did not exist a moment ago.
+ */
 export function demotionRefusal(
   doc: SceneDocument,
   definition: string,
@@ -1205,8 +1277,19 @@ export function demotionRefusal(
     return `${prop} is not a reference.`;
   }
 
-  return referred.declared?.default === undefined
-    ? `${referred.name} has no default, so there is no value to put here.`
+  const { default: value } = referred.declared ?? {};
+  if (value === undefined) {
+    return `${referred.name} has no default, so there is no value to put here.`;
+  }
+
+  const passed = argumentsFor(doc, definition, referred.name).find(
+    (held) => !(held.kind === 'literal' && sameValue(held.value, value)),
+  );
+
+  return passed
+    ? `An instance of ${definition} passes ${referred.name}=` +
+        `${shownValueOf(passed)}, which is not the ${JSON.stringify(value)} ` +
+        'this would put here.'
     : null;
 }
 

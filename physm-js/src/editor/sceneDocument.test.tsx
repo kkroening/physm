@@ -1,5 +1,6 @@
 import Anchor from './../react/Anchor';
 import Box from './../react/Box';
+import Coincidence from './../react/Coincidence';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './../react/Circle';
 import Frame from './../Frame';
@@ -7,6 +8,7 @@ import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
+import coreComponents from './../react/coreComponents';
 import emitScene from './emitScene';
 import starterDocument from './starterDocument';
 import { literalOf, parameterOf } from './propValue';
@@ -42,6 +44,7 @@ import type CoreScene from './../Scene';
 import type {
   DocNode,
   ElementOrigin,
+  NodePath,
   Parameter,
   SceneDocument,
 } from './sceneDocument';
@@ -772,6 +775,46 @@ describe("a component's place for children", () => {
   });
 });
 
+/** A `Pendulum` taking `bob`, instantiated twice at different points. */
+function twoInstances(): SceneDocument {
+  const [arm] = nodesFrom(
+    <RotationalFrame>
+      <Weight mass={1} position={[0, -1]} />
+    </RotationalFrame>,
+  );
+  const instance = (bob: readonly [number, number]): DocNode => ({
+    type: { kind: 'defined', name: 'Pendulum' },
+    props: { bob: literalOf(bob) },
+    children: [],
+  });
+
+  return {
+    root: 'Scene',
+    definitions: [
+      {
+        name: 'Scene',
+        body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+          ...cart,
+          children: [instance([4, 0]), instance([7, 0])],
+        })),
+      },
+      {
+        name: 'Pendulum',
+        parameters: [{ name: 'bob', type: 'point' }],
+        body: [
+          {
+            ...arm!,
+            children: arm!.children.map((weight) => ({
+              ...weight,
+              props: { ...weight.props, position: parameterOf('bob') },
+            })),
+          },
+        ],
+      },
+    ],
+  };
+}
+
 describe("a definition's parameters", () => {
   /** A `Scene` taking `bob`, with a weight whose position refers to it. */
   const taking = (): SceneDocument => {
@@ -791,46 +834,6 @@ describe("a definition's parameters", () => {
             {
               ...frame!,
               children: frame!.children.map((weight) => ({
-                ...weight,
-                props: { ...weight.props, position: parameterOf('bob') },
-              })),
-            },
-          ],
-        },
-      ],
-    };
-  };
-
-  /** A `Pendulum` taking `bob`, instantiated twice at different points. */
-  const twoInstances = (): SceneDocument => {
-    const [arm] = nodesFrom(
-      <RotationalFrame>
-        <Weight mass={1} position={[0, -1]} />
-      </RotationalFrame>,
-    );
-    const instance = (bob: readonly [number, number]): DocNode => ({
-      type: { kind: 'defined', name: 'Pendulum' },
-      props: { bob: literalOf(bob) },
-      children: [],
-    });
-
-    return {
-      root: 'Scene',
-      definitions: [
-        {
-          name: 'Scene',
-          body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
-            ...cart,
-            children: [instance([4, 0]), instance([7, 0])],
-          })),
-        },
-        {
-          name: 'Pendulum',
-          parameters: [{ name: 'bob', type: 'point' }],
-          body: [
-            {
-              ...arm!,
-              children: arm!.children.map((weight) => ({
                 ...weight,
                 props: { ...weight.props, position: parameterOf('bob') },
               })),
@@ -1020,6 +1023,24 @@ describe('carrying a prop to and from the declaration block', () => {
       </RotationalFrame>,
     );
 
+  /** One prop of every kind the building blocks declare, in one document. */
+  const everyKind = (): SceneDocument =>
+    documentFrom(
+      <>
+        <TrackFrame id="cart" angle={0.25}>
+          <Weight mass={3} position={[2, 0]} />
+          <Box width={1} height={1} color="red" solid />
+          <RotationalFrame id="arm" initialState={[0.5, 0]} />
+        </TrackFrame>
+        <Coincidence
+          frame1="cart"
+          frame2="arm"
+          position1={[0, 0]}
+          position2={[0, 0]}
+        />
+      </>,
+    );
+
   test('a promoted prop becomes a parameter defaulted to what it held', () => {
     const doc = promoteProp(rig(), 'Scene', [0, 0], 'position');
 
@@ -1060,18 +1081,89 @@ describe('carrying a prop to and from the declaration block', () => {
     );
   });
 
-  test('a prop the scene has no parameter type for says so rather than guessing', () => {
-    const doc = rig();
+  test('every prop kind either has a parameter type or says why not', () => {
+    // One prop per kind the building blocks declare, with the type it becomes
+    // -- or `null` where nothing can hold it. The exhaustiveness check below
+    // is the point: `PROMOTED_TYPES` is partial, so a kind nobody thought
+    // about is silence rather than a compile error.
+    const kinds: Record<
+      string,
+      { path: NodePath; prop: string; type: Parameter['type'] | null }
+    > = {
+      number: { path: [0, 0], prop: 'mass', type: 'scalar' },
+      length: { path: [0, 1], prop: 'width', type: 'scalar' },
+      angle: { path: [0], prop: 'angle', type: 'angle' },
+      point: { path: [0, 0], prop: 'position', type: 'point' },
+      name: { path: [0], prop: 'id', type: 'label' },
+      end: { path: [1], prop: 'frame1', type: 'label' },
+      color: { path: [0, 1], prop: 'color', type: 'label' },
+      flag: { path: [0, 1], prop: 'solid', type: null },
+      state: { path: [0, 2], prop: 'initialState', type: null },
+    };
+    const declared = new Set(
+      coreComponents.flatMap(({ meta }) =>
+        Object.values(meta.props).map(({ kind }) => kind),
+      ),
+    );
 
-    // A flag and an initial state are both absent from 0016 page 3's type set
-    // -- there is no boolean parameter, and a state is a coordinate and its
-    // rate, which no one type covers.
-    expect(promotionRefusal(doc, 'Scene', [0, 2], 'solid')).toMatch(
-      /no type Scene could declare/,
+    expect([...declared].filter((kind) => !(kind in kinds))).toEqual([]);
+
+    for (const [kind, { path, prop, type }] of Object.entries(kinds)) {
+      const refusal = promotionRefusal(everyKind(), 'Scene', path, prop);
+      if (type === null) {
+        // A flag is not in 0016 page 3's type set at all, and an initial
+        // state is a coordinate and its rate, which no one type covers.
+        expect([kind, refusal]).toEqual([
+          kind,
+          expect.stringMatching(/is not something a parameter can be/),
+        ]);
+        continue;
+      }
+
+      expect([kind, refusal]).toEqual([kind, null]);
+      expect([
+        kind,
+        definitionOf(promoteProp(everyKind(), 'Scene', path, prop), 'Scene')
+          .parameters![0]!.type,
+      ]).toEqual([kind, type]);
+    }
+  });
+
+  test('a component with no metadata to consult says that, not something else', () => {
+    // Three paths reach a refusal here and each says its own: this one, an
+    // instance holding a prop its component does not declare, and a building
+    // block whose prop kind has no type. One message reciting all three would
+    // lead with a case the reader is not in.
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: [
+            {
+              type: {
+                kind: 'imported',
+                name: 'Gantry',
+                component: () => null,
+              },
+              props: { span: literalOf(2) },
+              children: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(promotionRefusal(doc, 'Scene', [0], 'span')).toMatch(
+      /Gantry comes from its own module/,
     );
-    expect(promotionRefusal(doc, 'Scene', [0], 'initialState')).toMatch(
-      /no type Scene could declare/,
+    expect(promotionRefusal(twoInstances(), 'Scene', [0, 0], 'heft')).toBe(
+      'Pendulum does not take heft.',
     );
+  });
+
+  test('a prop with nothing to carry, and one whose value the type cannot hold', () => {
+    const doc = rig();
 
     // An anchor's point is solved for when absent, which no value expresses,
     // so there is nothing for a default to carry.
@@ -1079,7 +1171,16 @@ describe('carrying a prop to and from the declaration block', () => {
       /holds no value to carry/,
     );
     expect(() => promoteProp(doc, 'Scene', [0, 2], 'solid')).toThrow(
-      /no type Scene could declare/,
+      /Solid is not something a parameter can be/,
+    );
+
+    // The check `setParameterDefault` makes, by the other route: unreachable
+    // from the editor, reachable by a document built in code, and the emitted
+    // signature would write the default at a type that cannot hold it.
+    const mistyped = setProp(doc, 'Scene', [0, 0], 'mass', literalOf('heavy'));
+
+    expect(promotionRefusal(mistyped, 'Scene', [0, 0], 'mass')).toMatch(
+      /"heavy" is not a scalar/,
     );
   });
 
@@ -1123,6 +1224,69 @@ describe('carrying a prop to and from the declaration block', () => {
     expect(nodeAt(promoted, 'Scene', [0]).props.bob).toEqual(
       parameterOf('bob'),
     );
+
+    // And an instance passing nothing promotes at the sub-component's own
+    // default, which is the value it was resolving to -- the same fallback a
+    // building block's prop gets, reached by the other branch.
+    const defaulted: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: [{ ...nodeAt(doc, 'Scene', [0]), props: {} }],
+        },
+        {
+          ...definitionOf(doc, 'Pendulum'),
+          parameters: [{ name: 'bob', type: 'point', default: [9, 0] }],
+        },
+      ],
+    };
+
+    expect(
+      definitionOf(promoteProp(defaulted, 'Scene', [0], 'bob'), 'Scene')
+        .parameters,
+    ).toEqual([{ name: 'bob', type: 'point', default: [9, 0] }]);
+  });
+
+  test('demoting is refused while an instance passes something else', () => {
+    // What it writes is the *declaration's* default, which is what the
+    // reference resolved to only for instances passing nothing. Straight after
+    // a promote there are none, which is why the round trip is safe there and
+    // not in general.
+    const defaulted = setParameterDefault(
+      twoInstances(),
+      'Pendulum',
+      0,
+      [1, 0],
+    );
+
+    expect(demotionRefusal(defaulted, 'Pendulum', [0, 0], 'position')).toMatch(
+      /An instance of Pendulum passes bob=\[4,0\]/,
+    );
+    expect(() => demoteProp(defaulted, 'Pendulum', [0, 0], 'position')).toThrow(
+      /is not the \[1,0\] this would put here/,
+    );
+
+    // An instance passing the default resolves to it already, so writing it
+    // changes nothing and there is nothing to refuse.
+    const agreeing: SceneDocument = {
+      ...defaulted,
+      definitions: defaulted.definitions.map((definition) => ({
+        ...definition,
+        body: definition.body.map((node) => ({
+          ...node,
+          children: node.children.map((child) =>
+            child.type.kind === 'defined'
+              ? { ...child, props: { bob: literalOf([1, 0]) } }
+              : child,
+          ),
+        })),
+      })),
+    };
+
+    expect(
+      demotionRefusal(agreeing, 'Pendulum', [0, 0], 'position'),
+    ).toBeNull();
   });
 
   test('demoting puts the default back, and leaves the declaration', () => {
