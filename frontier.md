@@ -51,9 +51,14 @@ sizes:
    so a picker cannot generally write the leaf, and making it able to is core
    work.
 
-   [0027](docs/issues/0027.md) belongs with this too: a world-space decal
-   cannot be clicked in the drawing, because the thing a person would click
-   does not exist when the trace that maps shapes back to nodes is made.
+   [0027](docs/issues/0027.md) turned out **not** to belong with this, which
+   is the useful thing this slice taught. A world-space decal can now be
+   clicked, and making it so needed nothing from 0028: the obstacle was
+   identity rather than authoring -- the thing a person clicks does not exist
+   when the trace that maps shapes back to nodes is made -- so the trace
+   records the maker and a hit hands it back. What is left of that issue is a
+   question about snapping, [0031](docs/issues/0031.md), rather than a piece of
+   this step waiting on a decision.
 
    And a question to *ask* here rather than answer: a `Scene` now holds a
    closure, and `toJsonObj` has no term for one. The editor's round trip is
@@ -61,10 +66,14 @@ sizes:
    it yet -- but a save format ([0017](docs/issues/0017.md)) does, and it is
    what decides whether a world decal serializes as the expression it was built
    from or whether scene serialization stays honestly partial.
-4. **Force channels**, which meet the Rust boundary: `tick_mut` holds its
-   external-force slice constant for a batch, so such an expression is
-   evaluated per *batch*. That is the granularity the demo already ships, so it
-   inherits rather than needing something new.
+4. **Force channels** -- **blocked, and further off than this said.** They
+   meet the Rust boundary cleanly: `tick_mut` holds its external-force slice
+   constant for a batch, so such an expression is evaluated per *batch*, which
+   is the granularity the demo already ships and so inherits rather than
+   needing something new. What they are not is a standalone slice of signals.
+   A force channel is something a scene *declares* and something outside it
+   drives, which is the port surface (step 7) -- so the question owed there,
+   whether any of that has a TSX spelling at all, is owed here first.
 5. **A spring whose rest direction is world-referenced** -- **withdrawn as a
    step**, because it was never one thing. The rotary spring wanted a rest,
    which is local and is done; observing one frame from another is a capability
@@ -143,11 +152,16 @@ the demo ever wants the mounted route.
 
 ## Next — 0016
 
-**Where it stands: three of seven steps are done, signals are two slices in
-with the third blocked on a decision, and the three steps after them are
-untouched.** With the editor's half waiting on
-[0028](docs/issues/0028.md), the next thing built is force channels -- keeping
-this list's order, and taking only the part page 11 does not record as open. The three that landed came first because each
+**Where it stands: three of seven steps are done, signals are three slices in
+with the rest blocked on a decision, and the three steps after them are
+untouched.** Little of what remains is mine to unblock. The editor's half of
+signals waits on [0028](docs/issues/0028.md); force channels turn out to sit
+*under* the port surface (step 7) rather than beside it, so they wait on the
+question owed there; and what the language admits is one answer spread over
+[0022](docs/issues/0022.md), [0024](docs/issues/0024.md) and
+[0025](docs/issues/0025.md). **Named slots and repetition are what is
+unblocked**, and repetition wants its emitted form decided first. The three
+steps that landed came first because each
 grows more expensive with every site built before it. What remains of
 expressions themselves is the wish list rather than the feature -- `rotate`,
 comparison and selection, and the open questions above. Roughly one PR each,
@@ -163,9 +177,10 @@ ordered by risk rather than appetite; the
    the binding of a shared subexpression, below.
 4. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
-   Rust path hands external forces across once per batch. *Two slices in: the
-   kind and its leaf, and a line drawn between two bodies. The slices left are
-   in view above, one of them blocked.*
+   Rust path hands external forces across once per batch. *Three slices in: the
+   kind and its leaf, a line drawn between two bodies, and clicking one in the
+   drawing to select what wrote it. The slices left are in view above, and the
+   largest waits on a decision.*
 5. **Named slots** -- where the `slot` field lands, and new work in both the
    emitter and the reader, neither of which handles an element-valued prop.
 6. **Repetition**, with the emitted form decided first.

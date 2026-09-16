@@ -7,10 +7,11 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0031](0031.md) | Decide whether a world-space decal's endpoints are snap targets | Enhancement | Open |
 | [0030](0030.md) | Let an expression say what one frame looks like from another | RFC | Open |
 | [0029](0029.md) | Derive whether a mounted tree has any content, rather than enumerating it | Enhancement | Open |
 | [0028](0028.md) | Decide how a signal is written in the editor | RFC | Open |
-| [0027](0027.md) | Let a world-space decal be picked in the scene view | Enhancement | Open |
+| [0027](0027.md) | Let a world-space decal be picked in the scene view | Enhancement | Resolved |
 | [0026](0026.md) | Hold the emitter's operation imports and the binding's exports together | Bug | Resolved |
 | [0025](0025.md) | Decide whether the expression language has exponentiation | RFC | Open |
 | [0024](0024.md) | Say what unit an angle typed as an expression is in | Bug | Open |

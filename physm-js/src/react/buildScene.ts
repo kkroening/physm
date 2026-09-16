@@ -34,8 +34,15 @@ const MAX_DEPTH = 1000;
  */
 export type Trail = readonly ReactElement[];
 
-/** Told of each frame and decal as it is built, and the elements it came from. */
-export type Trace = (built: Frame | Decal, trail: Trail) => void;
+/**
+ * Told of each frame and decal as it is built, and the elements it came from.
+ *
+ * A world-space decal is told as its **maker**, because it has no shape at
+ * this moment and a different one on every pose -- so the maker is the only
+ * part of it a later pass can recognise. That is what lets a click on one lead
+ * back to the node that wrote it.
+ */
+export type Trace = (built: Frame | Decal | WorldDecal, trail: Trail) => void;
 
 /** Where the walk is, and where what it finds goes. */
 interface Walk {
@@ -136,8 +143,10 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
       return;
     case 'worldDecal':
       // Part of the scene rather than of a frame, and made afresh from each
-      // tick -- so unlike a `decal`, nothing is built here.
+      // tick -- so unlike a `decal`, nothing is built here. What is traced is
+      // the maker, which is what a hit hands back for the same reason.
       walk.worldDecals.push(node.build);
+      walk.trace?.(node.build, walk.trail);
       return;
     case 'constraint':
       // Built last, once every frame exists and every anchor is known.
@@ -322,7 +331,9 @@ function walkChildren(children: ReactNode, walk: Walk): void {
  * `trace`, when given, is told of each frame and decal as it is built, with the
  * elements it came from: the root's first, and the one that built it last. It
  * is how a tool holding the rig as data leads what is drawn back to what wrote
- * it.
+ * it. A world-space decal is not a shape at that point -- it is remade on every
+ * pose -- so what is traced for one is its `WorldDecal` **maker**, which is
+ * also what a hit on it hands back.
  *
  * And one thing it cannot do: **resolve an `<Anchor>` named by ref.** A ref is
  * filled in by an effect, and nothing here runs one. Name the anchor by `id`.

@@ -62,6 +62,7 @@ import { scrollPaneTo } from './scrollTopFor';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type CoreScene from './../Scene';
 import type Decal from './../Decal';
+import type { WorldDecal } from './../Decal';
 import type { PropSpec } from './../react/componentMeta';
 import type { StateMap } from './../Frame';
 import type {
@@ -1196,22 +1197,35 @@ function TreePane({
   );
 }
 
-/** A built scene, and the way back from what it draws to the node that wrote it. */
+/**
+ * Anything the scene draws, as the trace and a hit both address it.
+ *
+ * `Frame | Decal` would not cover it, because a world-space decal is not a
+ * shape until the scene is posed: it is remade on every pose, so what the
+ * trace can record and what a hit can hand back is the **maker**, and the
+ * lookups below take it in the shape they were given it.
+ */
+type Drawn = Frame | Decal | WorldDecal;
+
+/**
+ * A built scene, and the way back from what it draws to the node that wrote
+ * it.
+ */
 interface Built {
   readonly scene: CoreScene;
   readonly initial: StateMap;
 
   /** The focused body's node nearest to what built a frame or decal. */
-  readonly authoredPathOf: (built: Frame | Decal) => NodePath | null;
+  readonly authoredPathOf: (built: Drawn) => NodePath | null;
 
   /** The focused body's node that built a frame or decal itself, if one did. */
-  readonly ownPathOf: (built: Frame | Decal) => NodePath | null;
+  readonly ownPathOf: (built: Drawn) => NodePath | null;
 
   /** The frame a node of this body built, if it built one. */
   readonly frameAt: (path: NodePath) => Frame | null;
 
   /** The node that built something, in whatever body wrote it. */
-  readonly expandedOf: (built: Frame | Decal) => Selection | null;
+  readonly expandedOf: (built: Drawn) => Selection | null;
 }
 
 /**
@@ -1385,7 +1399,7 @@ function useBuiltScene(
   return useMemo(() => {
     try {
       const origins = new WeakMap<object, ElementOrigin>();
-      const trails = new Map<Frame | Decal, Trail>();
+      const trails = new Map<Drawn, Trail>();
       const scene = buildScene(elementOf(doc, focus, origins), {
         trace: (built, trail) => trails.set(built, trail),
       });
@@ -1622,13 +1636,20 @@ function ScenePane({
    *
    * One sweep: `hitsAt` places every frame's gizmo and walks every decal, so
    * asking it twice for one pointer move solves the scene's pose twice over.
+   *
+   * The pose is what is hoisted, and not the world decals `hitsAt` also makes
+   * from it: those are remade on every call, and `SceneView` makes the same
+   * ones again on every animation frame. Hoisting them would move a
+   * scene-walking concern into this render to save arithmetic nothing has
+   * measured as costing anything -- the same trade `SceneView`'s own doc
+   * names where it walks the scene a second time to draw the gizmos over it.
    */
   const poses =
     'scene' in built && drawn
       ? drawn.scene.getPosMatrixMap(drawn.stateMap)
       : null;
 
-  const hitsAtPoint = (point: ScreenPoint): (Frame | Decal)[] =>
+  const hitsAtPoint = (point: ScreenPoint): Drawn[] =>
     'scene' in built && drawn && poses
       ? hitsAt(drawn.scene, poses, xformMatrix, point).filter(
           (hit) => showMarks || !(hit instanceof Frame),
@@ -1641,7 +1662,7 @@ function ScenePane({
 
   /** The frames among `hits`, and the node each can be dragged by. */
   const gizmosIn = (
-    hits: readonly (Frame | Decal)[],
+    hits: readonly Drawn[],
   ): { frame: Frame; path: NodePath | null }[] =>
     'scene' in built
       ? hits
@@ -1883,7 +1904,7 @@ function ScenePane({
       return frameDrag(own.frame, own.path);
     }
 
-    const leadsTo = (hit: Frame | Decal): NodePath | null => {
+    const leadsTo = (hit: Drawn): NodePath | null => {
       const authored = built.authoredPathOf(hit);
 
       return authored ? movable(authored) : null;

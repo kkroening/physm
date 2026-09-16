@@ -755,6 +755,21 @@ describe('buildScene, traced', () => {
       circle,
     ]);
   });
+
+  test('a world-space decal is named by its maker', () => {
+    // It is not a shape until the scene is posed, and a different one on every
+    // pose, so what a trace can record -- and what a hit on it hands back --
+    // is the maker.
+    const rig = <WorldLine startPos={[0, 0]} endPos={[1, 1]} />;
+    const calls: [unknown, readonly ReactElement[]][] = [];
+    const scene = buildScene(rig, {
+      trace: (built, trail) => calls.push([built, trail]),
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]).toBe(scene.worldDecals[0]);
+    expectSame(calls[0]![1], [rig]);
+  });
 });
 
 describe('a prop that is computed rather than stated', () => {
