@@ -678,6 +678,175 @@ describe('Editor, a prop holding a reference', () => {
   });
 });
 
+/** The tree's rows for the definition being shown, as a screen reader finds them. */
+function treeRows(name: string): HTMLElement[] {
+  return within(screen.getByRole('tree', { name })).getAllByRole('treeitem');
+}
+
+/** Click the declaration block's row for `name`, and return the properties pane. */
+function selectParameter(name: string): HTMLElement {
+  fireEvent.click(
+    within(screen.getByRole('tree', { name: 'Scene' })).getByText(name),
+  );
+
+  return screen.getByRole('region', { name: 'Properties' });
+}
+
+describe('Editor, the declaration block', () => {
+  test('the parameters are a group of rows above the body', () => {
+    render(<Editor initialDocument={referring()} />);
+    const [first, second, third] = treeRows('Scene');
+
+    // A region of its own, so the block has a boundary a screen reader can
+    // find and not only a border under it.
+    const block = screen.getByRole('group', { name: 'Declarations' });
+
+    expect(within(block).getAllByRole('treeitem')).toHaveLength(2);
+    expect(block).not.toContainElement(third!);
+
+    // The declaration block comes first, because a definition is what it takes
+    // as well as what it renders.
+    expect(first).toHaveAccessibleName('label label');
+    expect(second).toHaveAccessibleName('bob point');
+    expect(third).toHaveAccessibleName('TrackFrame id=label');
+
+    // The first of them is the row Tab reaches, which says the tree's own
+    // order and the order the rows are drawn in agree -- they are kept in two
+    // places, and type-ahead and find both walk the first.
+    expect(first).toHaveAttribute('tabindex', '0');
+  });
+
+  test('selecting one edits its name, type and default', () => {
+    render(<Editor initialDocument={referring()} />);
+    const props = selectParameter('bob');
+
+    expect(within(props).getByRole('heading')).toHaveTextContent('bob');
+    expect(within(props).getByLabelText('Name')).toHaveValue('bob');
+    expect(within(props).getByLabelText('Type')).toHaveValue('point');
+
+    // A point's default is the pair its kind is edited with, and it has none.
+    expect(within(props).getByLabelText('Default x')).toHaveValue('');
+  });
+
+  test('a rename carries the props that refer to it into the code', () => {
+    render(<Editor initialDocument={referring()} />);
+    const name = within(selectParameter('bob')).getByLabelText('Name');
+    fireEvent.change(name, { target: { value: 'hangsAt' } });
+
+    expect(code()).toContain('hangsAt: readonly [number, number]');
+    expect(code()).toContain('position={hangsAt}');
+    expect(code()).not.toContain('bob');
+  });
+
+  test('a name the definition cannot take is shown as wrong, not applied', () => {
+    render(<Editor initialDocument={referring()} />);
+    const name = within(selectParameter('bob')).getByLabelText('Name');
+    fireEvent.change(name, { target: { value: 'label' } });
+
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(code()).toContain('position={bob}');
+
+    // Why it will not do, where it is read rather than hovered -- and tied to
+    // the field, so it is announced on focus as well as when it appears.
+    const said = within(
+      screen.getByRole('region', { name: 'Properties' }),
+    ).getByRole('status');
+
+    expect(said).toHaveTextContent('Scene already takes label.');
+    expect(name).toHaveAttribute('aria-describedby', said.id);
+
+    // And the field goes on showing what was typed, so it can be fixed.
+    expect(name).toHaveValue('label');
+  });
+
+  test('retyping changes what the default is edited with', () => {
+    render(<Editor initialDocument={referring()} />);
+    const props = selectParameter('bob');
+    fireEvent.change(within(props).getByLabelText('Type'), {
+      target: { value: 'scalar' },
+    });
+
+    expect(within(props).queryByLabelText('Default x')).toBeNull();
+    expect(within(props).getByLabelText('Default')).toBeVisible();
+    expect(code()).toContain('bob: number');
+  });
+
+  test('a default is written into the signature, and makes the prop optional', () => {
+    render(<Editor initialDocument={referring()} />);
+    const props = selectParameter('bob');
+    fireEvent.change(within(props).getByLabelText('Default x'), {
+      target: { value: '4' },
+    });
+    fireEvent.change(within(props).getByLabelText('Default y'), {
+      target: { value: '-1' },
+    });
+
+    expect(code()).toContain(
+      'function Scene({ label, bob = [4, -1] }: { label: string; bob?: readonly [number, number] })',
+    );
+
+    // And the row reads it back, which is the half the code pane cannot show:
+    // `JSON.stringify`, not `String`, or it would read `4,-1`.
+    expect(treeRows('Scene')[1]).toHaveAccessibleName('bob point = [4,-1]');
+  });
+
+  test('a new parameter is added, selected, and named around the rest', () => {
+    render(<Editor initialDocument={referring()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add a parameter' }));
+
+    expect(treeRows('Scene')[2]).toHaveAccessibleName('value scalar');
+    expect(
+      within(screen.getByRole('region', { name: 'Properties' })).getByRole(
+        'heading',
+      ),
+    ).toHaveTextContent('value');
+    expect(code()).toContain('value: number');
+  });
+
+  test('a JavaScript keyword is refused, whatever else it would parse as', () => {
+    render(<Editor initialDocument={referring()} />);
+    const name = within(selectParameter('bob')).getByLabelText('Name');
+    fireEvent.change(name, { target: { value: 'default' } });
+
+    // `function Scene({ default })` is a SyntaxError, and nothing downstream
+    // would say so: the code pane only reports what `emitScene` throws.
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(code()).toContain('position={bob}');
+  });
+
+  test('a referenced parameter cannot be deleted, and an unused one can', () => {
+    render(<Editor initialDocument={referring()} />);
+    selectParameter('bob');
+    const remove = screen.getByRole('button', { name: 'Delete' });
+
+    expect(remove).toBeDisabled();
+    expect(remove).toHaveAttribute(
+      'title',
+      "Weight's position refers to bob: give it a value first.",
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a parameter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(treeRows('Scene')).toHaveLength(4);
+    expect(code()).not.toContain('value');
+  });
+
+  test('Delete on a row removes it, and undo brings it back', () => {
+    render(<Editor initialDocument={referring()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add a parameter' }));
+    const row = treeRows('Scene')[2]!;
+    row.focus();
+    fireEvent.keyDown(row, { key: 'Delete' });
+
+    expect(code()).not.toContain('value');
+
+    fireEvent.click(undoButton());
+
+    expect(code()).toContain('value: number');
+  });
+});
+
 /** The library pane. */
 function library(): HTMLElement {
   return screen.getByRole('region', { name: 'Library' });

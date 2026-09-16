@@ -1,3 +1,4 @@
+import { BUILT_INS, IDENTIFIER, RESERVED } from './identifiers';
 import { definitionOf, placeholderPath } from './sceneDocument';
 import type { PropValue } from './propValue';
 import type {
@@ -169,9 +170,6 @@ function tagOf(type: Exclude<ComponentRef, { kind: 'children' }>): string {
   return name;
 }
 
-/** A JavaScript identifier, which is what a parameter is bound as. */
-const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-
 /**
  * Why a declared parameter cannot be written, or `null`.
  *
@@ -210,8 +208,22 @@ function parameterRefusal(
     );
   }
 
+  if (RESERVED.has(name)) {
+    return (
+      `'${name}' cannot be a parameter name${where}: it is a JavaScript ` +
+      'keyword, so the emitted function could not bind it.'
+    );
+  }
+
   if (seen.has(name)) {
     return `'${name}' is declared twice${where}.`;
+  }
+
+  if (BUILT_INS.has(name)) {
+    return (
+      `'${name}' cannot be a parameter name${where}: generated code may use ` +
+      'the built-in of that name, which the parameter would shadow.'
+    );
   }
 
   return bound.has(name)

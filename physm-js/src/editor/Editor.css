@@ -166,6 +166,22 @@
   color: #6c4f9e;
 }
 
+/* A declared parameter, which is not a component: named in the same colour a
+   reference is shown in beside its own value, and set apart from the body
+   below it by a rule under the last of them. */
+.editor__row--parameter .editor__tag {
+  color: #2f6f4f;
+  font-style: italic;
+}
+
+/* The block's own boundary, drawn on the group rather than on whatever row
+   happens to follow the last parameter. */
+[role='tree'] > [role='group'] {
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #dde4ea;
+  margin-bottom: 0.25rem;
+}
+
 /* A drop lands among rows as readily as inside one, so every row carries a gap
    above it: nothing to see until a drag is over it. */
 /* No vertical space of its own, so the rows keep their spacing -- but above

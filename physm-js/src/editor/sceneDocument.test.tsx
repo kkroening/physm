@@ -6,6 +6,7 @@ import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
+import emitScene from './emitScene';
 import starterDocument from './starterDocument';
 import { literalOf, parameterOf } from './propValue';
 import {
@@ -23,6 +24,14 @@ import {
   placeholderPath,
   removeNode,
   setProp,
+  addParameter,
+  parameterAt,
+  parameterNameRefusal,
+  parameterRemovalRefusal,
+  removeParameter,
+  renameParameter,
+  retypeParameter,
+  setParameterDefault,
 } from './sceneDocument';
 import type CoreScene from './../Scene';
 import type { DocNode, ElementOrigin, SceneDocument } from './sceneDocument';
@@ -720,6 +729,242 @@ describe("a component's place for children", () => {
     );
     expect(() => extractComponent(doc, 'Scene', [0], 'Arm')).toThrow(
       /position refers to Scene's bob/,
+    );
+  });
+});
+
+describe("a definition's parameters", () => {
+  /** A `Scene` taking `bob`, with a weight whose position refers to it. */
+  const taking = (): SceneDocument => {
+    const [frame] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Weight mass={1} position={[1, 0]} />
+      </RotationalFrame>,
+    );
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          parameters: [{ name: 'bob', type: 'point', default: [2, 0] }],
+          body: [
+            {
+              ...frame!,
+              children: frame!.children.map((weight) => ({
+                ...weight,
+                props: { ...weight.props, position: parameterOf('bob') },
+              })),
+            },
+          ],
+        },
+      ],
+    };
+  };
+
+  /** A `Pendulum` taking `bob`, instantiated twice at different points. */
+  const twoInstances = (): SceneDocument => {
+    const [arm] = nodesFrom(
+      <RotationalFrame>
+        <Weight mass={1} position={[0, -1]} />
+      </RotationalFrame>,
+    );
+    const instance = (bob: readonly [number, number]): DocNode => ({
+      type: { kind: 'defined', name: 'Pendulum' },
+      props: { bob: literalOf(bob) },
+      children: [],
+    });
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+            ...cart,
+            children: [instance([4, 0]), instance([7, 0])],
+          })),
+        },
+        {
+          name: 'Pendulum',
+          parameters: [{ name: 'bob', type: 'point' }],
+          body: [
+            {
+              ...arm!,
+              children: arm!.children.map((weight) => ({
+                ...weight,
+                props: { ...weight.props, position: parameterOf('bob') },
+              })),
+            },
+          ],
+        },
+      ],
+    };
+  };
+
+  test('a new one is named around the ones already declared', () => {
+    const once = addParameter(taking(), 'Scene');
+    const twice = addParameter(once, 'Scene');
+
+    expect(parameterAt(once, 'Scene', 1)).toEqual({
+      name: 'value',
+      type: 'scalar',
+    });
+    expect(parameterAt(twice, 'Scene', 2).name).toBe('value2');
+
+    // No default: a parameter every instance may leave out is the weaker
+    // statement, and nothing here knows what it is for yet.
+    expect(parameterAt(once, 'Scene', 1).default).toBeUndefined();
+  });
+
+  test('a name is checked the way a component name is', () => {
+    const doc = addParameter(taking(), 'Scene');
+
+    for (const name of ['half-length', '2x', '', 'a b']) {
+      expect(parameterNameRefusal(doc, 'Scene', 1, name)).toMatch(
+        /starts with a letter/,
+      );
+    }
+    expect(parameterNameRefusal(doc, 'Scene', 1, 'children')).toMatch(
+      /names what a component is given/,
+    );
+    expect(parameterNameRefusal(doc, 'Scene', 1, 'bob')).toBe(
+      'Scene already takes bob.',
+    );
+    expect(parameterNameRefusal(doc, 'Scene', 1, 'Array')).toMatch(
+      /JavaScript built-in/,
+    );
+
+    // A component name is checked by a rule requiring a capital first letter,
+    // which excludes every reserved word without naming one. A parameter name
+    // is lowercase by convention, so the same rule relaxed to allow that loses
+    // the guarantee -- and `function Scene({ default })` does not parse.
+    for (const word of ['default', 'const', 'this', 'in', 'await', 'static']) {
+      expect(parameterNameRefusal(doc, 'Scene', 1, word)).toMatch(
+        /JavaScript keyword/,
+      );
+    }
+
+    // A parameter is not a duplicate of itself, or renaming it to what it is
+    // called would be refused.
+    expect(parameterNameRefusal(doc, 'Scene', 0, 'bob')).toBeNull();
+    expect(parameterNameRefusal(doc, 'Scene', 1, 'heft')).toBeNull();
+  });
+
+  test('a rename carries every prop that refers to it', () => {
+    const renamed = renameParameter(taking(), 'Scene', 0, 'hangsAt');
+    const weight = nodeAt(renamed, 'Scene', [0, 0]);
+
+    expect(parameterAt(renamed, 'Scene', 0).name).toBe('hangsAt');
+    expect(weight.props.position).toEqual(parameterOf('hangsAt'));
+
+    // Which is the point: the scene the document builds is unchanged.
+    expect(
+      buildScene(elementOf(renamed)).frames[0]!.weights[0]!.position[0],
+    ).toBeCloseTo(2, 9);
+    expect(() => renameParameter(taking(), 'Scene', 0, 'children')).toThrow(
+      /names what a component is given/,
+    );
+  });
+
+  test('a rename carries what each instance passes, in whatever body holds it', () => {
+    // The other half of what a parameter's name reaches: an instance's prop is
+    // keyed by that name, and `elementOf` builds the scope from those keys --
+    // so a rename that missed them would leave the scope without the name the
+    // body now refers to, and both pendulums would fall to Weight's own
+    // default and land on top of each other.
+    const renamed = renameParameter(twoInstances(), 'Pendulum', 0, 'hangsAt');
+    const [first, second] = renamed.definitions[0]!.body[0]!.children;
+
+    expect(first!.props.hangsAt).toEqual(literalOf([4, 0]));
+    expect(second!.props.hangsAt).toEqual(literalOf([7, 0]));
+    expect(first!.props.bob).toBeUndefined();
+
+    const built = buildScene(elementOf(renamed)).frames[0]!.frames;
+
+    expect(built[0]!.weights[0]!.position[0]).toBeCloseTo(4, 9);
+    expect(built[1]!.weights[0]!.position[0]).toBeCloseTo(7, 9);
+  });
+
+  test('a delete takes the argument each instance passed with it', () => {
+    // Dropped rather than refused: an argument to a parameter that no longer
+    // exists is read by nothing, where a reference resolved against a scope
+    // without the name falls to its component's default and moves something.
+    // Leaving it would emit `<Pendulum bob={…} />` against a signature that
+    // does not take `bob`.
+    const doc = setProp(
+      twoInstances(),
+      'Pendulum',
+      [0, 0],
+      'position',
+      undefined,
+    );
+    const without = removeParameter(doc, 'Pendulum', 0);
+    const [first, second] = without.definitions[0]!.body[0]!.children;
+
+    expect(definitionOf(without, 'Pendulum').parameters).toEqual([]);
+    expect(first!.props.bob).toBeUndefined();
+    expect(second!.props.bob).toBeUndefined();
+    expect(emitScene(without).source).not.toContain('bob');
+  });
+
+  test('an edit to a component the document does not define says so', () => {
+    // `retypeParameter` reaches `withParameters` without looking the
+    // definition up first, so the guard in there is the only thing between a
+    // wrong name and an edit that silently returns the document unchanged.
+    expect(() => retypeParameter(taking(), 'Nowhere', 0, 'scalar')).toThrow(
+      /defines no component named 'Nowhere'/,
+    );
+  });
+
+  test('a referenced parameter cannot be deleted, and an unused one can', () => {
+    const doc = addParameter(taking(), 'Scene');
+
+    expect(parameterRemovalRefusal(doc, 'Scene', 0)).toBe(
+      "Weight's position refers to bob: give it a value first.",
+    );
+    expect(() => removeParameter(doc, 'Scene', 0)).toThrow(/refers to bob/);
+    expect(parameterRemovalRefusal(doc, 'Scene', 1)).toBeNull();
+    expect(
+      removeParameter(doc, 'Scene', 1).definitions[0]!.parameters,
+    ).toHaveLength(1);
+  });
+
+  test('retyping keeps a default that still fits and drops one that does not', () => {
+    const doc = taking();
+
+    // A point's `[2, 0]` says nothing as a label, and coercing it would invent
+    // an answer the person has one for.
+    expect(
+      parameterAt(retypeParameter(doc, 'Scene', 0, 'label'), 'Scene', 0),
+    ).toEqual({ name: 'bob', type: 'label' });
+
+    const scalar = setParameterDefault(
+      retypeParameter(doc, 'Scene', 0, 'scalar'),
+      'Scene',
+      0,
+      3,
+    );
+
+    expect(
+      parameterAt(retypeParameter(scalar, 'Scene', 0, 'angle'), 'Scene', 0),
+    ).toEqual({ name: 'bob', type: 'angle', default: 3 });
+  });
+
+  test('a default the declared type cannot hold is refused, and none is allowed', () => {
+    const doc = taking();
+
+    expect(() => setParameterDefault(doc, 'Scene', 0, 'over there')).toThrow(
+      /is not a point, which bob is/,
+    );
+    expect(() => setParameterDefault(doc, 'Scene', 0, [1])).toThrow(
+      /is not a point/,
+    );
+    expect(
+      parameterAt(setParameterDefault(doc, 'Scene', 0, undefined), 'Scene', 0),
+    ).toEqual({ name: 'bob', type: 'point' });
+    expect(() => parameterAt(doc, 'Scene', 4)).toThrow(
+      /declares no parameter at 4/,
     );
   });
 });
