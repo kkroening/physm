@@ -10,7 +10,7 @@ import FixedFrame from './../react/FixedFrame';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
-import { literalOf } from './propValue';
+import { literalOf, parameterOf } from './propValue';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
 import emitScene, { rangeKey } from './emitScene';
@@ -338,6 +338,104 @@ function withProp(prop: string, value: unknown): SceneDocument {
     ],
   };
 }
+
+/**
+ * A `Pendulum` whose rod length is a parameter, instantiated twice at different
+ * lengths -- the case a document of literals cannot express at all.
+ */
+function parameterised(withDefault: boolean): SceneDocument {
+  const [arm] = nodesFrom(
+    <RotationalFrame>
+      <Line endPos={[0, -1]} lineWidth={0.1} />
+      <Weight mass={3} position={[0, -1]} />
+    </RotationalFrame>,
+  );
+  const [rod, bob] = arm!.children;
+  const at = (node: DocNode, prop: string): DocNode => ({
+    ...node,
+    props: { ...node.props, [prop]: parameterOf('bob') },
+  });
+
+  return {
+    root: 'Scene',
+    definitions: [
+      {
+        name: 'Scene',
+        body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+          ...cart,
+          children: [
+            { ...instance('Pendulum'), props: { bob: literalOf([4, 0]) } },
+            withDefault
+              ? instance('Pendulum')
+              : { ...instance('Pendulum'), props: { bob: literalOf([7, 0]) } },
+          ],
+        })),
+      },
+      {
+        name: 'Pendulum',
+        parameters: [
+          {
+            name: 'bob',
+            type: 'point' as const,
+            ...(withDefault ? { default: [9, 0] } : {}),
+          },
+        ],
+        body: [
+          {
+            ...arm!,
+            children: [at(rod!, 'endPos'), at(bob!, 'position')],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe('a definition that takes parameters', () => {
+  test('two instances at different lengths build different scenes', () => {
+    const scene = buildScene(elementOf(parameterised(false)));
+    const [first, second] = scene.frames[0]!.frames;
+
+    // Each instance resolved `length` against what it was passed, so the two
+    // pendulums differ -- which is the whole point of a parameter, and is
+    // unreachable by a document that can only hold literals.
+    expect(first!.weights[0]!.position[0]).toBeCloseTo(4, 9);
+    expect(second!.weights[0]!.position[0]).toBeCloseTo(7, 9);
+  });
+
+  test('an instance that passes nothing gets the declared default', () => {
+    const scene = buildScene(elementOf(parameterised(true)));
+    const [first, second] = scene.frames[0]!.frames;
+
+    expect(first!.weights[0]!.position[0]).toBeCloseTo(4, 9);
+    expect(second!.weights[0]!.position[0]).toBeCloseTo(9, 9);
+  });
+
+  test('the emitted module takes the parameter and passes it', () => {
+    const source = expectRoundTrip(parameterised(false));
+
+    // The signature binds and types it; the body refers to it by name rather
+    // than to the number it happened to resolve to; the caller passes one.
+    expect(source).toContain(
+      'function Pendulum({ bob }: { bob: readonly [number, number] }): ReactElement',
+    );
+    expect(source).toContain('endPos={bob}');
+    expect(source).toContain('<Pendulum bob={[4, 0]} />');
+    expect(source).toContain('<Pendulum bob={[7, 0]} />');
+
+    // And nowhere does the reference get flattened into its argument.
+    expect(source).not.toContain('endPos={[4, 0]}');
+  });
+
+  test('a default is optional to the caller and defaulted in the signature', () => {
+    const source = expectRoundTrip(parameterised(true));
+
+    expect(source).toContain(
+      'function Pendulum({ bob = [9, 0] }: { bob?: readonly [number, number] }): ReactElement',
+    );
+    expect(source).toContain('<Pendulum />');
+  });
+});
 
 describe('emitScene', () => {
   test('writes a module that rebuilds the scene, every kind of value included', () => {

@@ -1,10 +1,10 @@
 import coreComponents from './../react/coreComponents';
 import { Fragment, createElement, isValidElement } from 'react';
 import { canContain } from './../react/componentMeta';
-import { literalProps, plainProps } from './propValue';
+import { literalProps, resolvedProps } from './propValue';
 import type { ComponentMeta } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
-import type { DocProps, PropValue } from './propValue';
+import type { DocProps, PropValue, Scope } from './propValue';
 
 /** Any component, as the document holds it: a function of some props. */
 type AnyComponent = (props: never) => ReactNode;
@@ -54,9 +54,30 @@ export interface DocNode {
   readonly children: readonly DocNode[];
 }
 
-/** A component the document defines: a name, and the elements it renders. */
+/**
+ * What a definition takes: a name a child prop can refer to, and a type saying
+ * what may be passed.
+ *
+ * The types are [0016 page 3](../../../docs/issues/0016/03-scope.md)'s set,
+ * restricted to the ones a literal can express. `Direction` and `Frame` arrive
+ * with the features that need them.
+ */
+export interface Parameter {
+  readonly name: string;
+  readonly type: 'scalar' | 'integer' | 'angle' | 'point' | 'label';
+  readonly default?: unknown;
+}
+
+/** A component the document defines: a name, what it takes, and what it renders. */
 export interface Definition {
   readonly name: string;
+
+  /**
+   * Absent and empty mean the same thing -- a definition that takes nothing --
+   * so a document written before parameters existed needs no migration.
+   */
+  readonly parameters?: readonly Parameter[];
+
   readonly body: readonly DocNode[];
 }
 
@@ -250,15 +271,27 @@ export function elementOf(
       return cached;
     }
 
-    const { body } = definitionOf(doc, definitionName);
-    const component: FunctionComponent<{ children?: ReactNode }> = ({
+    const { body, parameters } = definitionOf(doc, definitionName);
+    const defaults = Object.fromEntries(
+      (parameters ?? [])
+        .filter(({ default: value }) => value !== undefined)
+        .map(({ name, default: value }) => [name, value]),
+    );
+
+    // Whatever the instance passed, over the declared defaults: that is the
+    // scope every `parameter` prop in this body resolves against.
+    const component: FunctionComponent<{ children?: ReactNode } & Scope> = ({
       children,
+      ...passed
     }) =>
       createElement(
         Fragment,
         null,
         ...body.map((node, index) =>
-          render(definitionName, node, [index], children),
+          render(definitionName, node, [index], children, {
+            ...defaults,
+            ...passed,
+          }),
         ),
       );
 
@@ -286,6 +319,7 @@ export function elementOf(
     node: DocNode,
     path: NodePath,
     given: ReactNode,
+    scope: Scope,
   ): ReactElement => {
     if (node.type.kind === 'children') {
       return createElement(
@@ -295,12 +329,12 @@ export function elementOf(
       );
     }
 
-    const plain = plainProps(node.props);
+    const plain = resolvedProps(node.props, scope);
     const element = createElement(
       typeOf(node.type),
       node.key === undefined ? plain : { ...plain, key: node.key },
       ...node.children.map((child, index) =>
-        render(definition, child, [...path, index], given),
+        render(definition, child, [...path, index], given, scope),
       ),
     );
     origins?.set(element, { definition, path });

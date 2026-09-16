@@ -40,7 +40,7 @@ import {
   setProp,
 } from './sceneDocument';
 import { historyOf, recorded, redone, undone } from './history';
-import { literalOf } from './propValue';
+import { literalIn, literalOf, shownValueOf } from './propValue';
 import {
   dropPoint,
   dropRefusal,
@@ -104,10 +104,8 @@ function summaryOf(node: DocNode): string {
   }
 
   return Object.entries(node.type.component.meta.props)
-    .filter(
-      ([name, spec]) => spec.summary && node.props[name]?.value !== undefined,
-    )
-    .map(([name]) => `${name}=${JSON.stringify(node.props[name]!.value)}`)
+    .filter(([name, spec]) => spec.summary && shownValueOf(node.props[name]))
+    .map(([name]) => `${name}=${shownValueOf(node.props[name])!}`)
     .join(' ');
 }
 
@@ -265,9 +263,11 @@ function rowStarting(
 function findTextOf(node: DocNode): string {
   return [
     tagOf(node.type),
-    ...Object.entries(node.props)
-      .filter(([, prop]) => prop.value !== undefined)
-      .map(([name, prop]) => `${name}=${JSON.stringify(prop.value)}`),
+    ...Object.entries(node.props).flatMap(([name, prop]) => {
+      const shown = shownValueOf(prop);
+
+      return shown === null ? [] : [`${name}=${shown}`];
+    }),
   ]
     .join(' ')
     .toLowerCase();
@@ -1494,7 +1494,7 @@ function ScenePane({
             frame,
             xformMatrix,
             vec3.coerce(
-              (node.props[prop]?.value ?? spec.default ?? [0, 0]) as
+              (literalIn(node.props[prop]) ?? spec.default ?? [0, 0]) as
                 number | readonly number[],
             ),
           ),
@@ -1764,8 +1764,9 @@ function ScenePane({
     blurAway();
     drags.current += 1;
     const position = vec3.coerce(
-      (nodeAt(doc, focus, target.path).props[target.prop]?.value ?? [0, 0]) as
-        number | readonly number[],
+      (literalIn(nodeAt(doc, focus, target.path).props[target.prop]) ?? [
+        0, 0,
+      ]) as number | readonly number[],
     );
 
     // Only in the pose the code builds: a snap is a claim about where frames

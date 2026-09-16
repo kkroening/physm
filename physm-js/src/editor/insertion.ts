@@ -1,5 +1,5 @@
 import { canContain } from './../react/componentMeta';
-import { literalProps } from './propValue';
+import { literalIn, literalProps } from './propValue';
 import {
   definitionOf,
   insertNode,
@@ -122,7 +122,9 @@ function definitionsUsedBy(
 /** Every id these nodes and their children carry. */
 function idsIn(nodes: readonly DocNode[]): string[] {
   return nodes.flatMap(({ props, children }) => [
-    ...(typeof props.id?.value === 'string' ? [props.id.value] : []),
+    ...(props.id?.kind === 'literal' && typeof props.id.value === 'string'
+      ? [props.id.value]
+      : []),
     ...idsIn(children),
   ]);
 }
@@ -155,8 +157,9 @@ function expansionCounts(
   };
   const visit = (nodes: readonly DocNode[]): void => {
     for (const node of nodes) {
-      if (typeof node.props.id?.value === 'string') {
-        bump(`id:${node.props.id.value}`);
+      const id = node.props.id;
+      if (id?.kind === 'literal' && typeof id.value === 'string') {
+        bump(`id:${id.value}`);
       }
 
       if (node.type.kind === 'defined') {
@@ -178,7 +181,7 @@ function endsIn(nodes: readonly DocNode[]): string[] {
     ...(node.type.kind === 'core'
       ? Object.entries(node.type.component.meta.props)
           .filter(([, spec]) => spec.kind === 'end')
-          .map(([prop]) => node.props[prop]?.value)
+          .map(([prop]) => literalIn(node.props[prop]))
           .filter((end): end is string => typeof end === 'string')
       : []),
     ...endsIn(node.children),
