@@ -21,6 +21,7 @@ import CoreLineDecal from './../LineDecal';
 import CoreRotationalFrame from './../RotationalFrame';
 import CoreScene from './../Scene';
 import CoreSpring from './../Spring';
+import CoreWorldSpring from './../WorldSpring';
 import CoreTrackFrame from './../TrackFrame';
 import CoreWeight from './../Weight';
 import Distance from './Distance';
@@ -31,6 +32,7 @@ import Scene from './Scene';
 import Spring from './Spring';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
+import WorldSpring from './WorldSpring';
 import WorldLine from './WorldLine';
 import type { LineDecalOptions } from './../LineDecal';
 import type { WorldDecal } from './../Decal';
@@ -91,7 +93,7 @@ function normalized(scene: CoreScene): unknown {
 }
 
 /**
- * All twelve building blocks with every prop set: none at its default when `k`
+ * All thirteen building blocks with every prop set: none at its default when `k`
  * is 1, and every one different between `k` = 1 and 2.
  *
  * The constraints join three pairs of weighted pivots set `gap` apart at
@@ -148,6 +150,7 @@ function fullRig(k: 1 | 2): ReactElement {
           resistance={1.25 * k}
         >
           <Spring stiffness={0.8 * k} />
+          <WorldSpring stiffness={0.5 * k} restAngle={0.2 * k} />
           <Circle
             position={[3 * k, 0]}
             radius={0.3 * k}
@@ -265,6 +268,7 @@ function handBuilt(k: 1 | 2): CoreScene {
             initialState: [0.6 * k, -0.2 * k],
             resistance: 1.25 * k,
             springs: [new CoreSpring(0.8 * k)],
+            worldSprings: [new CoreWorldSpring(0.5 * k, 0.2 * k)],
             decals: [
               new CoreCircleDecal({
                 position: [3 * k, 0],
@@ -602,7 +606,7 @@ describe('buildScene', () => {
     // its call would fail here rather than drop a weight's mass unseen.
     const leaves = coreComponents.filter(({ meta }) => meta.slot !== 'frame');
 
-    expect(leaves).toHaveLength(9);
+    expect(leaves).toHaveLength(10);
 
     for (const leaf of leaves) {
       const { meta } = leaf;
@@ -850,6 +854,34 @@ describe('a prop that is computed rather than stated', () => {
       ]);
       expect(armOf(scene).springForce(0.5)).toBeCloseTo(-4, 12);
     }
+  });
+
+  test('a world spring outside a turning frame is refused, in both routes', () => {
+    // Its torque acts on a coordinate that turns, and a track's slides while a
+    // fixed frame's moves nothing -- so the force would land in a row where it
+    // means nothing. Refused by the core constructor rather than by the
+    // describer, so every route in meets the same rule.
+    const refusal = /whose coordinate does not turn/;
+
+    for (const rig of [
+      <TrackFrame id="cart">
+        <WorldSpring stiffness={3} restAngle={0} />
+      </TrackFrame>,
+      <FixedFrame id="mount">
+        <WorldSpring stiffness={3} restAngle={0} />
+      </FixedFrame>,
+    ]) {
+      expect(() => buildScene(rig)).toThrow(refusal);
+      expect(() => assemble(rig)).toThrow(refusal);
+    }
+  });
+
+  test('a world spring at the root is refused, in both routes', () => {
+    const rig = <WorldSpring stiffness={3} restAngle={0} />;
+    const refusal = /<WorldSpring> must be inside a frame/;
+
+    expect(() => buildScene(rig)).toThrow(refusal);
+    expect(() => assemble(rig)).toThrow(refusal);
   });
 
   test('a spring inside a fixed frame is refused, in both routes', () => {

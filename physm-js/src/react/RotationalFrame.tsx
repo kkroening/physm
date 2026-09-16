@@ -29,11 +29,12 @@ function describeRotationalFrame(
   return {
     slot: 'frame',
     id: frameId,
-    build: ({ decals, weights, springs, frames }) =>
+    build: ({ decals, weights, springs, worldSprings, frames }) =>
       new CoreRotationalFrame({
         decals,
         weights,
         springs,
+        worldSprings,
         frames,
         // An omitted id defaults to this component's own key, not to a
         // fresh random one: the scene is rebuilt on every registration

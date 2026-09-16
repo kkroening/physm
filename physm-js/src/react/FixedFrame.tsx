@@ -28,7 +28,7 @@ function describeFixedFrame(
   return {
     slot: 'frame',
     id: frameId,
-    build: ({ decals, weights, springs, frames }) => {
+    build: ({ decals, weights, springs, worldSprings, frames }) => {
       // Its coordinate moves nothing, so a spring on it would pull on nothing
       // -- silently, since the force would enter a row that changes no pose.
       // `FixedFrameOptions` omits `resistance` for the same reason, and says
@@ -45,6 +45,7 @@ function describeFixedFrame(
       return new CoreFixedFrame({
         decals,
         weights,
+        worldSprings,
         frames,
         // An omitted id defaults to this component's own key, as a joint's
         // does, so a rebuilt scene still matches a caller's state map.

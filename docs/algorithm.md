@@ -59,6 +59,7 @@ objects were already right.
 | **`force_vector`** | Generalized force minus the Christoffel term: $`Q_i - \Gamma_{i,jk}\dot q^j \dot q^k`$ | $`f_i`$ |
 | `resistance`, `drag` | Rayleigh dissipation coefficients — joint-space and task-space | $`c_i`$, $`b_w`$ |
 | `springs[].stiffness` | Joint spring constants. Conservative, so they enter $`U`$ with gravity rather than $`\mathcal{F}`$ with the two above. A frame carries a list, and they add: $`k_i = \sum_s k_{i,s}`$ | $`k_i`$ |
+| `worldSprings[]` | Springs anchored to the world, slack toward a direction in it. Conservative too, and the one term that is *not* joint-local — see below | $`\kappa_i`$, $`\rho_i`$ |
 
 ---
 
@@ -287,14 +288,13 @@ by the same **leaf-to-root** recurrence — the mirror image of sweeps 1, 3 and 
 
 Since `sort_frames` already orders parents before children, one reverse pass over that same
 array computes them. The joint-local terms $`-c_i\dot q^i`$, $`-k_i q^i`$ and
-$`Q_i^{\text{ext}}`$ need no accumulation — they belong to $i$ alone.
+$`Q_i^{\text{ext}}`$ need no accumulation — they belong to $i$ alone. One force term does
+not, and it is [taken up below](#the-spring-that-is-not-joint-local).
 
 The spring sits beside the resistance term in the code and belongs with gravity in the
 mathematics: $`\tfrac12 k_i (q^i)^2`$ is a term of $`U`$, so $`-k_i q^i`$ is part of
 $`-\partial_i U`$ and not of the Rayleigh bracket. It is conservative, and unlike the
-weight sums it needs no pose — the frame's own coordinate is the whole of its input,
-which is why a spring pulling toward a direction fixed in *another* frame is a different
-construction entirely.
+weight sums it needs no pose — the frame's own coordinate is the whole of its input.
 
 This is the **Composite Rigid Body Algorithm**, and the $`\mathcal{K}`$ half is the backward
 pass of **RNEA**. It reduces the mass matrix to $`O(n \cdot \mathrm{depth})`$ and the force
@@ -304,6 +304,37 @@ vector to $O(n)$.
 ancestors — rather than testing all $n^2$ pairs, so the comparability test disappears instead
 of being made cheaper, and both triangles are written as they are computed. There is no
 `fill_lower_triangle_with_upper_triangle` pass any more, and symmetry holds by construction.
+
+### The spring that is not joint-local
+
+A spring anchored to the **world** is the one force term that breaks the sentence above,
+and it is worth being precise about how. Its potential is written against the frame's
+*accumulated* orientation,
+
+```math
+U_i^{\text{world}} \;=\; \tfrac12 \kappa_i \bigl(\theta_i - \rho_i\bigr)^2,
+\qquad
+\theta_i \;=\; \sum_{j \,\in\, \text{rot}(\text{path}(i))} q^j
+```
+
+so $`\partial \theta_i / \partial q^j`$ is **one for every revolute joint between the world
+and $`i`$**, and zero for a prismatic or fixed one — sliding a cart carries what it holds
+without turning it. The generalized force is therefore
+
+```math
+Q_j \;=\; \sum_{i \,\in\, D(j)} \kappa_i \,\mathrm{wrap}\bigl(\rho_i - \theta_i\bigr)
+\cdot \frac{\partial \theta_i}{\partial q^j}
+```
+
+— a sum over the same descendant set $`D(j)`$ the weight terms already accumulate over, so
+it costs one more reverse pass and no change to the shape of the algorithm.
+
+**Putting it in $`i`$'s row alone would be a different device.** That is a joint actuator
+with a world-referenced set-point: physically realizable, and what a gyro-levelled crane
+is — but it is not the gradient of any potential, so it does net work around a closed loop
+in configuration space and can add energy to a rig without bound. The two agree exactly
+whenever every ancestor is prismatic or fixed, which is why the distinction is easy to
+miss.
 
 ### When the scene closes a loop: the augmented system
 

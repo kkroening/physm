@@ -7,6 +7,7 @@ import FixedFrame from './FixedFrame';
 import Line from './Line';
 import RotationalFrame from './RotationalFrame';
 import Spring from './Spring';
+import WorldSpring from './WorldSpring';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import WorldLine from './WorldLine';
@@ -28,6 +29,7 @@ const coreComponents = [
   WorldLine,
   Weight,
   Spring,
+  WorldSpring,
   Anchor,
   Coincidence,
   Distance,

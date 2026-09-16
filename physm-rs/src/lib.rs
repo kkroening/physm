@@ -22,6 +22,7 @@ pub use crate::solver::Solver;
 pub use crate::spring::Spring;
 pub use crate::track_frame::TrackFrame;
 pub use crate::weight::Weight;
+pub use crate::world_spring::WorldSpring;
 
 mod constraint;
 mod fixed_frame;
@@ -34,6 +35,7 @@ mod spring;
 mod track_frame;
 mod utils;
 mod weight;
+mod world_spring;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Error(String);

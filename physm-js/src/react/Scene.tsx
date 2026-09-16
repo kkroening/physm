@@ -102,18 +102,19 @@ export default function Scene({
       node.slot === 'worldDecal' ? [node.build] : [],
     );
 
-    // Every kind of content, enumerated -- which has now gone stale twice, for
-    // world decals and then for springs, each time letting this route answer
-    // "no scene" where `buildScene` answered something. Asking instead whether
-    // anything registered at all would not go stale, and would change what a
-    // tree of only constraints or only anchors does; `docs/issues/0029.md`.
-    if (
-      !root.frames.length &&
-      !root.decals.length &&
-      !root.weights.length &&
-      !root.springs.length &&
-      !worldDecals.length
-    ) {
+    // Read off `root` rather than listed, because the list went stale three
+    // times in three changes -- world decals, then springs, then world springs
+    // -- each time letting this route answer "no scene" where `buildScene`
+    // answered something, which is the quietest failure this binding has.
+    // `FrameChildren` is all collections, so a new one counts by existing.
+    //
+    // Still a narrower question than "did anything register at all", which
+    // would also take in constraints and anchors and change what a tree of
+    // only those does; `docs/issues/0029.md` holds that one.
+    const empty =
+      Object.values(root).every((held) => !held.length) && !worldDecals.length;
+
+    if (empty) {
       // Cleared on this path too. The warnings below read these refs, so an
       // early return that left them alone would re-report the *previous*
       // assembly's failures against a scene that no longer has any.

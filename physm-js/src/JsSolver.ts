@@ -236,6 +236,7 @@ export default class JsSolver extends Solver {
 
   _getForceVectorEntry(
     baseFrame: Frame,
+    posMatMap: Map<FrameId, Mat3>,
     velMatMap: Map<FrameId, Mat3>,
     velSumMatMap: Map<FrameId, Mat3>,
     accelSumMatMap: Map<FrameId, Mat3>,
@@ -288,13 +289,30 @@ export default class JsSolver extends Solver {
     // Asked of the frame rather than written out here: a frame may carry
     // several springs, and what each is slack toward is its own business.
     const springForce = baseFrame.springForce(q);
+
+    // Summed over the subtree rather than read off this frame, because a
+    // spring anchored to the world resists rotation from wherever it comes --
+    // so a spring below this frame lands in this row too, scaled by how much
+    // this coordinate turns what is under it. Zero for a joint that slides,
+    // which is why the sum is skipped rather than multiplied by nothing.
+    const turnRate = baseFrame.turnRate();
+    const worldSpringTorque = turnRate
+      ? turnRate *
+        this._getDescendentFrames(baseFrame).reduce(
+          (total, frame) =>
+            total +
+            frame.worldSpringTorque(mapGet(posMatMap, frame.id, 'pose')),
+          0,
+        )
+      : 0;
     const externalForce =
       (externalForceMap && externalForceMap.get(baseFrame.id)) || 0;
-    result += externalForce + resistanceForce + springForce;
+    result += externalForce + resistanceForce + springForce + worldSpringTorque;
     return result;
   }
 
   _getForceVector(
+    posMatMap: Map<FrameId, Mat3>,
     velMatMap: Map<FrameId, Mat3>,
     velSumMatMap: Map<FrameId, Mat3>,
     accelSumMatMap: Map<FrameId, Mat3>,
@@ -312,6 +330,7 @@ export default class JsSolver extends Solver {
 
       array[index] = this._getForceVectorEntry(
         frame,
+        posMatMap,
         velMatMap,
         velSumMatMap,
         accelSumMatMap,
@@ -409,6 +428,7 @@ export default class JsSolver extends Solver {
     // );
     let massMatrix: number[][] = this._getCoefficientMatrix(stateMap);
     let forceVector: number[] = this._getForceVector(
+      posMatMap,
       velMatMap,
       velSumMatMap,
       accelSumMatMap,

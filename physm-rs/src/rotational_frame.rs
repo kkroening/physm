@@ -7,6 +7,7 @@ use crate::Mat3;
 use crate::Position;
 use crate::Spring;
 use crate::Weight;
+use crate::WorldSpring;
 
 #[derive(Debug)]
 pub struct RotationalFrame {
@@ -15,6 +16,7 @@ pub struct RotationalFrame {
     pub position: Position,
     pub resistance: f64,
     pub springs: Vec<Spring>,
+    pub world_springs: Vec<WorldSpring>,
     pub weights: Vec<Weight>,
 }
 
@@ -26,6 +28,7 @@ impl RotationalFrame {
             position: Position([0.0, 0.0]),
             resistance: 0.,
             springs: Vec::new(),
+            world_springs: Vec::new(),
             weights: Vec::new(),
         }
     }
@@ -50,6 +53,11 @@ impl RotationalFrame {
         self
     }
 
+    pub fn add_world_spring(mut self, spring: WorldSpring) -> Self {
+        self.world_springs.push(spring);
+        self
+    }
+
     pub fn add_weight(mut self, weight: Weight) -> Self {
         self.weights.push(weight);
         self
@@ -63,6 +71,11 @@ impl RotationalFrame {
             position: json::map_obj_item_or_default(obj, "position", Position::from_json_value)?,
             resistance: json::map_obj_item_or_default(obj, "resistance", json::value_to_f64)?,
             springs: json::map_obj_item_or_default(obj, "springs", json::value_to_springs)?,
+            world_springs: json::map_obj_item_or_default(
+                obj,
+                "worldSprings",
+                json::value_to_world_springs,
+            )?,
             weights: json::map_obj_item_or_default(obj, "weights", json::value_to_weights)?,
         })
     }
@@ -83,6 +96,15 @@ impl Frame for RotationalFrame {
 
     fn get_springs(&self) -> &[Spring] {
         &self.springs
+    }
+
+    fn get_world_springs(&self) -> &[WorldSpring] {
+        &self.world_springs
+    }
+
+    /// One: its coordinate *is* an angle, so everything below turns with it.
+    fn get_turn_rate(&self) -> f64 {
+        1.
     }
 
     fn get_weights(&self) -> &[Weight] {
@@ -137,11 +159,11 @@ mod tests {
         assert_eq!(frame.children.len(), 2);
         assert_eq!(
             format!("{:?}", frame.children[0]),
-            "RotationalFrame { children: [], id: \"b\", position: Position([1.5, 2.6]), resistance: 0.0, springs: [], weights: [] }",
+            "RotationalFrame { children: [], id: \"b\", position: Position([1.5, 2.6]), resistance: 0.0, springs: [], world_springs: [], weights: [] }",
         );
         assert_eq!(
             format!("{:?}", frame.children[1]),
-            "RotationalFrame { children: [], id: \"c\", position: Position([5.0, 28.0]), resistance: 0.0, springs: [], weights: [] }",
+            "RotationalFrame { children: [], id: \"c\", position: Position([5.0, 28.0]), resistance: 0.0, springs: [], world_springs: [], weights: [] }",
         );
         assert_eq!(
             format!("{:?}", frame.weights),

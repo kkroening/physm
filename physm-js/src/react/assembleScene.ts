@@ -59,6 +59,14 @@ export default function assembleScene(
   // root spring is collected by both routes and read by neither. Dropping it
   // silently takes a force out of a rig, which changes the answer rather than
   // the picture, and `<Spring>` sits beside `<Weight>` in the library.
+  if (root.worldSprings.length) {
+    throw new Error(
+      `A <WorldSpring> must be inside a frame: it is a spring between a frame ` +
+        `and the world, and ${root.worldSprings.length} was placed at the ` +
+        'root of the scene.',
+    );
+  }
+
   if (root.springs.length) {
     throw new Error(
       `A <Spring> must be inside a frame: a spring acts on a frame's own ` +

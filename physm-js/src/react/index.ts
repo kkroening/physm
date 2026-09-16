@@ -31,6 +31,7 @@ export { default as Line } from './Line';
 export { default as WorldLine } from './WorldLine';
 export { default as Weight } from './Weight';
 export { default as Spring } from './Spring';
+export { default as WorldSpring } from './WorldSpring';
 
 export { default as Anchor } from './Anchor';
 export { default as Coincidence } from './Coincidence';

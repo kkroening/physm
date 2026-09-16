@@ -7,6 +7,7 @@ import Spring from './Spring';
 import type Solver from './Solver';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
+import WorldSpring from './WorldSpring';
 import { DistanceConstraint } from './Constraint';
 import type Frame from './Frame';
 import type { FrameId, StateMap } from './Frame';
@@ -323,6 +324,45 @@ function getSpringScene() {
 }
 
 describeCrossValidation('spring scene', getSpringScene);
+
+/**
+ * A spring anchored to the world, under a mast that turns.
+ *
+ * The one force term that reads the pose rather than only the coordinate, and
+ * the one that lands in a row other than its own -- so it is where the two
+ * solvers could disagree about something besides arithmetic. Each walks state
+ * to pose its own way, and a spring that read the wrong matrix, or wrote its
+ * torque into the wrong rows, would still oscillate, just about the wrong
+ * place.
+ *
+ * **The mast has to turn.** A frame whose coordinate moves nothing has
+ * `d(theta_world)/dq` of zero, so a conservative spring and a joint actuator
+ * with a world set-point agree exactly beneath it. A live rotational ancestor
+ * is the only configuration in which they differ at all.
+ */
+function getWorldSpringScene() {
+  return new Scene({
+    frames: [
+      new RotationalFrame({
+        id: 'mast',
+        initialState: [0.4, 0.3],
+        springs: [new Spring(12)],
+        weights: [new Weight(9, { position: [4, 0] })],
+        frames: [
+          new RotationalFrame({
+            id: 'arm',
+            position: [4, 0],
+            initialState: [-0.2, 0],
+            worldSprings: [new WorldSpring(45, 0)],
+            weights: [new Weight(5, { position: [6, 0] })],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+describeCrossValidation('world-spring scene', getWorldSpringScene);
 
 /**
  * What the spring actually does, as distinct from the two solvers agreeing

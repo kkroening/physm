@@ -154,7 +154,12 @@ export function canContain(parent: Slot | 'root', child: Slot): boolean {
       // endpoints move with a body, which is the thing it exists not to do.
       return child !== 'worldDecal';
     case 'root':
-      return child !== 'weight' && child !== 'anchor' && child !== 'spring';
+      return (
+        child !== 'weight' &&
+        child !== 'anchor' &&
+        child !== 'spring' &&
+        child !== 'worldSpring'
+      );
     default:
       return false;
   }

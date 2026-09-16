@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use crate::Mat3;
 use crate::Spring;
 use crate::Weight;
+use crate::WorldSpring;
 
 pub type FrameId = String;
 
@@ -17,6 +18,13 @@ pub trait Frame: Debug {
     /// than a number, because a spring is a thing a person adds rather than a
     /// property the frame has.
     fn get_springs(&self) -> &[Spring];
+
+    /// Springs between this frame and the world -- see `WorldSpring`. Kept
+    /// apart from `get_springs` because their generalised forces land in
+    /// different rows.
+    fn get_world_springs(&self) -> &[WorldSpring] {
+        &[]
+    }
 
     fn get_weights(&self) -> &[Weight];
 
@@ -49,6 +57,26 @@ pub trait Frame: Debug {
             .iter()
             .map(|spring| spring.get_force(q))
             .sum()
+    }
+
+    /// The torque this frame's world-anchored springs apply, at a given pose.
+    ///
+    /// Not this frame's row alone: a spring anchored to the world resists
+    /// rotation from wherever it comes, so the solver sums this over a subtree
+    /// rather than reading it per row.
+    fn get_world_spring_torque(&self, pos_mat: &Mat3) -> f64 {
+        self.get_world_springs()
+            .iter()
+            .map(|spring| spring.get_torque(pos_mat))
+            .sum()
+    }
+
+    /// How much a unit of this frame's coordinate turns everything below it.
+    ///
+    /// `d(theta_world)/dq` for the subtree: one for a revolute joint, zero for
+    /// a coordinate that slides or moves nothing.
+    fn get_turn_rate(&self) -> f64 {
+        0.
     }
 }
 

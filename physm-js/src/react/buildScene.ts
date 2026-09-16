@@ -109,6 +109,7 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
         decals: [],
         weights: [],
         springs: [],
+        worldSprings: [],
         frames: [],
       };
       walkChildren(children, { ...walk, frameId: node.id, into });
@@ -128,6 +129,9 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
       return;
     case 'spring':
       walk.into.springs.push(node.build());
+      return;
+    case 'worldSpring':
+      walk.into.worldSprings.push(node.build());
       return;
     case 'anchor':
       if (node.id !== undefined) {
@@ -335,6 +339,7 @@ export default function buildScene(
     decals: [],
     weights: [],
     springs: [],
+    worldSprings: [],
     frames: [],
   };
   const anchors = new Map<string, AnchorPoint>();

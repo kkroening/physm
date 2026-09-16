@@ -340,6 +340,32 @@ fn get_composite_moment_mats(
     moment_mats
 }
 
+/// Each frame's world-anchored spring torque, summed over its subtree.
+///
+/// One reverse pass, the way `get_composite_force_mats` accumulates: a spring
+/// anchored to the world resists rotation from wherever it comes, so its
+/// torque belongs to every rotational frame between the world and it -- and a
+/// subtree sum read at each row is exactly that set.
+///
+/// Mirrors what `JsSolver` does with `_getDescendentFrames`.
+fn get_composite_world_spring_torques(
+    frames: &[&FrameBox],
+    index_path_map: &FrameIndexPathMap,
+    pos_mats: &[Mat3],
+) -> Vec<f64> {
+    debug_assert_eq!(index_path_map.len(), frames.len());
+    debug_assert_eq!(pos_mats.len(), frames.len());
+    let mut torques = vec![0.; frames.len()];
+    for index in (0..frames.len()).rev() {
+        torques[index] += frames[index].get_world_spring_torque(&pos_mats[index]);
+        if let Some(parent_index) = get_parent_index(index, index_path_map) {
+            let subtree = torques[index];
+            torques[parent_index] += subtree;
+        }
+    }
+    torques
+}
+
 fn get_composite_force_mats(
     frames: &[&FrameBox],
     index_path_map: &FrameIndexPathMap,
@@ -444,10 +470,12 @@ fn get_force_vector_entry(
     frames: &[&FrameBox],
     vel_mats: &[Mat3],
     composite_force_mats: &[Mat3],
+    composite_world_spring_torques: &[f64],
     states: &[State],
     external_forces: &[f64],
 ) -> f64 {
     debug_assert!(row_index < frames.len());
+    debug_assert_eq!(composite_world_spring_torques.len(), frames.len());
     debug_assert_eq!(vel_mats.len(), frames.len());
     debug_assert_eq!(composite_force_mats.len(), frames.len());
     debug_assert_eq!(states.len(), frames.len());
@@ -458,13 +486,23 @@ fn get_force_vector_entry(
     // Asked of the frame rather than written out here: a frame may carry
     // several springs, and what each is slack toward is its own business.
     let spring_force = frames[row_index].get_spring_force(states[row_index].q);
-    resistance_force + spring_force + weight_force + external_forces[row_index]
+
+    // Scaled by how much this coordinate turns what is under it: one for a
+    // revolute joint, zero for a coordinate that slides or moves nothing.
+    let world_spring_torque =
+        frames[row_index].get_turn_rate() * composite_world_spring_torques[row_index];
+    resistance_force
+        + spring_force
+        + world_spring_torque
+        + weight_force
+        + external_forces[row_index]
 }
 
 fn get_force_vector(
     frames: &[&FrameBox],
     vel_mats: &[Mat3],
     composite_force_mats: &[Mat3],
+    composite_world_spring_torques: &[f64],
     states: &[State],
     external_forces: &[f64],
 ) -> ForceVector {
@@ -475,6 +513,7 @@ fn get_force_vector(
             frames,
             vel_mats,
             composite_force_mats,
+            composite_world_spring_torques,
             states,
             external_forces,
         )
@@ -574,10 +613,13 @@ fn get_system_of_equations(
     );
     let unconstrained_matrix =
         get_coefficient_matrix(frames, index_path_map, &vel_mats, &composite_moment_mats);
+    let composite_world_spring_torques =
+        get_composite_world_spring_torques(frames, index_path_map, &pos_mats);
     let unconstrained_forces = get_force_vector(
         frames,
         &vel_mats,
         &composite_force_mats,
+        &composite_world_spring_torques,
         states,
         external_forces,
     );
@@ -1080,6 +1122,7 @@ mod tests {
     use crate::Spring;
     use crate::TrackFrame;
     use crate::Weight;
+    use crate::WorldSpring;
 
     use super::*;
 
@@ -1327,6 +1370,120 @@ mod tests {
                 .collect::<Vec<&str>>(),
             FRAME_IDS
         );
+    }
+
+    /// Two rotational frames and one sliding one, each carrying a world spring,
+    /// with their poses taken from the states they are in.
+    fn world_spring_rig() -> (Vec<FrameBox>, Vec<State>) {
+        let frames: Vec<FrameBox> = vec![Box::new(
+            RotationalFrame::new("mast".into())
+                .add_world_spring(WorldSpring::new(4., 0.))
+                .add_child(Box::new(
+                    RotationalFrame::new("arm".into())
+                        .add_world_spring(WorldSpring::new(10., 0.))
+                        .add_child(Box::new(
+                            TrackFrame::new("slide".into()).add_child(Box::new(
+                                RotationalFrame::new("tip".into())
+                                    .add_world_spring(WorldSpring::new(6., 0.)),
+                            )),
+                        )),
+                )),
+        )];
+        let states = vec![
+            State { q: 0.1, qd: 0. },
+            State { q: 0.2, qd: 0. },
+            State { q: 0.5, qd: 0. },
+            State { q: 0.3, qd: 0. },
+        ];
+
+        (frames, states)
+    }
+
+    #[test]
+    fn test_get_composite_world_spring_torques() {
+        // A spring anchored to the world resists rotation from wherever it
+        // comes, so its torque belongs to every frame between the world and
+        // it -- which a subtree sum read at each row is exactly. Mirrors what
+        // `JsSolver` does with `_getDescendentFrames`.
+        let (frames, states) = world_spring_rig();
+        let frames = super::sort_frames(&frames);
+        let index_path_map = super::get_index_path_map(&frames);
+        let pos_mats = super::get_pos_mats(&frames, &index_path_map, &states);
+        let torques =
+            super::get_composite_world_spring_torques(&frames, &index_path_map, &pos_mats);
+
+        // World orientations: the mast at 0.1, the arm at 0.3, the tip at 0.6
+        // -- the slide between them carries it without turning it.
+        let mast_torque = 4. * -0.1;
+        let arm_torque = 10. * -0.3;
+        let tip_torque = 6. * -0.6;
+
+        assert_eq!(
+            frames
+                .iter()
+                .map(|f| f.get_id().clone())
+                .collect::<Vec<_>>(),
+            vec!["mast", "arm", "slide", "tip"]
+        );
+        assert_abs_diff_eq!(
+            torques[0],
+            mast_torque + arm_torque + tip_torque,
+            epsilon = 1e-12
+        );
+        assert_abs_diff_eq!(torques[1], arm_torque + tip_torque, epsilon = 1e-12);
+
+        // Carried *through* the sliding joint rather than stopped by it: what
+        // decides whether it lands in a row is that row's own turn rate.
+        assert_abs_diff_eq!(torques[2], tip_torque, epsilon = 1e-12);
+        assert_abs_diff_eq!(torques[3], tip_torque, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn test_world_spring_torque_reaches_only_rows_that_turn() {
+        // The row is scaled by `d(theta_world)/dq`, which is zero for a joint
+        // that slides: a cart carries what it holds without turning it, so a
+        // spring below it says nothing in its row even though it is in the
+        // subtree.
+        let (frames, states) = world_spring_rig();
+        let frames = super::sort_frames(&frames);
+        let index_path_map = super::get_index_path_map(&frames);
+        let pos_mats = super::get_pos_mats(&frames, &index_path_map, &states);
+        let torques =
+            super::get_composite_world_spring_torques(&frames, &index_path_map, &pos_mats);
+        let vel_mats = super::get_vel_mats(
+            &frames,
+            &index_path_map,
+            &pos_mats,
+            &super::get_inv_pos_mats(&pos_mats),
+            &states,
+        );
+        let composite_force_mats = vec![Mat3::zeros(); frames.len()];
+        let external_forces = vec![0.; frames.len()];
+        let entry = |row| {
+            super::get_force_vector_entry(
+                row,
+                &frames,
+                &vel_mats,
+                &composite_force_mats,
+                &torques,
+                &states,
+                &external_forces,
+            )
+        };
+
+        // Nothing is moving and there is no weight force, so each row is its
+        // own share of the spring torques and nothing else.
+        assert_abs_diff_eq!(
+            entry(0),
+            4. * -0.1 + 10. * -0.3 + 6. * -0.6,
+            epsilon = 1e-12
+        );
+        assert_abs_diff_eq!(entry(1), 10. * -0.3 + 6. * -0.6, epsilon = 1e-12);
+
+        // The sliding joint has a spring below it in its subtree and takes
+        // none of it: its coordinate does not turn what it carries.
+        assert_abs_diff_eq!(entry(2), 0., epsilon = 1e-12);
+        assert_abs_diff_eq!(entry(3), 6. * -0.6, epsilon = 1e-12);
     }
 
     #[test]
@@ -1838,11 +1995,14 @@ mod tests {
                 &weight_pos_vecs,
                 &gravity,
             );
+            let composite_world_spring_torques =
+                super::get_composite_world_spring_torques(&frames, &index_path_map, &pos_mats);
             super::get_force_vector_entry(
                 row_index,
                 &frames,
                 &vel_mats,
                 &composite_force_mats,
+                &composite_world_spring_torques,
                 &states,
                 &external_forces,
             )
@@ -1980,10 +2140,16 @@ mod tests {
                         &vel_mats,
                         &composite_moment_mats,
                     );
+                    let composite_world_spring_torques = super::get_composite_world_spring_torques(
+                        &frames,
+                        &index_path_map,
+                        &pos_mats,
+                    );
                     let actual_forces = super::get_force_vector(
                         &frames,
                         &vel_mats,
                         &composite_force_mats,
+                        &composite_world_spring_torques,
                         &states,
                         &external_forces,
                     );

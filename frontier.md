@@ -65,8 +65,19 @@ sizes:
    external-force slice constant for a batch, so such an expression is
    evaluated per *batch*. That is the granularity the demo already ships, so it
    inherits rather than needing something new.
-5. **A spring whose rest direction is world-referenced**, which needs the
-   accumulated pose and is core work on both sides.
+5. ~~**A spring whose rest direction is world-referenced**~~ -- done, and it
+   turned out **not to be signals work at all**. Page 2 is right that the rest
+   orientation depends on the accumulated pose; what does not follow is that an
+   expression has to carry it. The solver already walks state to pose every
+   tick, so a frame can be asked what its spring is doing and answer from its
+   own pose.
+
+   The narrow finding is the one that survives: *a rest expressed as a constant,
+   in a frame the solver already walks, needs no machinery.* The broader claim
+   -- that this disposes of signals for rest directions -- does not follow: the
+   batch-granularity objection is against one delivery mechanism rather than
+   against the idea, and a rest that *sweeps* references no other frame and is
+   still outside.
 
 **Not taken here:** what survives a rebuild when structure changes at run time.
 Page 2 reopens [0014](docs/issues/0014.md)'s reset-on-structural-edit rule for
@@ -184,13 +195,13 @@ anchored elsewhere distinguishable, which a pair of numbers on the frame cannot
 do, and which is how a first attempt at the world-referenced one came to
 implement a non-conservative actuator without anybody noticing.
 
-The local joint spring is done in that shape. Next is the one **anchored to the
-world** -- the crane arm that holds itself horizontal. Its physics is written
-and reviewed already; what it needs is the conservative reading, which means the
-restoring torque enters the row of every rotational ancestor rather than the
-frame's own alone, and so the force assembly stops being computable row by row.
-After that, a rest direction referencing *another frame*, which is the one that
-genuinely wants signals and wants the port surface first.
+The local joint spring and the one **anchored to the world** are both done in
+that shape. The second took the conservative reading -- its torque enters the
+row of every rotational frame between the world and it -- which turned out to
+cost one more reverse pass over the same subtree the weight terms already
+accumulate over, rather than the restructuring it looked like. What is left is a
+rest direction referencing *another frame*, which is the one that genuinely
+wants signals and wants the port surface first.
 
 **Standing fallback when the main line is blocked:** the expression graph viewer
 ([0018](docs/issues/0018.md)). It is a check on the representation as much as a
@@ -322,6 +333,14 @@ wrongly -- so it is worth early and is never urgent.
 
 ## Done
 
+- **A spring that holds a crane arm horizontal** -- `<WorldSpring>` is anchored
+  to the world rather than to the joint, so a frame cancels whatever it hangs
+  from instead of leaning with it, and goes on cancelling it while the scene
+  runs. Conservative: its torque enters the row of every rotational frame
+  between the world and it, which is the difference between a spring and a
+  joint actuator that can pump energy without bound. Both solvers, held to each
+  other by a cross-validated rig whose mast turns -- the only configuration in
+  which the two readings differ at all.
 - **A line between two points on different bodies** -- the wish list's own
   example, which no `<Line>` prop could express because its endpoints have no
   common frame. An expression is structural or signal; a signal reads where the

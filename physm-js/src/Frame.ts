@@ -5,6 +5,7 @@ import type { State } from './State';
 import type { Vec3 } from './Vec3';
 import Decal from './Decal';
 import Spring from './Spring';
+import WorldSpring from './WorldSpring';
 import Weight from './Weight';
 import { ZERO_STATE, coerceState } from './State';
 import { generateRandomId } from './utils';
@@ -19,6 +20,7 @@ export interface FrameOptions {
   decals?: Decal[];
   weights?: Weight[];
   springs?: Spring[];
+  worldSprings?: WorldSpring[];
   frames?: Frame[];
   resistance?: number;
   initialState?: number | readonly number[] | null;
@@ -55,6 +57,17 @@ export default class Frame {
    */
   readonly springs: Spring[];
 
+  /**
+   * Springs between this frame and the world -- see `WorldSpring`.
+   *
+   * Kept apart from `springs` because they are different devices rather than
+   * two settings of one: a joint spring acts on this frame's coordinate, and
+   * one anchored to the world resists any rotation of this frame, including
+   * rotation inherited from above. Their generalised forces land in different
+   * rows, which is the difference a shared list would hide.
+   */
+  readonly worldSprings: WorldSpring[];
+
   readonly frames: Frame[];
   readonly resistance: number;
 
@@ -65,6 +78,7 @@ export default class Frame {
     decals = [],
     weights = [],
     springs = [],
+    worldSprings = [],
     frames = [],
     resistance = 0,
     initialState = ZERO_STATE,
@@ -77,6 +91,26 @@ export default class Frame {
     this.decals = decals;
     this.weights = weights;
     this.springs = springs;
+    this.worldSprings = worldSprings;
+
+    // Refused here rather than in the binding, so that every route in --
+    // JSX, the walk, a document, a constructor called by hand -- meets the
+    // same rule. A spring anchored to the world applies a *torque*, and a
+    // coordinate that slides or moves nothing has no torque to receive: the
+    // force would enter a row where it means nothing, silently.
+    // Checked here rather than omitted from each non-turning frame's options,
+    // the way `resistance` is from a fixed frame's. That omit works because
+    // nothing checks resistance at run time; this rule is about `turnRate`,
+    // which the *base* frame also answers zero to -- so the run-time check has
+    // to exist whatever the subclass types say, and a second statement of it
+    // would only be a second thing to keep in step.
+    if (worldSprings.length && !this.turnRate()) {
+      throw new Error(
+        `A spring anchored to the world is on ${this.typeName} '${this.id}', ` +
+          'whose coordinate does not turn -- so the torque it applies would ' +
+          'act on nothing. It belongs on a frame that rotates.',
+      );
+    }
     this.frames = frames;
     this.resistance = resistance;
     this.initialState = coerceState(initialState);
@@ -128,6 +162,35 @@ export default class Frame {
     return this.springs.reduce((total, spring) => total + spring.force(q), 0);
   }
 
+  /**
+   * The torque this frame's world-anchored springs apply, at the given pose.
+   *
+   * Separate from `springForce` because it does not belong to this frame's row
+   * alone: a spring anchored to the world resists rotation from wherever it
+   * comes, so this torque enters the row of every rotational frame above this
+   * one as well. The solver sums it over a subtree rather than reading it per
+   * row, exactly as it already sums the weights.
+   */
+  worldSpringTorque(pose: Mat3): number {
+    return this.worldSprings.reduce(
+      (total, spring) => total + spring.torque(pose),
+      0,
+    );
+  }
+
+  /**
+   * How much a unit of this frame's coordinate turns everything below it.
+   *
+   * `d(theta_world)/dq` for the subtree: one for a revolute joint, zero for a
+   * frame whose coordinate slides or moves nothing. It is what decides whether
+   * a world-anchored spring below this frame appears in its row at all, and it
+   * is a property of the joint rather than something the solver can infer --
+   * a sliding joint carries a frame without turning it.
+   */
+  turnRate(): number {
+    return 0;
+  }
+
   toJsonObj({ includeDecals = false }: FrameJsonOptions = {}): Record<
     string,
     unknown
@@ -139,6 +202,7 @@ export default class Frame {
       position: vec3.toPlanar(this.position),
       resistance: this.resistance,
       springs: this.springs.map((spring) => spring.toJsonObj()),
+      worldSprings: this.worldSprings.map((spring) => spring.toJsonObj()),
       type: this.typeName,
       weights: this.weights.map((weight) => weight.toJsonObj()),
     };

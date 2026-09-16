@@ -5,6 +5,7 @@ use crate::RotationalFrame;
 use crate::Spring;
 use crate::TrackFrame;
 use crate::Weight;
+use crate::WorldSpring;
 
 use serde_json::Map;
 use serde_json::Value;
@@ -79,6 +80,20 @@ pub fn value_to_springs(value: &Value) -> Result<Vec<Spring>, Error> {
         .ok_or_else(|| Error(format!("Expected `springs` to be an array; got {}", value)))?
         .iter()
         .map(Spring::from_json_value)
+        .collect::<Result<_, _>>()
+}
+
+pub fn value_to_world_springs(value: &Value) -> Result<Vec<WorldSpring>, Error> {
+    value
+        .as_array()
+        .ok_or_else(|| {
+            Error(format!(
+                "Expected `worldSprings` to be an array; got {}",
+                value
+            ))
+        })?
+        .iter()
+        .map(WorldSpring::from_json_value)
         .collect::<Result<_, _>>()
 }
 

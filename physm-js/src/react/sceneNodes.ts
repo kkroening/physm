@@ -11,6 +11,7 @@ import type { WorldDecal } from './../Decal';
 import type Frame from './../Frame';
 import type { FrameId } from './../Frame';
 import type Spring from './../Spring';
+import type WorldSpring from './../WorldSpring';
 import type Weight from './../Weight';
 import type { PositionLike } from './../Scene';
 import type { ReactNode } from 'react';
@@ -94,6 +95,7 @@ export type SceneNode =
     }
   | { readonly slot: 'weight'; readonly build: () => Weight }
   | { readonly slot: 'spring'; readonly build: () => Spring }
+  | { readonly slot: 'worldSpring'; readonly build: () => WorldSpring }
   | {
       readonly slot: 'constraint';
       /**
@@ -161,6 +163,7 @@ export interface FrameChildren {
   readonly decals: Decal[];
   readonly weights: Weight[];
   readonly springs: Spring[];
+  readonly worldSprings: WorldSpring[];
   readonly frames: Frame[];
 }
 
@@ -330,6 +333,7 @@ export function buildChildren(
     decals: [],
     weights: [],
     springs: [],
+    worldSprings: [],
     frames: [],
   };
 
@@ -347,6 +351,9 @@ export function buildChildren(
         break;
       case 'spring':
         children.springs.push(node.build());
+        break;
+      case 'worldSpring':
+        children.worldSprings.push(node.build());
         break;
       case 'frame':
         children.frames.push(node.build(buildChildren(entries, key)));

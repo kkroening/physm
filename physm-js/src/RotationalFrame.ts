@@ -40,4 +40,9 @@ export default class RotationalFrame extends Frame {
   override isJoint(): boolean {
     return true;
   }
+
+  /** One: its coordinate *is* an angle, so everything below turns with it. */
+  override turnRate(): number {
+    return 1;
+  }
 }

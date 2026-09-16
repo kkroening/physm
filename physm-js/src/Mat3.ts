@@ -241,9 +241,44 @@ export function scaleFactor(m: Mat3): number {
  * are calibrated against -- it differs from `atan2(m10, m00)` by a half turn.
  * Preserved rather than corrected, because `TrackFrame` and `BoxDecal` read it
  * and a "fix" here would silently rotate the rendered scene.
+ *
+ * **`orientation` below is the other convention**, and is what a caller wants
+ * when it has to agree with the geometry rather than with these two. The pair
+ * differ by pi, which is a trap worth naming from both sides.
  */
 export function rotationAngle(m: Mat3): number {
   return Math.atan2(m[1], -m[0]);
+}
+
+/**
+ * Which way the transform points, in radians: `atan2(m10, m00)`.
+ *
+ * The rotation as trigonometry means it -- `orientation(rotation(a))` is `a`.
+ * That is *not* what `rotationAngle` above returns, which is a half turn away
+ * and stays that way because the drawing is calibrated against it.
+ *
+ * This one exists rather than a correction because the difference is
+ * load-bearing for those older callers: a spring pulling a frame toward a
+ * direction in the world has to agree with the geometry, and half a turn of
+ * disagreement points the crane arm at the ground.
+ */
+export function orientation(m: Mat3): number {
+  return Math.atan2(m[3], m[0]);
+}
+
+/**
+ * An angle folded into `(-pi, pi]`, so a difference takes the short way round.
+ *
+ * The interval is closed at `+pi` and open at `-pi`, and which end is which is
+ * not cosmetic: `physm-rs` carries the same function, and an implementation
+ * that folded to `[-pi, pi)` would return the opposite maximal torque at
+ * exactly a half turn from rest -- for a rest a person can write, at the
+ * default initial state. `utils.rs` mirrors this case for case.
+ */
+export function wrapAngle(angle: number): number {
+  const turned = (angle + Math.PI) % (2 * Math.PI);
+
+  return (turned <= 0 ? turned + 2 * Math.PI : turned) - Math.PI;
 }
 
 /** The translation column, as a plain `[x, y]`. */
