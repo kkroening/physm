@@ -1,6 +1,6 @@
 import parseExpression from './parseExpression';
 import { evaluate } from './../expression';
-import { expressionSource, literalOf, parameterOf } from './propValue';
+import { literalOf, parameterOf, shownValueOf } from './propValue';
 import type { PropValue } from './propValue';
 
 /** What the text parses to, or a throw carrying the refusal it gave instead. */
@@ -13,16 +13,16 @@ function nodeOf(text: string): PropValue {
   return parsed.node;
 }
 
-/** How the parsed text reads back as source, which is the emitter's form. */
+/**
+ * How the parsed text reads back, through the printer the pane actually runs.
+ *
+ * `shownValueOf` rather than a configuration of `expressionSource` assembled
+ * here: the two agree on finite numbers and diverge on exactly the values
+ * `describe` exists to handle, so a printer built for the test would verify a
+ * configuration that ships nowhere.
+ */
 function sourceOf(text: string): string {
-  const node = nodeOf(text);
-
-  return 'kind' in node && node.kind === 'operation'
-    ? expressionSource(node, {
-        reference: (name) => name,
-        value: (held) => JSON.stringify(held) ?? String(held),
-      })
-    : JSON.stringify(node);
+  return shownValueOf(nodeOf(text))!;
 }
 
 /** The refusal the text gives, or a throw saying it was accepted. */
@@ -65,6 +65,10 @@ describe('what a person types into a prop box', () => {
     ['dot(vec(1, 2), vec(3, 4))', 'dot(vec(1, 2), vec(3, 4))'],
   ])('%s', (typed, source) => {
     expect(sourceOf(typed)).toBe(source);
+
+    // And printing is the parser's inverse, which idempotence is the cheap
+    // statement of: what comes out has to go back in and come out the same.
+    expect(sourceOf(source)).toBe(source);
   });
 
   test('what it parses to is what it computes', () => {
@@ -81,14 +85,16 @@ describe('what a person types into a prop box', () => {
     ['', 'An expression needs something in it.'],
     ['  ', 'An expression needs something in it.'],
     ['2 +', 'Expected a value, and the expression ended.'],
-    ['2 + * 3', "Expected a value, and found '*'."],
+    ['2 + * 3', "Expected a value at character 5, and found '*'."],
     ['(2 + 3', "Expected ')', and the expression ended."],
-    ['2 3', "'3' has nothing to join to."],
+    ['2 3', "'3' at character 3 has nothing to join to."],
     ['2 @ 3', "'@' has no meaning in an expression."],
     ['lerp(1, 2)', 'There is no operation called lerp.'],
     ['sqrt(1, 2)', 'sqrt takes 1 operand, and was given 2.'],
     ['vec(1)', 'vec takes 2 operands, and was given 1.'],
     ['vec()', 'vec takes 2 operands, and was given 0.'],
+    ['1e999 * 2', '1e999 is too large to be a number.'],
+    ['(2 + 3 4', "Expected ')' at character 8, and found '4'."],
   ])('%s is refused', (typed, refusal) => {
     expect(refusalOf(typed)).toBe(refusal);
   });

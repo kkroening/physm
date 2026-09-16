@@ -27,10 +27,13 @@ comparison and selection, and the two open questions below.
 
 **Still open, and owed an answer around here:**
 
-- [0024](docs/issues/0024.md) -- an angle typed as an expression skips the
-  field's degree scaling, so `45` and `30 + 15` differ by 57.3 in the same box.
-  Scaling the node would put the surface's unit into the stored graph, so it
-  wants the same answer as [0022](docs/issues/0022.md) rather than a multiply.
+- **What the language admits**, which is three issues asking one question and
+  is cheaper answered together than three times:
+  [0022](docs/issues/0022.md) (do the parameter types grow toward the prop
+  kinds), [0024](docs/issues/0024.md) (what unit is an angle expression in) and
+  [0025](docs/issues/0025.md) (is there exponentiation). An answer to any
+  constrains the others -- a `Length` type wants to know whether `x**2` yields
+  one, and an `Angle` carrying a unit wants to know what a power of it means.
 - [0023](docs/issues/0023.md) -- whether to run a real mutation tester. Seven
   review rounds have found something the hand enumeration missed in five
   distinct ways, and a tool has no frame to miss things from.
@@ -253,9 +256,11 @@ wrongly -- so it is worth early and is never urgent.
   representation rather than a second opinion about it. Resolves
   [0018](docs/issues/0018.md).
 - **Expressions, typed** — `halfLength * 2` in a prop box becomes the graph the
-  emitter writes as `mul(halfLength, 2)`, refused with a sentence rather than a
-  stack trace while it is half-typed, and editable where it is readable: a
-  field that can print an expression takes a new one.
+  emitter writes as `mul(halfLength, 2)`, and a refusal says what was wrong and
+  where, beside the field. A prop is offered as text when the field can *read
+  its own output back*, so a graph with no syntax for it is drawn rather than
+  offered as text a person cannot change. An angle is not offered at all while
+  its unit is open ([0024](docs/issues/0024.md)).
 - **Expression nodes** — a prop can be computed rather than stated:
   `position={vec(3, mul(halfLength, 2))}`. A constructor returns a node rather
   than a result, so one form serves a hand-written component, the module the

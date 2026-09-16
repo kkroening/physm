@@ -16,7 +16,7 @@ import { InvalidStateMapError } from './../Solver';
 import buildScene from './../react/buildScene';
 import { documentFrom, elementOf, nodesFrom } from './sceneDocument';
 import { literalOf, parameterOf } from './propValue';
-import { div, mul, vec } from './../expression';
+import { div, dot, mul, vec } from './../expression';
 import type { DocNode, SceneDocument } from './sceneDocument';
 import type { PropValue } from './propValue';
 import { vi } from 'vitest';
@@ -1070,33 +1070,166 @@ describe('Editor, a prop the document computes', () => {
     ).toBeVisible();
   });
 
-  /** A weight in a frame, with a mass written out rather than computed. */
-  const stating = (): SceneDocument =>
-    documentFrom(
-      <RotationalFrame id="arm">
-        <Weight mass={1} position={[1, 0]} />
-      </RotationalFrame>,
-    );
+  /**
+   * Type `text` into `input` the way a person does: one character at a time.
+   *
+   * Which is the only model that can see a field committing on every
+   * keystroke. Setting the whole string in one event tests a field that
+   * commits on blur, and this one does not -- the first version of this
+   * feature was unusable for want of exactly this loop, because committing
+   * the lone name `h` unmounted the input the person was typing into.
+   */
+  const type = (input: HTMLElement, text: string): void => {
+    for (let upto = 1; upto <= text.length; upto += 1) {
+      fireEvent.change(input, { target: { value: text.slice(0, upto) } });
+    }
+  };
+
+  /** A `Scene` declaring `half`, with a weight whose mass is written out. */
+  const declaring = (): SceneDocument => ({
+    root: 'Scene',
+    definitions: [
+      {
+        name: 'Scene',
+        parameters: [{ name: 'half', type: 'scalar', default: 3 }],
+        body: nodesFrom(
+          <RotationalFrame id="arm">
+            <Weight mass={1} position={[1, 0]} />
+          </RotationalFrame>,
+        ),
+      },
+    ],
+  });
 
   test('typing a computation into a prop box stores the graph', () => {
-    render(<Editor initialDocument={stating()} />);
-    const props = select('Weight');
-    fireEvent.change(within(props).getByLabelText('Mass'), {
-      target: { value: '2 * 3' },
-    });
+    render(<Editor initialDocument={declaring()} />);
+    type(within(select('Weight')).getByLabelText('Mass'), 'half * 2');
 
     // Infix in, constructor out: the two are the same expression, and only the
-    // printed form is the call.
-    expect(code()).toContain('mass={mul(2, 3)}');
+    // printed form is the call. Typed a character at a time, so the lone name
+    // `h` and the incomplete `half *` both pass through the field.
+    expect(code()).toContain('mass={mul(half, 2)}');
     expect(screen.queryByRole('alert')).toBeNull();
     expect(
       within(select('Weight')).getByRole('img', { name: 'Mass as a graph' }),
     ).toBeVisible();
+
+    // And a run of keystrokes in one field is one step, as it is for a value.
+    fireEvent.click(undoButton());
+
+    expect(code()).toContain('mass={1}');
+  });
+
+  test('a reference typed into a field can be typed out of again', () => {
+    // A lone name is a reference, and a field that prints one back can take
+    // one -- where a field that could not would be replaced mid-keystroke by
+    // the row that shows it, which is what made this unusable at first.
+    render(<Editor initialDocument={declaring()} />);
+    type(within(select('Weight')).getByLabelText('Mass'), 'half');
+
+    expect(code()).toContain('mass={half}');
+    expect(within(select('Weight')).getByLabelText('Mass')).toHaveValue('half');
+
+    type(within(select('Weight')).getByLabelText('Mass'), '4');
+
+    expect(code()).toContain('mass={4}');
+  });
+
+  test('a refused keystroke says why, and leaves the document alone', () => {
+    render(<Editor initialDocument={declaring()} />);
+    const mass = within(select('Weight')).getByLabelText('Mass');
+    fireEvent.change(mass, { target: { value: 'sqrt(1, 2)' } });
+    const props = screen.getByRole('region', { name: 'Properties' });
+    const said = within(props).getByRole('status');
+
+    // A refusal a person cannot infer from the text has to be spelled out:
+    // `sqrt takes 1 operand` is nothing on screen states.
+    expect(said).toHaveTextContent('sqrt takes 1 operand, and was given 2.');
+    expect(mass).toHaveAttribute('aria-describedby', said.id);
+    expect(mass).toHaveAttribute('aria-invalid', 'true');
+    expect(code()).toContain('mass={1}');
+  });
+
+  test('a field shows a reference it was given, without being typed in', () => {
+    const doc = declaring();
+    render(
+      <Editor
+        initialDocument={{
+          ...doc,
+          definitions: doc.definitions.map((definition) => ({
+            ...definition,
+            body: definition.body.map((frame) => ({
+              ...frame,
+              children: frame.children.map((weight) => ({
+                ...weight,
+                props: { ...weight.props, mass: parameterOf('half') },
+              })),
+            })),
+          })),
+        }}
+      />,
+    );
+
+    expect(within(select('Weight')).getByLabelText('Mass')).toHaveValue('half');
+  });
+
+  test('a graph this field cannot read back is shown, not offered as text', () => {
+    // The printer can render graphs the grammar has no syntax for -- a point
+    // operand comes from a hand-written component -- and an editable box a
+    // person cannot change one character of would be worse than a drawing.
+    const doc = declaring();
+    render(
+      <Editor
+        initialDocument={{
+          ...doc,
+          definitions: doc.definitions.map((definition) => ({
+            ...definition,
+            body: definition.body.map((frame) => ({
+              ...frame,
+              children: frame.children.map((weight) => ({
+                ...weight,
+                props: { ...weight.props, mass: dot([1, 2], [3, 4]) },
+              })),
+            })),
+          })),
+        }}
+      />,
+    );
+    const props = select('Weight');
+
+    expect(within(props).queryByLabelText('Mass')).toBeNull();
+    expect(props.querySelector('.editor__reference')).toHaveTextContent(
+      'dot([1, 2], [3, 4])',
+    );
+  });
+
+  test('a value written the long way is taken as a value', () => {
+    // `(4)` and `- 4` parse and are not computations, so they go down the
+    // value path -- where the field's scaling and its required-prop rules
+    // live. Refusing them would be refusing a number for being written oddly.
+    render(<Editor initialDocument={declaring()} />);
+    const mass = within(select('Weight')).getByLabelText('Mass');
+    fireEvent.change(mass, { target: { value: '(4)' } });
+
+    expect(code()).toContain('mass={4}');
+    expect(mass).not.toHaveAttribute('aria-invalid');
+  });
+
+  test('an angle is not typed as an expression while its unit is open', () => {
+    // `45` in that box is degrees and `30 + 15` would be radians, so a
+    // computed angle is shown rather than typed until 0024 is answered.
+    render(<Editor />);
+    const angle = within(select('TrackFrame')).getByLabelText('Angle');
+    fireEvent.change(angle, { target: { value: '30 + 15' } });
+
+    expect(angle).toHaveAttribute('aria-invalid', 'true');
+    expect(code()).not.toContain('add(30, 15)');
   });
 
   test('a computation can be typed over, and cleared back to a value', () => {
     render(<Editor initialDocument={computing()} />);
-    const mass = () => within(select('Weight')).getByLabelText('Mass');
+    const mass = (): HTMLElement =>
+      within(select('Weight')).getByLabelText('Mass');
     fireEvent.change(mass(), { target: { value: 'mul(2, 4)' } });
 
     expect(code()).toContain('mass={mul(2, 4)}');
@@ -1110,7 +1243,7 @@ describe('Editor, a prop the document computes', () => {
   });
 
   test('text that is not an expression is refused, and nothing is stored', () => {
-    render(<Editor initialDocument={stating()} />);
+    render(<Editor initialDocument={declaring()} />);
     const mass = within(select('Weight')).getByLabelText('Mass');
     fireEvent.change(mass, { target: { value: '2 +' } });
 

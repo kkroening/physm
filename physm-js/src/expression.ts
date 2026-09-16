@@ -323,12 +323,14 @@ type Operands<K extends Operation> = Parameters<(typeof OPERATIONS)[K]>;
  *
  * For a caller building a node from text rather than from a constructor: the
  * arity is the implementation's own parameter count, so a parser checking
- * against it cannot drift from what `evaluate` will refuse.
+ * against it cannot drift from what `evaluate` will refuse *about the count*.
+ * It says nothing about the operands themselves -- a parser that accepted a
+ * non-finite number would still be handing over what `scalar` refuses.
  */
 export function arityOf(name: string): number | null {
   return Object.hasOwn(OPERATIONS, name)
-    ? ((OPERATIONS[name as Operation] as (...operands: never[]) => unknown)
-        .length ?? null)
+    ? (OPERATIONS[name as Operation] as (...operands: never[]) => unknown)
+        .length
     : null;
 }
 

@@ -8,10 +8,14 @@ import type { PropValue } from './propValue';
  *
  * [0016's expressions design](../../../docs/issues/0016/04-expressions.md)
  * keeps the two apart on purpose: "someone typing into a prop box still writes
- * `halfLength * 2`, or `sqrt(x**2 + y**2)`. The editor parses it to the same
- * graph either way; only the *printed* form is the constructor." So infix is
- * the surface and calls are the storage, and this is the one direction that
- * has to exist -- the other is `expressionSource`.
+ * `halfLength * 2` ... The editor parses it to the same graph either way; only
+ * the *printed* form is the constructor." So infix is the surface and calls
+ * are the storage, and this is the one direction that has to exist -- the
+ * other is `expressionSource`.
+ *
+ * That sentence goes on to offer `sqrt(x**2 + y**2)`, which this grammar
+ * refuses: there is no `**` token and no `pow` among the operations, and
+ * whether the language should have either is `docs/issues/0025.md`.
  *
  * **A refusal rather than a throw**, because this runs on every keystroke in a
  * field that has to keep working while the text is half-typed. It reads like
@@ -116,9 +120,13 @@ export default function parseExpression(text: string): Parsed {
   const unexpected = (wanted: string): { refusal: string } => {
     const token = peek();
 
+    // With the position, because a refusal that cannot be located in a long
+    // expression is half a sentence -- and the character is what a person
+    // counts, so it is one-based.
     return {
       refusal: token
-        ? `Expected ${wanted}, and found '${token.text}'.`
+        ? `Expected ${wanted} at character ${token.at + 1}, and found ` +
+          `'${token.text}'.`
         : `Expected ${wanted}, and the expression ended.`,
     };
   };
@@ -200,7 +208,14 @@ export default function parseExpression(text: string): Parsed {
     }
 
     if (token.kind === 'number') {
-      return { operand: Number(token.text) };
+      const value = Number(token.text);
+
+      // `parseNumber` guards this on the value path, so without it the two
+      // commit paths of one field would disagree about whether a number has
+      // to be finite -- and the one reaching the document is this one.
+      return Number.isFinite(value)
+        ? { operand: value }
+        : { refusal: `${token.text} is too large to be a number.` };
     }
 
     if (token.text === '(') {
@@ -219,7 +234,11 @@ export default function parseExpression(text: string): Parsed {
     }
 
     if (token.kind !== 'name') {
-      return { refusal: `Expected a value, and found '${token.text}'.` };
+      return {
+        refusal:
+          `Expected a value at character ${token.at + 1}, and found ` +
+          `'${token.text}'.`,
+      };
     }
 
     if (peek()?.text !== '(') {
@@ -271,7 +290,11 @@ export default function parseExpression(text: string): Parsed {
   }
 
   if (at !== tokens.length) {
-    return { refusal: `'${tokens[at]!.text}' has nothing to join to.` };
+    return {
+      refusal:
+        `'${tokens[at]!.text}' at character ${tokens[at]!.at + 1} has nothing ` +
+        'to join to.',
+    };
   }
 
   // Only here does an operand become a prop value: a bare number is a literal

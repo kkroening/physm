@@ -1,7 +1,7 @@
 import ExpressionView from './ExpressionView';
 import parseExpression from './parseExpression';
 import { Fragment, useId, useRef, useState } from 'react';
-import { isOperation } from './../expression';
+import { describe, isOperation } from './../expression';
 import { literalOf, shownValueOf } from './propValue';
 import {
   definitionOf,
@@ -60,14 +60,35 @@ interface ParameterSelection {
 }
 
 /**
- * The prop kinds a field shows as text a person can type back.
+ * The prop kinds whose field is one line of text a person can type back.
  *
- * Which is what decides whether a *computed* prop of that kind is editable:
- * the field can print the expression and parse a new one, so showing it
- * read-only would withhold an editor that works. A pair or a flag field
- * cannot, so a computed prop of those kinds is shown rather than edited.
+ * `angle` is deliberately absent. An angle is held in radians and shown in
+ * degrees, and the field scales a *value* both ways -- but not an expression,
+ * so `45` and `30 + 15` in one box would differ by 57.3 with nothing marking
+ * either. `docs/issues/0024.md` carries the design question; until it is
+ * answered a computed angle is shown rather than typed, which is what it was
+ * before this field could take one at all.
  */
-const TYPED_TEXT = new Set(['number', 'length', 'angle']);
+const TYPED_TEXT: ReadonlySet<PropSpec['kind']> = new Set(['number', 'length']);
+
+/**
+ * Whether a prop the document holds is one this pane can offer a field for.
+ *
+ * Stated as a round trip rather than as an inventory: a field a person can
+ * type in is one whose text this field can *read*. The printer can render
+ * graphs the grammar has no syntax for -- `dot([1, 2], [3, 4])` from a
+ * hand-written component -- and offering an editable box for one would give a
+ * person text they cannot change a character of, with no way to be told why.
+ */
+function typeable(held: PropValue | undefined, spec: PropSpec): boolean {
+  if (!TYPED_TEXT.has(spec.kind)) {
+    return false;
+  }
+
+  const shown = shownValueOf(held);
+
+  return shown !== null && !('refusal' in parseExpression(shown));
+}
 
 /** Degrees per radian. An angle is held in radians and shown in degrees. */
 const DEGREES = 180 / Math.PI;
@@ -100,27 +121,40 @@ function commitText(
   text: string,
   parse: (text: string) => unknown,
   onChange: (value: unknown) => void,
-): boolean {
+): string | null {
   if (text.trim() === '') {
     if (!spec.required) {
       onChange(undefined);
+
+      return null;
     }
 
-    return !spec.required;
+    // Empty and refused, with no sentence: a required prop's field says so by
+    // its placeholder, which reads `required`, and the text is on screen.
+    return '';
   }
 
   const value = parse(text);
   if (value === undefined) {
-    return false;
+    return '';
   }
 
   onChange(value);
-  return true;
+
+  return null;
 }
 
 interface DraftInputProps {
   readonly shown: string;
-  readonly commit: (text: string) => boolean;
+
+  /**
+   * Take the text, or say why not.
+   *
+   * A sentence rather than a boolean, because a refusal a person cannot infer
+   * from what they typed has to be spelled out -- `sqrt takes 1 operand` is
+   * nothing the text states, where "that is not a number" was.
+   */
+  readonly commit: (text: string) => string | null;
   readonly placeholder: string;
   readonly id?: string | undefined;
   readonly 'aria-label'?: string | undefined;
@@ -142,23 +176,32 @@ function DraftInput({
   ...attributes
 }: DraftInputProps): ReactElement {
   const [draft, setDraft] = useState<string | null>(null);
-  const [invalid, setInvalid] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const said = useId();
 
   return (
-    <input
-      type="text"
-      {...attributes}
-      value={draft ?? shown}
-      aria-invalid={invalid || undefined}
-      onChange={(event) => {
-        setDraft(event.target.value);
-        setInvalid(!commit(event.target.value));
-      }}
-      onBlur={() => {
-        setDraft(null);
-        setInvalid(false);
-      }}
-    />
+    <>
+      <input
+        type="text"
+        {...attributes}
+        value={draft ?? shown}
+        aria-invalid={refusal !== null || undefined}
+        aria-describedby={refusal === null ? undefined : said}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setRefusal(commit(event.target.value));
+        }}
+        onBlur={() => {
+          setDraft(null);
+          setRefusal(null);
+        }}
+      />
+      {refusal === null || refusal === '' ? null : (
+        <p id={said} className="editor__hint" role="status">
+          {refusal}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -195,7 +238,7 @@ function NumberInput({
       id={id}
       inputMode="decimal"
       shown={
-        held && isOperation(held)
+        held && held.kind !== 'literal'
           ? shownValueOf(held)!
           : typeof value === 'number'
             ? formatNumber(value * scale)
@@ -207,8 +250,8 @@ function NumberInput({
           : absenceOf(spec)
       }
       commit={(text) => {
-        if (commitText(spec, text, parse, onChange)) {
-          return true;
+        if (commitText(spec, text, parse, onChange) === null) {
+          return null;
         }
 
         // Not a number, so perhaps a computation. Typed in the surface syntax
@@ -220,15 +263,33 @@ function NumberInput({
         // this box is degrees and `30 + 15` is radians, and scaling the node
         // would put the surface's unit into the stored graph and still be
         // wrong for `halfTurn * 2`. `docs/issues/0024.md` carries it.
-        const parsed = onHeld ? parseExpression(text) : { refusal: '' };
-
-        if ('refusal' in parsed || parsed.node.kind === 'literal') {
-          return false;
+        if (!onHeld) {
+          return `${spec.label} takes a number.`;
         }
 
-        onHeld!(parsed.node);
+        const parsed = parseExpression(text);
+        if ('refusal' in parsed) {
+          return parsed.refusal;
+        }
 
-        return true;
+        // A value, arrived at the long way: `(4)` and `- 4` parse and are not
+        // computations. They go down the value path, which is where the
+        // field's scaling and its required-prop rules live -- refusing them
+        // would be refusing a number for being written oddly.
+        if (parsed.node.kind === 'literal') {
+          return commitText(
+            spec,
+            String(parsed.node.value),
+            parse,
+            onChange,
+          ) === null
+            ? null
+            : `${spec.label} cannot be ${describe(parsed.node.value)}.`;
+        }
+
+        onHeld(parsed.node);
+
+        return null;
       }}
     />
   );
@@ -279,13 +340,14 @@ function PairInputs({ spec, value, onChange }: FieldProps): ReactElement {
             commit={(text) => {
               const parsed = parseNumber(text);
               if (parsed === null) {
-                return false;
+                return '';
               }
 
               const next = [...(pair ?? fallback ?? [0, 0])];
               next[index] = parsed / scale;
               onChange(next);
-              return true;
+
+              return null;
             }}
           />
           {scale === DEGREES ? (
@@ -634,11 +696,19 @@ function NodeProps({
         {Object.entries(meta.props).map(([name, spec]) => {
           const held = node.props[name];
 
+          // One key for the whole field, so a run of keystrokes is one step to
+          // undo whichever of the two paths each of them took -- `2`, then
+          // `2 * 3`, is one edit as far as a person is concerned.
+          const field = `${selection.definition}/${selection.path.join('.')}/${name}#${visit.current}`;
+
           // Computed. A field that can parse one shows it as text and takes a
           // new one, so an expression is editable where it is readable -- and
           // where it cannot be parsed back, the call is shown rather than
           // edited, which is the posture a reference has for the same reason.
-          if (isOperation(held) && !TYPED_TEXT.has(spec.kind)) {
+          if (
+            (isOperation(held) || held?.kind === 'parameter') &&
+            !typeable(held, spec)
+          ) {
             return (
               <div className="editor__field" key={name}>
                 <span className="editor__label">{spec.label}</span>
@@ -648,11 +718,12 @@ function NodeProps({
             );
           }
 
-          // A prop holding a reference is not a literal to edit, and
-          // offering the literal editor would let a keystroke silently
-          // replace the reference with whatever was typed. Shown, not
-          // edited -- the same posture as an imported component's props.
-          return held?.kind === 'parameter' ? (
+          // A reference in a field that cannot print it back: shown, not
+          // edited, because the literal editor would let a keystroke replace
+          // it with whatever was typed. Where the field *can* print it, the
+          // branch above has already let it through -- a field that reads its
+          // own text back is not a silent replacement.
+          return held?.kind === 'parameter' && !typeable(held, spec) ? (
             <div className="editor__field" key={name}>
               <span className="editor__label">{spec.label}</span>
               <div className="editor__inputs">
@@ -687,20 +758,49 @@ function NodeProps({
               value={held?.kind === 'literal' ? held.value : undefined}
               held={held}
               names={names}
-              onHeld={(node) =>
-                onChange(
-                  setProp(
-                    doc,
-                    selection.definition,
-                    selection.path,
-                    name,
-                    node,
-                  ),
-                  null,
-                )
+              onHeld={
+                TYPED_TEXT.has(spec.kind)
+                  ? (typed) =>
+                      onChange(
+                        setProp(
+                          doc,
+                          selection.definition,
+                          selection.path,
+                          name,
+                          typed,
+                        ),
+                        field,
+                      )
+                  : undefined
               }
+              // Carrying goes with the field rather than with the read-only
+              // row, now that a reference can be typed in one: a value is
+              // promoted, a reference is demoted, and a computation is
+              // neither until there is a gesture for it.
               extra={
-                isOperation(held) ? undefined : (
+                held?.kind === 'parameter' ? (
+                  <Carry
+                    label={`Replace ${spec.label} with its value`}
+                    glyph="⤵"
+                    refusal={demotionRefusal(
+                      doc,
+                      selection.definition,
+                      selection.path,
+                      name,
+                    )}
+                    onCarry={() =>
+                      onChange(
+                        demoteProp(
+                          doc,
+                          selection.definition,
+                          selection.path,
+                          name,
+                        ),
+                        null,
+                      )
+                    }
+                  />
+                ) : isOperation(held) ? undefined : (
                   <Carry
                     label={`Promote ${spec.label} to a prop`}
                     glyph="⤴"
@@ -733,9 +833,7 @@ function NodeProps({
                     name,
                     value === undefined ? undefined : literalOf(value),
                   ),
-                  discrete
-                    ? null
-                    : `${selection.definition}/${selection.path.join('.')}/${name}#${visit.current}`,
+                  discrete ? null : field,
                 )
               }
               // Below the field rather than beside it: a drawing is as wide as
