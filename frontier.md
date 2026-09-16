@@ -174,8 +174,23 @@ after the node question settles _(Karl, 2026-09-16)_.
 
 **Running alongside, blocked by nothing:** springs -- additive to the document,
 though each is core work on both sides of the `physm-rs` boundary rather than a
-warm-up. The local joint spring is done; the ones referencing another frame's
-direction wait on signals.
+warm-up.
+
+**A spring is a node** _(Karl, 2026-09-16)_, not a number on the frame: there
+may be several, they are things a person adds and removes, and a non-linear one
+-- the wish list's "restoring force that gets stronger at greater angles" --
+has nowhere to live otherwise. That also keeps a *joint* spring and a spring
+anchored elsewhere distinguishable, which a pair of numbers on the frame cannot
+do, and which is how a first attempt at the world-referenced one came to
+implement a non-conservative actuator without anybody noticing.
+
+The local joint spring is done in that shape. Next is the one **anchored to the
+world** -- the crane arm that holds itself horizontal. Its physics is written
+and reviewed already; what it needs is the conservative reading, which means the
+restoring torque enters the row of every rotational ancestor rather than the
+frame's own alone, and so the force assembly stops being computable row by row.
+After that, a rest direction referencing *another frame*, which is the one that
+genuinely wants signals and wants the port surface first.
 
 **Standing fallback when the main line is blocked:** the expression graph viewer
 ([0018](docs/issues/0018.md)). It is a check on the representation as much as a

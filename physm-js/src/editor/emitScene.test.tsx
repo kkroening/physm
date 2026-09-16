@@ -500,7 +500,7 @@ describe('a definition that takes parameters', () => {
           ],
           body: nodesFrom(<RotationalFrame />).map((frame) => ({
             ...frame,
-            props: { id: parameterOf('tag'), stiffness: parameterOf('span') },
+            props: { id: parameterOf('tag'), resistance: parameterOf('span') },
           })),
         },
       ],

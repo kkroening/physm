@@ -5,6 +5,7 @@ import RsSolver from './RsSolver';
 import Scene from './Scene';
 import type Solver from './Solver';
 import TrackFrame from './TrackFrame';
+import Spring from './Spring';
 import Weight from './Weight';
 import { DistanceConstraint } from './Constraint';
 import type Frame from './Frame';
@@ -305,14 +306,14 @@ function getSpringScene() {
       new TrackFrame({
         id: 'cart',
         initialState: [2, 0],
-        stiffness: 30,
+        springs: [new Spring(30)],
         resistance: 1.5,
         weights: [new Weight(20)],
         frames: [
           new RotationalFrame({
             id: 'arm',
             initialState: [0.9, 0],
-            stiffness: 45,
+            springs: [new Spring(45)],
             weights: [new Weight(5, { position: [6, 0] })],
           }),
         ],
@@ -348,7 +349,8 @@ describe('a frame spring', () => {
       new RotationalFrame({
         id: 'arm',
         initialState: [AMPLITUDE, 0],
-        stiffness: 18, // I = m r^2 = 2 * 3^2 = 18, so omega = sqrt(k/I) = 1
+        // I = m r^2 = 2 * 3^2 = 18, so omega = sqrt(k/I) = 1
+        springs: [new Spring(18)],
         weights: [new Weight(2, { position: [3, 0] })],
       }),
     ],
@@ -359,7 +361,8 @@ describe('a frame spring', () => {
       new TrackFrame({
         id: 'slider',
         initialState: [AMPLITUDE, 0],
-        stiffness: 4, // m = 4, so omega = sqrt(k/m) = 1
+        // m = 4, so omega = sqrt(k/m) = 1
+        springs: [new Spring(4)],
         weights: [new Weight(4)],
       }),
     ],
@@ -397,9 +400,30 @@ describe('a frame spring', () => {
     expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(AMPLITUDE, 10);
   }
 
+  /**
+   * The same rotational arm, with its stiffness split across two springs.
+   *
+   * While every spring is linear this is the *same* rig -- `18 = 11 + 7` --
+   * so it must oscillate identically, in both solvers. That is the claim the
+   * list shape rests on today, and it is the one that stops holding the moment
+   * a spring is not linear, which is what the list is for.
+   */
+  const split = new Scene({
+    gravity: 0,
+    frames: [
+      new RotationalFrame({
+        id: 'arm',
+        initialState: [AMPLITUDE, 0],
+        springs: [new Spring(11), new Spring(7)],
+        weights: [new Weight(2, { position: [3, 0] })],
+      }),
+    ],
+  });
+
   const arms = [
     { name: 'a rotational joint', scene: rotational, id: 'arm' },
     { name: 'a track joint', scene: linear, id: 'slider' },
+    { name: 'a joint with its spring split in two', scene: split, id: 'arm' },
   ];
 
   for (const { name, scene, id } of arms) {

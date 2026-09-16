@@ -5,6 +5,7 @@ use crate::FrameBox;
 use crate::FrameId;
 use crate::Mat3;
 use crate::Position;
+use crate::Spring;
 use crate::Weight;
 
 /// A frame fixed to its parent: set at `position`, turned by `angle`, and moved
@@ -80,8 +81,11 @@ impl Frame for FixedFrame {
         0.
     }
 
-    fn get_stiffness(&self) -> f64 {
-        0.
+    /// None, ever: its coordinate moves nothing, so a spring on it would pull
+    /// on nothing. `physm-js`'s binding refuses one outright rather than
+    /// letting it be written and do nothing.
+    fn get_springs(&self) -> &[Spring] {
+        &[]
     }
 
     fn get_weights(&self) -> &[Weight] {

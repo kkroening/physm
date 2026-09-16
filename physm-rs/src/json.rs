@@ -2,6 +2,7 @@ use crate::Error;
 use crate::FixedFrame;
 use crate::FrameBox;
 use crate::RotationalFrame;
+use crate::Spring;
 use crate::TrackFrame;
 use crate::Weight;
 
@@ -70,6 +71,15 @@ pub fn value_to_frames(value: &Value) -> Result<Vec<FrameBox>, Error> {
         .iter()
         .map(value_to_frame)
         .collect::<Result<_, _>>()?)
+}
+
+pub fn value_to_springs(value: &Value) -> Result<Vec<Spring>, Error> {
+    value
+        .as_array()
+        .ok_or_else(|| Error(format!("Expected `springs` to be an array; got {}", value)))?
+        .iter()
+        .map(Spring::from_json_value)
+        .collect::<Result<_, _>>()
 }
 
 pub fn value_to_weights(value: &Value) -> Result<Vec<Weight>, Error> {

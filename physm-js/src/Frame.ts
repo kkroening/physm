@@ -4,6 +4,7 @@ import type { Mat3 } from './Mat3';
 import type { State } from './State';
 import type { Vec3 } from './Vec3';
 import Decal from './Decal';
+import Spring from './Spring';
 import Weight from './Weight';
 import { ZERO_STATE, coerceState } from './State';
 import { generateRandomId } from './utils';
@@ -17,9 +18,9 @@ export interface FrameOptions {
   position?: number | readonly number[] | Vec3;
   decals?: Decal[];
   weights?: Weight[];
+  springs?: Spring[];
   frames?: Frame[];
   resistance?: number;
-  stiffness?: number;
   initialState?: number | readonly number[] | null;
   id?: FrameId | null;
   typeName?: string | null;
@@ -43,21 +44,19 @@ export default class Frame {
   readonly position: Vec3;
   readonly decals: Decal[];
   readonly weights: Weight[];
-  readonly frames: Frame[];
-  readonly resistance: number;
 
   /**
-   * A spring on this frame's own coordinate, slack at zero: the restoring force
-   * is `-stiffness * q`.
+   * Springs acting on this frame's own coordinate -- see `Spring`.
    *
-   * Local by construction -- it reads the frame's coordinate and nothing else,
-   * so it needs no pose at all. A spring pulling toward a direction defined in
-   * *another* frame is a different thing, and needs the accumulated pose from
-   * the world down -- `docs/issues/0016/09-elements.md` keeps the two apart on
-   * purpose, because writing the second as though it were the first goes wrong
-   * silently the moment anything above it rotates.
+   * A list rather than a number, because a spring is a thing a person adds
+   * rather than a property the frame has. Several of them add up, which while
+   * each is linear is the same as one of their summed stiffness, and stops
+   * being so the moment one is not.
    */
-  readonly stiffness: number;
+  readonly springs: Spring[];
+
+  readonly frames: Frame[];
+  readonly resistance: number;
 
   initialState: State;
 
@@ -65,9 +64,9 @@ export default class Frame {
     position = vec3.ORIGIN,
     decals = [],
     weights = [],
+    springs = [],
     frames = [],
     resistance = 0,
-    stiffness = 0,
     initialState = ZERO_STATE,
     id = null,
     typeName = null,
@@ -77,9 +76,9 @@ export default class Frame {
     this.position = vec3.coerce(position);
     this.decals = decals;
     this.weights = weights;
+    this.springs = springs;
     this.frames = frames;
     this.resistance = resistance;
-    this.stiffness = stiffness;
     this.initialState = coerceState(initialState);
   }
 
@@ -113,6 +112,22 @@ export default class Frame {
     return false;
   }
 
+  /**
+   * What this frame's springs contribute to its generalised force, together.
+   *
+   * They add, which is what makes several of them meaningful: while every one
+   * is linear their sum is one spring of the summed stiffness, and the moment
+   * one is not -- a stop that engages past a threshold, a stiffness that rises
+   * with the angle -- the sum is the only thing that expresses it.
+   *
+   * Asked of the frame so the solver adds a term without knowing what is in
+   * it, which is the seam a spring slack toward something other than zero
+   * arrives through.
+   */
+  springForce(q: number): number {
+    return this.springs.reduce((total, spring) => total + spring.force(q), 0);
+  }
+
   toJsonObj({ includeDecals = false }: FrameJsonOptions = {}): Record<
     string,
     unknown
@@ -123,7 +138,7 @@ export default class Frame {
       initialState: this.initialState,
       position: vec3.toPlanar(this.position),
       resistance: this.resistance,
-      stiffness: this.stiffness,
+      springs: this.springs.map((spring) => spring.toJsonObj()),
       type: this.typeName,
       weights: this.weights.map((weight) => weight.toJsonObj()),
     };

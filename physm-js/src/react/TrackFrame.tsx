@@ -16,21 +16,13 @@ interface TrackFrameValues {
   angle?: number;
   initialState?: number | readonly number[];
   resistance?: number;
-  stiffness?: number;
 }
 
 /** What an element may be given: any of them may be computed. */
 export type TrackFrameProps = Computable<TrackFrameValues>;
 
 function describeTrackFrame(
-  {
-    id,
-    position,
-    angle,
-    initialState,
-    resistance,
-    stiffness,
-  }: TrackFrameValues,
+  { id, position, angle, initialState, resistance }: TrackFrameValues,
   { key }: SceneNodeContext,
 ): FrameNode {
   const frameId = id ?? key;
@@ -38,10 +30,11 @@ function describeTrackFrame(
   return {
     slot: 'frame',
     id: frameId,
-    build: ({ decals, weights, frames }) =>
+    build: ({ decals, weights, springs, frames }) =>
       new CoreTrackFrame({
         decals,
         weights,
+        springs,
         frames,
         // An omitted id defaults to this component's own key, not to a
         // fresh random one: the scene is rebuilt on every registration
@@ -54,7 +47,6 @@ function describeTrackFrame(
         ...(angle === undefined ? {} : { angle }),
         ...(initialState === undefined ? {} : { initialState }),
         ...(resistance === undefined ? {} : { resistance }),
-        ...(stiffness === undefined ? {} : { stiffness }),
       }),
   };
 }
@@ -98,6 +90,5 @@ TrackFrame.meta = {
       default: [0, 0],
     },
     resistance: { kind: 'number', label: 'Resistance', default: 0 },
-    stiffness: { kind: 'number', label: 'Stiffness', default: 0 },
   },
 } satisfies ComponentMeta<TrackFrameValues>;
