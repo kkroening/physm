@@ -58,7 +58,7 @@ objects were already right.
 | **`coefficient_matrix`** | **Pullback metric** $`g = \varphi^*(\bigoplus_w m_w\delta)`$ — the joint-space inertia, i.e. the mass matrix | $`g_{ij}`$ |
 | **`force_vector`** | Generalized force minus the Christoffel term: $`Q_i - \Gamma_{i,jk}\dot q^j \dot q^k`$ | $`f_i`$ |
 | `resistance`, `drag` | Rayleigh dissipation coefficients — joint-space and task-space | $`c_i`$, $`b_w`$ |
-| `springs[].stiffness` | Joint spring constants. Conservative, so they enter $`U`$ with gravity rather than $`\mathcal{F}`$ with the two above. A frame carries a list, and they add: $`k_i = \sum_s k_{i,s}`$ | $`k_i`$ |
+| `springs[]` | Joint springs: a constant and a rest, in the frame's own coordinate. Conservative, so they enter $`U`$ with gravity rather than $`\mathcal{F}`$ with the two above. A frame carries a list, and they add | $`k_{i,s}`$, $`r_{i,s}`$ |
 
 ---
 
@@ -290,11 +290,21 @@ array computes them. The joint-local terms $`-c_i\dot q^i`$, $`-k_i q^i`$ and
 $`Q_i^{\text{ext}}`$ need no accumulation — they belong to $i$ alone.
 
 The spring sits beside the resistance term in the code and belongs with gravity in the
-mathematics: $`\tfrac12 k_i (q^i)^2`$ is a term of $`U`$, so $`-k_i q^i`$ is part of
-$`-\partial_i U`$ and not of the Rayleigh bracket. It is conservative, and unlike the
-weight sums it needs no pose — the frame's own coordinate is the whole of its input,
-which is why a spring pulling toward a direction fixed in *another* frame is a different
-construction entirely.
+mathematics: $`\tfrac12 k_{i,s} (q^i - r_{i,s})^2`$ is a term of $`U`$, so
+$`-k_{i,s}(q^i - r_{i,s})`$ is part of $`-\partial_i U`$ and not of the Rayleigh bracket.
+A frame's springs add, so the whole of it is
+
+```math
+Q_i^{\text{spring}} \;=\; -\sum_{s \,\text{on}\, i} k_{i,s}\bigl(q^i - r_{i,s}\bigr)
+```
+
+It is conservative, and unlike the weight sums it needs no pose — the frame's own
+coordinate is the whole of its input, **rest included**. That is what makes "hold the arm
+at this angle" local: the angle is measured from what the arm is mounted on, because the
+coordinate is. A rest measured against some *other* frame is not a property of the spring
+at all — it is one frame observed from another, which is
+[0030](../docs/issues/0030.md)'s question and needs the accumulated pose that this term
+conspicuously does not.
 
 This is the **Composite Rigid Body Algorithm**, and the $`\mathcal{K}`$ half is the backward
 pass of **RNEA**. It reduces the mass matrix to $`O(n \cdot \mathrm{depth})`$ and the force

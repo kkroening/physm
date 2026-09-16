@@ -7,6 +7,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0030](0030.md) | Let an expression say what one frame looks like from another | RFC | Open |
 | [0029](0029.md) | Derive whether a mounted tree has any content, rather than enumerating it | Enhancement | Open |
 | [0028](0028.md) | Decide how a signal is written in the editor | RFC | Open |
 | [0027](0027.md) | Let a world-space decal be picked in the scene view | Enhancement | Open |

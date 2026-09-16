@@ -76,7 +76,8 @@ describe("a frame's springs", () => {
 
   test('reach the frame through its own serialization', () => {
     expect(
-      new Frame({ id: 'a', springs: [new Spring(6)] }).toJsonObj().springs,
-    ).toEqual([{ stiffness: 6 }]);
+      new Frame({ id: 'a', springs: [new Spring(6, 0.25)] }).toJsonObj()
+        .springs,
+    ).toEqual([{ stiffness: 6, rest: 0.25 }]);
   });
 });

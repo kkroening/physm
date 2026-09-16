@@ -1,15 +1,17 @@
 export interface SpringJson {
   stiffness: number;
+  rest: number;
 }
 
 /**
- * A spring acting on the frame's own coordinate, slack at zero.
+ * A spring acting on the frame's own coordinate, slack at `rest`.
  *
- * The restoring generalised force is `-stiffness * q`: a torque on a
+ * The restoring generalised force is `-stiffness * (q - rest)`: a torque on a
  * rotational joint, and a force along the axis of a track. It is conservative
- * -- `U = stiffness * q^2 / 2` -- so it enters the potential with gravity
- * rather than the dissipative terms, which is what `docs/algorithm.md` means
- * by "the frame's own coordinate is the whole of its input".
+ * -- `U = stiffness * (q - rest)^2 / 2` -- so it enters the potential with
+ * gravity rather than the dissipative terms, which is what
+ * `docs/algorithm.md` means by "the frame's own coordinate is the whole of its
+ * input".
  *
  * **A node rather than a prop on the frame**, for the reasons a frame's
  * `Weight`s are: there may be several, they are separate things a person adds
@@ -27,8 +29,25 @@ export interface SpringJson {
 export default class Spring {
   readonly stiffness: number;
 
-  constructor(stiffness = 0) {
+  /**
+   * Where the spring is slack, in the frame's *own* coordinate.
+   *
+   * An angle on a revolute joint and a length along a track, because that is
+   * what the coordinate is -- so it carries no unit of its own and none is
+   * assumed, the same way `stiffness` does not.
+   *
+   * **Relative, not absolute.** A crane arm held "horizontal" is held
+   * horizontal *relative to what it is mounted on*, which is what a rest in
+   * the joint's coordinate says. Where the rest genuinely has to be read
+   * against some other frame, that is not a property of the spring at all --
+   * it is one frame observed from another, which belongs to the expression
+   * system. See `docs/issues/0030.md`.
+   */
+  readonly rest: number;
+
+  constructor(stiffness = 0, rest = 0) {
     this.stiffness = stiffness;
+    this.rest = rest;
   }
 
   /**
@@ -39,10 +58,10 @@ export default class Spring {
    * over the coordinate and adds up what it gets back.
    */
   force(q: number): number {
-    return -this.stiffness * q;
+    return -this.stiffness * (q - this.rest);
   }
 
   toJsonObj(): SpringJson {
-    return { stiffness: this.stiffness };
+    return { stiffness: this.stiffness, rest: this.rest };
   }
 }

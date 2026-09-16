@@ -8,20 +8,27 @@ import type { SceneNode } from './sceneNodes';
 
 interface SpringValues {
   stiffness: number;
+  rest?: number;
 }
 
 /** What an element may be given: any of them may be computed. */
 export type SpringProps = Computable<SpringValues>;
 
-function describeSpring({ stiffness }: SpringValues): SceneNode {
-  return { slot: 'spring', build: () => new CoreSpring(stiffness) };
+function describeSpring({ stiffness, rest }: SpringValues): SceneNode {
+  return { slot: 'spring', build: () => new CoreSpring(stiffness, rest) };
 }
 
 /**
- * A spring on the enclosing frame's coordinate, slack at zero.
+ * A spring on the enclosing frame's coordinate, slack at `rest`.
  *
  * A torque on a rotational joint and a force along a track's axis, pulling the
- * joint back toward zero with `-stiffness * q`.
+ * joint back toward `rest` with `-stiffness * (q - rest)`.
+ *
+ * **`rest` is in the frame's own coordinate**, which is what "hold the arm
+ * horizontal" needs: horizontal relative to whatever the arm is mounted on. A
+ * rest read against some *other* frame is not a property of the spring -- it
+ * is one frame observed from another, which belongs to the expression system
+ * (`docs/issues/0030.md`).
  *
  * **A frame may have several**, and they add. While each is linear that is the
  * same as one of their summed stiffness, so the multiplicity is not yet worth
@@ -54,5 +61,11 @@ Spring.meta = {
       initial: 1,
       summary: true,
     },
+
+    // `number` rather than `angle` or `length`, because which it is depends on
+    // the frame this sits in -- an angle on a revolute joint, a distance along
+    // a track -- and one component serves both. `stiffness` is untyped for the
+    // same reason.
+    rest: { kind: 'number', label: 'Rest', default: 0 },
   },
 } satisfies ComponentMeta<SpringValues>;
