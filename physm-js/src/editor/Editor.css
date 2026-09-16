@@ -174,13 +174,12 @@
   font-style: italic;
 }
 
-/* The rule between the block and the body goes on the first row after it,
-   which is the one element CSS can name: there is no "last of the rows that
-   match". A definition with no body draws none, and has nothing to divide. */
-.editor__parameter + li:not(.editor__parameter) {
-  padding-top: 0.25rem;
-  border-top: 1px solid #dde4ea;
-  margin-top: 0.2rem;
+/* The block's own boundary, drawn on the group rather than on whatever row
+   happens to follow the last parameter. */
+[role='tree'] > [role='group'] {
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #dde4ea;
+  margin-bottom: 0.25rem;
 }
 
 /* A drop lands among rows as readily as inside one, so every row carries a gap

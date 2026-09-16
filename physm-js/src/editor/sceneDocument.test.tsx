@@ -6,6 +6,7 @@ import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
+import emitScene from './emitScene';
 import starterDocument from './starterDocument';
 import { literalOf, parameterOf } from './propValue';
 import {
@@ -761,6 +762,46 @@ describe("a definition's parameters", () => {
     };
   };
 
+  /** A `Pendulum` taking `bob`, instantiated twice at different points. */
+  const twoInstances = (): SceneDocument => {
+    const [arm] = nodesFrom(
+      <RotationalFrame>
+        <Weight mass={1} position={[0, -1]} />
+      </RotationalFrame>,
+    );
+    const instance = (bob: readonly [number, number]): DocNode => ({
+      type: { kind: 'defined', name: 'Pendulum' },
+      props: { bob: literalOf(bob) },
+      children: [],
+    });
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+            ...cart,
+            children: [instance([4, 0]), instance([7, 0])],
+          })),
+        },
+        {
+          name: 'Pendulum',
+          parameters: [{ name: 'bob', type: 'point' }],
+          body: [
+            {
+              ...arm!,
+              children: arm!.children.map((weight) => ({
+                ...weight,
+                props: { ...weight.props, position: parameterOf('bob') },
+              })),
+            },
+          ],
+        },
+      ],
+    };
+  };
+
   test('a new one is named around the ones already declared', () => {
     const once = addParameter(taking(), 'Scene');
     const twice = addParameter(once, 'Scene');
@@ -779,9 +820,11 @@ describe("a definition's parameters", () => {
   test('a name is checked the way a component name is', () => {
     const doc = addParameter(taking(), 'Scene');
 
-    expect(parameterNameRefusal(doc, 'Scene', 1, 'half-length')).toMatch(
-      /starts with a letter/,
-    );
+    for (const name of ['half-length', '2x', '', 'a b']) {
+      expect(parameterNameRefusal(doc, 'Scene', 1, name)).toMatch(
+        /starts with a letter/,
+      );
+    }
     expect(parameterNameRefusal(doc, 'Scene', 1, 'children')).toMatch(
       /names what a component is given/,
     );
@@ -791,6 +834,16 @@ describe("a definition's parameters", () => {
     expect(parameterNameRefusal(doc, 'Scene', 1, 'Array')).toMatch(
       /JavaScript built-in/,
     );
+
+    // A component name is checked by a rule requiring a capital first letter,
+    // which excludes every reserved word without naming one. A parameter name
+    // is lowercase by convention, so the same rule relaxed to allow that loses
+    // the guarantee -- and `function Scene({ default })` does not parse.
+    for (const word of ['default', 'const', 'this', 'in', 'await', 'static']) {
+      expect(parameterNameRefusal(doc, 'Scene', 1, word)).toMatch(
+        /JavaScript keyword/,
+      );
+    }
 
     // A parameter is not a duplicate of itself, or renaming it to what it is
     // called would be refused.
@@ -811,6 +864,56 @@ describe("a definition's parameters", () => {
     ).toBeCloseTo(2, 9);
     expect(() => renameParameter(taking(), 'Scene', 0, 'children')).toThrow(
       /names what a component is given/,
+    );
+  });
+
+  test('a rename carries what each instance passes, in whatever body holds it', () => {
+    // The other half of what a parameter's name reaches: an instance's prop is
+    // keyed by that name, and `elementOf` builds the scope from those keys --
+    // so a rename that missed them would leave the scope without the name the
+    // body now refers to, and both pendulums would fall to Weight's own
+    // default and land on top of each other.
+    const renamed = renameParameter(twoInstances(), 'Pendulum', 0, 'hangsAt');
+    const [first, second] = renamed.definitions[0]!.body[0]!.children;
+
+    expect(first!.props.hangsAt).toEqual(literalOf([4, 0]));
+    expect(second!.props.hangsAt).toEqual(literalOf([7, 0]));
+    expect(first!.props.bob).toBeUndefined();
+
+    const built = buildScene(elementOf(renamed)).frames[0]!.frames;
+
+    expect(built[0]!.weights[0]!.position[0]).toBeCloseTo(4, 9);
+    expect(built[1]!.weights[0]!.position[0]).toBeCloseTo(7, 9);
+  });
+
+  test('a delete takes the argument each instance passed with it', () => {
+    // Dropped rather than refused: an argument to a parameter that no longer
+    // exists is read by nothing, where a reference resolved against a scope
+    // without the name falls to its component's default and moves something.
+    // Leaving it would emit `<Pendulum bob={…} />` against a signature that
+    // does not take `bob`.
+    const doc = setProp(
+      twoInstances(),
+      'Pendulum',
+      [0, 0],
+      'position',
+      undefined,
+    );
+    const without = removeParameter(doc, 'Pendulum', 0);
+    const [first, second] = without.definitions[0]!.body[0]!.children;
+
+    expect(definitionOf(without, 'Pendulum').parameters).toEqual([]);
+    expect(first!.props.bob).toBeUndefined();
+    expect(second!.props.bob).toBeUndefined();
+    expect(emitScene(without).source).not.toContain('bob');
+  });
+
+  test('an edit to a component the document does not define says so', () => {
+    // `retypeParameter` reaches `withParameters` without looking the
+    // definition up first, so the guard in there is the only thing between a
+    // wrong name and an edit that silently returns the document unchanged.
+    expect(() => retypeParameter(taking(), 'Nowhere', 0, 'scalar')).toThrow(
+      /defines no component named 'Nowhere'/,
     );
   });
 

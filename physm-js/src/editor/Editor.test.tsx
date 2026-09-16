@@ -693,9 +693,16 @@ function selectParameter(name: string): HTMLElement {
 }
 
 describe('Editor, the declaration block', () => {
-  test('a parameter is a row above the body, showing its type and default', () => {
+  test('the parameters are a group of rows above the body', () => {
     render(<Editor initialDocument={referring()} />);
     const [first, second, third] = treeRows('Scene');
+
+    // A region of its own, so the block has a boundary a screen reader can
+    // find and not only a border under it.
+    const block = screen.getByRole('group', { name: 'Declarations' });
+
+    expect(within(block).getAllByRole('treeitem')).toHaveLength(2);
+    expect(block).not.toContainElement(third!);
 
     // The declaration block comes first, because a definition is what it takes
     // as well as what it renders.
@@ -737,8 +744,16 @@ describe('Editor, the declaration block', () => {
     fireEvent.change(name, { target: { value: 'label' } });
 
     expect(name).toHaveAttribute('aria-invalid', 'true');
-    expect(name).toHaveAttribute('title', 'Scene already takes label.');
     expect(code()).toContain('position={bob}');
+
+    // Why it will not do, where it is read rather than hovered -- and tied to
+    // the field, so it is announced on focus as well as when it appears.
+    const said = within(
+      screen.getByRole('region', { name: 'Properties' }),
+    ).getByRole('status');
+
+    expect(said).toHaveTextContent('Scene already takes label.');
+    expect(name).toHaveAttribute('aria-describedby', said.id);
 
     // And the field goes on showing what was typed, so it can be fixed.
     expect(name).toHaveValue('label');
@@ -769,6 +784,10 @@ describe('Editor, the declaration block', () => {
     expect(code()).toContain(
       'function Scene({ label, bob = [4, -1] }: { label: string; bob?: readonly [number, number] })',
     );
+
+    // And the row reads it back, which is the half the code pane cannot show:
+    // `JSON.stringify`, not `String`, or it would read `4,-1`.
+    expect(treeRows('Scene')[1]).toHaveAccessibleName('bob point = [4,-1]');
   });
 
   test('a new parameter is added, selected, and named around the rest', () => {
@@ -782,6 +801,17 @@ describe('Editor, the declaration block', () => {
       ),
     ).toHaveTextContent('value');
     expect(code()).toContain('value: number');
+  });
+
+  test('a JavaScript keyword is refused, whatever else it would parse as', () => {
+    render(<Editor initialDocument={referring()} />);
+    const name = within(selectParameter('bob')).getByLabelText('Name');
+    fireEvent.change(name, { target: { value: 'default' } });
+
+    // `function Scene({ default })` is a SyntaxError, and nothing downstream
+    // would say so: the code pane only reports what `emitScene` throws.
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(code()).toContain('position={bob}');
   });
 
   test('a referenced parameter cannot be deleted, and an unused one can', () => {

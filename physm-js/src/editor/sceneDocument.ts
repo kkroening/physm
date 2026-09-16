@@ -1,4 +1,5 @@
 import coreComponents from './../react/coreComponents';
+import { BUILT_INS, IDENTIFIER, RESERVED } from './identifiers';
 import { Fragment, createElement, isValidElement } from 'react';
 import { canContain } from './../react/componentMeta';
 import { literalProps, parameterOf, resolvedProps } from './propValue';
@@ -638,61 +639,6 @@ export function movedPath(
   return [...afterRemoval(parent, from), index];
 }
 
-/**
- * ECMAScript's own capitalised built-ins: names generated code may use -- page
- * 6's `-Math.PI / 2`, say -- and the same set whichever host runs the editor.
- */
-const BUILT_INS = new Set([
-  'AggregateError',
-  'Array',
-  'ArrayBuffer',
-  'Atomics',
-  'BigInt',
-  'BigInt64Array',
-  'BigUint64Array',
-  'Boolean',
-  'DataView',
-  'Date',
-  'Error',
-  'EvalError',
-  'FinalizationRegistry',
-  'Float32Array',
-  'Float64Array',
-  'Function',
-  'Infinity',
-  'Int16Array',
-  'Int32Array',
-  'Int8Array',
-  'Intl',
-  'Iterator',
-  'JSON',
-  'Map',
-  'Math',
-  'NaN',
-  'Number',
-  'Object',
-  'Promise',
-  'Proxy',
-  'RangeError',
-  'ReferenceError',
-  'Reflect',
-  'RegExp',
-  'Set',
-  'SharedArrayBuffer',
-  'String',
-  'Symbol',
-  'SyntaxError',
-  'TypeError',
-  'URIError',
-  'Uint16Array',
-  'Uint32Array',
-  'Uint8Array',
-  'Uint8ClampedArray',
-  'WeakMap',
-  'WeakRef',
-  'WeakSet',
-]);
-
 /** Every node in these nodes and their children, parents first. */
 function everyNode(nodes: readonly DocNode[]): DocNode[] {
   return nodes.flatMap((node) => [node, ...everyNode(node.children)]);
@@ -743,13 +689,10 @@ export function nameRefusal(doc: SceneDocument, name: string): string | null {
     : null;
 }
 
-/** What a parameter is bound as, wherever the module writes its name. */
-const PARAMETER_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-
 /**
  * Whether `value` is what a parameter of `type` may default to.
  *
- * The union `Parameter` is keeps the two together at compile time; this is the
+ * The union `Parameter` keeps the two together at compile time; this is the
  * same rule where the type is chosen at runtime, by a person picking one.
  */
 function fitsType(type: Parameter['type'], value: unknown): boolean {
@@ -784,7 +727,7 @@ export function parameterNameRefusal(
 ): string | null {
   const { parameters = [] } = definitionOf(doc, definition);
 
-  if (!PARAMETER_NAME.test(name)) {
+  if (!IDENTIFIER.test(name)) {
     return (
       'A parameter name starts with a letter, _ or $, and has only letters, ' +
       'digits, _ and $ after it.'
@@ -793,6 +736,10 @@ export function parameterNameRefusal(
 
   if (name === 'children') {
     return 'children names what a component is given as its children.';
+  }
+
+  if (RESERVED.has(name)) {
+    return `${name} is a JavaScript keyword, so nothing can be called it.`;
   }
 
   if (
@@ -808,7 +755,14 @@ export function parameterNameRefusal(
     : null;
 }
 
-/** Every prop in `definition`'s body that refers to the parameter `name`. */
+/**
+ * Every prop in `definition`'s body that refers to the parameter `name`.
+ *
+ * Not every prop that *names* it: an instance of `definition` passes one keyed
+ * by the parameter's name, in whatever body holds that instance, and those are
+ * `instancesPassing`. The two sets are disjoint and every edit to a parameter
+ * has to answer for both.
+ */
 function referencesTo(
   doc: SceneDocument,
   definition: string,
@@ -819,6 +773,41 @@ function referencesTo(
       held.kind === 'parameter' && held.name === name ? [{ node, prop }] : [],
     ),
   );
+}
+
+/** Whether `node` is an instance of the component `definition` names. */
+function instantiates(node: DocNode, definition: string): boolean {
+  return node.type.kind === 'defined' && node.type.name === definition;
+}
+
+/**
+ * Every definition's body rewritten by `update`, wherever it instantiates
+ * `definition`.
+ *
+ * The instances are the other half of what a parameter's name reaches: what an
+ * instance passes is keyed by that name, and `elementOf` builds the scope from
+ * those keys -- so a name the two halves disagree about resolves to
+ * `undefined` and the prop it fed falls to its component's own default.
+ */
+function withInstances(
+  doc: SceneDocument,
+  definition: string,
+  update: (props: DocProps) => DocProps,
+): SceneDocument {
+  const rewrite = (nodes: readonly DocNode[]): DocNode[] =>
+    nodes.map((node) => ({
+      ...node,
+      ...(instantiates(node, definition) ? { props: update(node.props) } : {}),
+      children: rewrite(node.children),
+    }));
+
+  return {
+    ...doc,
+    definitions: doc.definitions.map((entry) => ({
+      ...entry,
+      body: rewrite(entry.body),
+    })),
+  };
 }
 
 /**
@@ -837,6 +826,12 @@ export function parameterRemovalRefusal(
   const { name } = parameterAt(doc, definition, at);
   const [first] = referencesTo(doc, definition, name);
 
+  // Only the references. What an instance passes is dropped by
+  // `removeParameter` rather than refused: a reference resolved against a
+  // scope that no longer holds the name falls to its component's default and
+  // moves something, where an argument to a parameter that no longer exists
+  // is read by nothing at all. Refusing that one would make a person visit
+  // every instance to delete a value that already means nothing.
   return first
     ? `${nodeName(first.node.type)}'s ${first.prop} refers to ${name}: ` +
         'give it a value first.'
@@ -863,6 +858,9 @@ function withParameters(
   definition: string,
   update: (parameters: readonly Parameter[]) => readonly Parameter[],
 ): SceneDocument {
+  // Throws on a definition the document does not have. Without it the map
+  // below matches nothing and the edit silently returns the document
+  // unchanged, which is a worse failure and a harder one to trace back here.
   definitionOf(doc, definition);
 
   return {
@@ -899,7 +897,13 @@ export function addParameter(
   ]);
 }
 
-/** `definition` without the parameter at `at`, which nothing may refer to. */
+/**
+ * `definition` without the parameter at `at`, which nothing may refer to.
+ *
+ * The argument each instance passed for it goes too. It feeds nothing once the
+ * declaration is gone, and leaving it would emit `<Pendulum bob={[4, 0]} />`
+ * against a signature that does not take `bob`.
+ */
 export function removeParameter(
   doc: SceneDocument,
   definition: string,
@@ -910,18 +914,24 @@ export function removeParameter(
     throw new Error(refusal);
   }
 
-  return withParameters(doc, definition, (parameters) =>
+  const { name } = parameterAt(doc, definition, at);
+  const declared = withParameters(doc, definition, (parameters) =>
     parameters.filter((_, index) => index !== at),
+  );
+
+  return withInstances(declared, definition, (props) =>
+    Object.fromEntries(Object.entries(props).filter(([prop]) => prop !== name)),
   );
 }
 
 /**
- * The parameter at `at` renamed, and every prop referring to it renamed with
- * it.
+ * The parameter at `at` renamed, along with every prop that names it: the
+ * references in this definition's body, and the argument each instance passes.
  *
- * The references are the reason this is an edit rather than a field: a rename
- * that left them behind would change the scene, which is the one thing a
- * rename must not do.
+ * Those two are the reason this is an edit rather than a field. A rename that
+ * left either behind would change the scene, which is the one thing a rename
+ * must not do -- and the instance half is the quieter of the two, because
+ * nothing about the definition being renamed says which bodies hold one.
  */
 export function renameParameter(
   doc: SceneDocument,
@@ -954,7 +964,17 @@ export function renameParameter(
       children: rewrite(node.children),
     }));
 
-  return withBody(renamed, definition, rewrite);
+  return withInstances(
+    withBody(renamed, definition, rewrite),
+    definition,
+    (props) =>
+      Object.fromEntries(
+        Object.entries(props).map(([prop, held]) => [
+          prop === was ? name : prop,
+          held,
+        ]),
+      ),
+  );
 }
 
 /**

@@ -1118,26 +1118,35 @@ function TreePane({
           }
         }}
       >
-        {parameters.map((parameter, at) => (
-          <ParameterRow
-            parameter={parameter}
-            at={at}
-            selected={selectedKey}
-            tabbable={tabbable}
-            onFocusRow={setFocused}
-            onSelect={(which) => {
-              setNaming(null);
-              onSelectParameter(which);
-            }}
-            onDeselect={rowActions.onDeselect}
-            onDelete={(which) => {
-              if (!parameterRemovalRefusal(doc, focus, which)) {
-                onDeleteParameter(which);
-              }
-            }}
-            key={parameterKey(at)}
-          />
-        ))}
+        {/* A region of its own, so the block has a boundary in the
+            accessibility tree and not only in the border under it. Prefixing
+            each row's label instead would be cheaper and wrong: `rowStarting`
+            matches on `aria-label.startsWith`, so every row here would answer
+            to the same keystrokes rather than to its own name. */}
+        {parameters.length ? (
+          <ul role="group" aria-label="Declarations">
+            {parameters.map((parameter, at) => (
+              <ParameterRow
+                parameter={parameter}
+                at={at}
+                selected={selectedKey}
+                tabbable={tabbable}
+                onFocusRow={setFocused}
+                onSelect={(which) => {
+                  setNaming(null);
+                  onSelectParameter(which);
+                }}
+                onDeselect={rowActions.onDeselect}
+                onDelete={(which) => {
+                  if (!parameterRemovalRefusal(doc, focus, which)) {
+                    onDeleteParameter(which);
+                  }
+                }}
+                key={parameterKey(at)}
+              />
+            ))}
+          </ul>
+        ) : null}
         {body.map((node, at) => (
           <TreeRow
             drag={drag}

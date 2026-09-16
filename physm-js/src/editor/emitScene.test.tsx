@@ -573,6 +573,18 @@ describe('a parameter the emitter cannot write', () => {
     expect(source).not.toMatch(/^const POSITION = /m);
   });
 
+  test('a JavaScript keyword is refused, and so is a built-in it would shadow', () => {
+    // The document refuses these while a person can still fix one; this is the
+    // same check for a document that arrived already holding one, and without
+    // it the emitted module does not parse.
+    expect(() =>
+      emitScene(declaring([{ name: 'default', type: 'scalar' }])),
+    ).toThrow(/JavaScript keyword/);
+    expect(() =>
+      emitScene(declaring([{ name: 'Array', type: 'scalar' }])),
+    ).toThrow(/generated code may use the built-in/);
+  });
+
   test('a reference to a parameter the definition does not take is refused', () => {
     const doc: SceneDocument = {
       root: 'Scene',

@@ -554,6 +554,7 @@ function ParameterProps({
   const parameter = parameterAt(doc, definition, at);
   const nameId = useId();
   const typeId = useId();
+  const refusalId = useId();
 
   // The text while it is not yet a name: `null` whenever the field shows what
   // the document holds, which is also what a fresh selection starts at.
@@ -581,6 +582,7 @@ function ParameterProps({
               type="text"
               value={shown}
               aria-invalid={refusal ? true : undefined}
+              aria-describedby={refusal ? refusalId : undefined}
               title={refusal ?? undefined}
               onChange={(event) => {
                 const next = event.target.value;
@@ -597,6 +599,16 @@ function ParameterProps({
               }}
             />
           </div>
+          {/* Why the name will not do, where it is read rather than hovered:
+              a prop field's refusal is visible in the value, and a name's is
+              not -- `Array` is refused for a reason nothing else on screen
+              states. `ExtractForm` says it the same way, about the same
+              field. */}
+          {refusal ? (
+            <p id={refusalId} className="editor__hint" role="status">
+              {refusal}
+            </p>
+          ) : null}
         </div>
         <div className="editor__field">
           <label className="editor__label" htmlFor={typeId}>
