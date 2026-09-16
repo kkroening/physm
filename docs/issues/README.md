@@ -7,6 +7,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0019](0019.md) | Decide whether physm owns its element type, or keeps borrowing React's | RFC | Open |
 | [0018](0018.md) | Draw the expression graph, so the representation has to be honest | Enhancement | Open |
 | [0017](0017.md) | Give the document a save format, since its own output cannot carry it | RFC | Open |
 | [0016](0016.md) | Make the document a program rather than a drawing | RFC | Open |

@@ -20,8 +20,8 @@ Addressing is settled -- a slot lives on the child node, `NodePath` never
 changes, and children bind by Python's keyword-argument rule. See
 [Decisions](#decisions).
 
-What the same conversation turned up is larger, and goes to the tracker before
-anything is built on the answer: **does physm own its element type, or keep
+What the same conversation turned up is larger, and is now filed as
+[0019](docs/issues/0019.md): **does physm own its element type, or keep
 borrowing React's?** A JSX factory of our own would make `<Multiply a={x} b={y}/>`
 produce a physm node rather than a React element -- which is not a tidying-up, it
 is the common cause behind several open problems. `emitScene` cannot write
