@@ -8,15 +8,84 @@ Every expression in the document is one of two kinds, and the difference decides
 where it may appear, when it is evaluated, and whether a feature is tractable at
 all.
 
-- **Structural.** Evaluated once, at build time, from parameters and constants.
-  It decides the scene's *shape*: how many of something there are, where a frame
+- **Structural.** Evaluated **per build**, from parameters and constants. It
+  decides the scene's *shape*: how many of something there are, where a frame
   sits in its parent, how long a rod is, which variant of an enum is in force.
 - **Signal.** Evaluated per tick, against the current pose and state. It decides
   things that may change while the scene runs: a force, a world-space drawing, a
   key binding's contribution.
 
+**"Per build" is not "once", and the difference matters more than it looks.** An
+earlier draft of this page said structural values are evaluated *once*, which
+reads as *immutable* and is wrong. A build happens whenever the element tree is
+produced again — which the mounted route does on every React re-render. So a
+`pendulumCount` held in a component's state is still structural; it simply
+triggers a rebuild when it changes.
+
+That gives three regimes rather than two, and the third had no name here:
+
+| regime | when | example |
+|---|---|---|
+| build | the tree is produced | a rod's length from a parameter |
+| tick | every solver step | a force, a world-space line's endpoints |
+| **event** | something happens | a box breaks into fragments; a rope grows a segment |
+
+The event regime is *structural values changing between builds*, not a fourth
+kind of value — which is why it needs no new machinery in this RFC and does need
+[a policy for what survives a rebuild](#what-survives-a-rebuild).
+
 **A structural expression may not read state.** That is the whole rule, and three
 of the wish list's items fall out of it.
+
+## What survives a rebuild
+
+A structural change at run time means a new `Scene`: a new frame set, new
+matrices, and a state map keyed on frame ids that may no longer match. The
+editor's rule today is all-or-nothing — [0014 page 8](../0014/08-play.md#editing-while-it-runs)
+settled that a structural edit **resets** simulation state while a prop edit
+carries it over — and that is right for an editor, where you changed the rig and
+restarting is honest.
+
+It is wrong for a box breaking mid-swing. Nothing else in the scene should
+teleport back to its start because one body fragmented.
+
+**The merge was already specified, and already rejected**, so the question is
+not what the mechanism is — it is whether the gameplay case escapes the reason
+it was turned down. [0014 page 8](../0014/08-play.md#editing-while-it-runs) sets
+out carrying each frame's `[q, q̇]` across a rebuild by identity, and then:
+
+> ⚠️ **Positional identity is where this leaks, and the editor resets rather
+> than guessing.** Delete the second of five rope segments and every segment
+> below shifts up one index — so carrying state by path would not reset the
+> shifted frames, **it would hand each its neighbour's velocity.**
+
+That reason is sound, and it covers the rope case this page wants. A count
+falling from five to four is benign only because it drops the *last* one; a
+segment removed from the middle is exactly the leak.
+
+**The escape is on the same page**: *"An explicit `key` the author wrote is
+honoured either way; the editor does not invent one."* The leak is about
+identity being **positional**, and the gameplay case is the one where it need
+not be — an engine that fragments a body or removes a segment *knows which*, so
+identity is carried rather than inferred from where something sits.
+
+So the proposition, narrowly: **a rig whose structure changes at run time must
+carry stable keys, and then merge-by-identity is sound; where it does not,
+0014's reset is still right.** Two notes if that is taken:
+
+- 0014 settles identity as **`(path, kind)`, with an explicit `id` preferred**.
+  The `kind` half is load-bearing — a frame retyped from `TrackFrame` to
+  `RotationalFrame` has `q` in metres and then in radians — and the preference
+  for an explicit `id` is the same argument as generating ids from the
+  instantiation path ([page 3](03-scope.md)).
+- The merged state can violate the *new* scene's constraints. 0014 is sharper
+  than "stabilise it" here: the stabilizer yanking shut **looks like an
+  explosion**, so re-running the consistency step and saying so beats silently
+  correcting.
+
+**Changing 0014's rule is Karl's call and is not taken here.** It is his
+decision and his prior reasoning; this page's job is to say that the gameplay
+case reopens it, and on what grounds.
 
 ## Why a repetition count must be structural
 
@@ -29,8 +98,10 @@ edit carries state over and a structural edit restarts it; a count that changed
 per tick would make every tick a structural edit).
 
 So the constraint is not a limitation to apologise for. It is what makes
-repetition implementable: **the count is a function of parameters, and parameters
-do not change while the scene runs.**
+repetition implementable: **the count is a function of parameters, and a
+parameter changes between builds rather than between ticks.** A count that
+changes on an event is fine, and is the rope-grows-a-segment case; a count that
+changes per tick would make every tick a structural edit.
 
 ## Why a line between two anchors needs a signal
 

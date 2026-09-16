@@ -88,7 +88,7 @@ module and compares scenes, and never asks for the document back
 | step | what has to emit |
 |---|---|
 | parameters | a definition with parameters emits a function with a signature, and the emitted module builds the same scene |
-| expressions | a computed prop emits as the host language's own expression — `length={halfLength * 2}`, not a wrapper — and the emitted module builds the same scene |
+| expressions | a computed prop emits in constructor form — `mul(halfLength, 2)`, not `halfLength * 2` — and the emitted module builds the same scene |
 | signals | a world-space decal emits as an element whose endpoint props hold expressions, and the built scene draws the same line |
 | slots | an instance with named slots emits as element-valued props — new work in the emitter, and in the reader for the import path |
 | repetition | a chain of N emits as a construct, **not** as N unrolled literals |

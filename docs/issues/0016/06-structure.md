@@ -77,9 +77,12 @@ differences from mounting — sibling order is JSX order, always, because a walk
 has no registration to go by. There is no registry to race and no newcomer to
 mis-order; a re-walk reads the whole tree in order every time.
 
-What is real is narrower. Emitted TSX is meant to be mounted by a consumer, and a
-consumer that mounts it under `<Scene>` and changes a count prop at run time gets
-first-registration order for the newcomers. That is the pre-existing
+What is real is narrower, and it is the case gameplay lands in. Emitted TSX is
+meant to be mounted by a consumer, and a consumer that mounts it under `<Scene>`
+and changes a count prop at run time gets first-registration order for the
+newcomers — so a fragment or a new rope segment sorts by when it registered
+rather than by where it sits. That shifts `sortedFrames`, which indexes the
+state and external-force buffers, and it changes decal paint order. That is the pre-existing
 conditional-mounting case, and repetition supplies one more way to reach it
 rather than creating it. So 0005 stays worth fixing, on its own schedule, and
 this feature does not wait for it.

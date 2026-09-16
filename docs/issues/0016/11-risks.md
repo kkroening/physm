@@ -30,6 +30,17 @@ concession at a time is how the graph view becomes impossible to build.
 The escape hatch is what makes the filter affordable: the answer to "the language
 cannot express this" is a hand-written definition, not a new construct.
 
+## Kinds unchecked while the node set is shared
+
+[Page 4](04-expressions.md) now has structural and signal expressions built from
+one set of nodes, which is the right simplification and removes a guard that
+used to be free: a signal could not previously be *written* into a structural
+prop, because host arithmetic had no way to name a pose-derived value.
+
+If the nodes ship before kind propagation does, that guard is gone and nothing
+replaces it. The failure is the quiet kind — a count that reads a velocity,
+authored happily, re-assembling the scene every tick once it runs.
+
 ## The structural/signal split discovered late
 
 If expressions ship untyped in time, two things follow and neither is loud. Props
