@@ -13,6 +13,7 @@ import TrackFrame from './../react/TrackFrame';
 import { literalOf, parameterOf } from './propValue';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
+import coreComponents from './../react/coreComponents';
 import { mul, vec } from './../expression';
 import emitScene, { rangeKey } from './emitScene';
 import ts from 'typescript';
@@ -24,6 +25,7 @@ import {
 } from './sceneDocument';
 import type CoreScene from './../Scene';
 import type { DocNode, Parameter, SceneDocument } from './sceneDocument';
+import type { Operation } from './../expression';
 import type { ReactElement } from 'react';
 
 /**
@@ -612,6 +614,65 @@ describe('a parameter the emitter cannot write', () => {
     expect(() => emitScene(doc)).toThrow(
       /refers to 'tag', which Dial does not take/,
     );
+  });
+});
+
+describe('what the emitted module can import', () => {
+  /**
+   * Every operation, written out -- and exhaustive by construction.
+   *
+   * `satisfies` fails to compile if one is missing or invented, so it cannot
+   * drift from the table -- and `Object.keys` of it is therefore an exhaustive
+   * enumeration that no runtime call can quietly shorten, which is what the
+   * loops below need and what a first version of them did not have.
+   */
+  const EVERY_OPERATION = {
+    add: true,
+    sub: true,
+    mul: true,
+    div: true,
+    neg: true,
+    sqrt: true,
+    vec: true,
+    scale: true,
+    dot: true,
+    xOf: true,
+    yOf: true,
+    worldPoint: true,
+  } satisfies Record<Operation, true>;
+
+  test('the binding re-exports a constructor for every operation', () => {
+    // `importsOf` collects operation names from the *document* -- whatever the
+    // props happen to use -- and writes them as one named import from
+    // `./react`. Nothing else holds that list and the binding's hand-written
+    // re-exports together, so an operation the binding does not re-export is a
+    // module the emitter writes and nobody can compile.
+    //
+    // It agreed by coincidence for a long time: the re-export list happened to
+    // be exactly the operations there were. Adding a twelfth broke that for as
+    // long as it took someone to notice, which is `docs/issues/0026.md`.
+    const exported = new Set(Object.keys(binding));
+
+    for (const name of Object.keys(EVERY_OPERATION)) {
+      expect([name, exported.has(name)]).toEqual([name, true]);
+    }
+  });
+
+  test('and no building block is named like an operation', () => {
+    // `importsOf` puts both into one `core` set and writes them as a single
+    // import, so a building block sharing a name with an operation would
+    // collapse the two into one imported name -- and the module would import
+    // whichever the binding exported under it.
+    //
+    // Walked over `coreComponents` rather than sifted out of the binding by a
+    // marker: that is the authoritative list, it cannot come back empty, and
+    // deriving it a second time here is how the first version of this test
+    // ended up able to iterate nothing and pass.
+    const names = new Set<string>(Object.keys(EVERY_OPERATION));
+
+    for (const { meta } of coreComponents) {
+      expect([meta.name, names.has(meta.name)]).toEqual([meta.name, false]);
+    }
   });
 });
 
