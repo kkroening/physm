@@ -65,8 +65,18 @@ sizes:
    external-force slice constant for a batch, so such an expression is
    evaluated per *batch*. That is the granularity the demo already ships, so it
    inherits rather than needing something new.
-5. **A spring whose rest direction is world-referenced**, which needs the
-   accumulated pose and is core work on both sides.
+5. **A spring whose rest direction is world-referenced** -- **withdrawn as a
+   step**, because it was never one thing. The rotary spring wanted a rest,
+   which is local and is done; observing one frame from another is a capability
+   of the expression system rather than a spring's property, and is
+   [0030](docs/issues/0030.md). Two attempts at it as a single feature were
+   closed unmerged.
+
+   0030 also asks the question this area kept walking past: **the world is not
+   special.** It is the root frame with no name. `worldPoint` and `<WorldLine>`
+   both hard-code it as the observer, so both are the general thing with an
+   argument left out -- which is additive to fix rather than wrong, but is the
+   shape to stop repeating.
 
 **Not taken here:** what survives a rebuild when structure changes at run time.
 Page 2 reopens [0014](docs/issues/0014.md)'s reset-on-structural-edit rule for
@@ -184,13 +194,18 @@ anchored elsewhere distinguishable, which a pair of numbers on the frame cannot
 do, and which is how a first attempt at the world-referenced one came to
 implement a non-conservative actuator without anybody noticing.
 
-The local joint spring is done in that shape. Next is the one **anchored to the
-world** -- the crane arm that holds itself horizontal. Its physics is written
-and reviewed already; what it needs is the conservative reading, which means the
-restoring torque enters the row of every rotational ancestor rather than the
-frame's own alone, and so the force assembly stops being computable row by row.
-After that, a rest direction referencing *another frame*, which is the one that
-genuinely wants signals and wants the port surface first.
+The joint spring is done in that shape, and it is **slack where its rest says**
+rather than at zero -- which turns out to be the whole of "hold the crane arm
+horizontal", because that goal is relative to what the arm is mounted on and
+the joint's coordinate is measured from exactly there _(Karl, 2026-09-16)_.
+
+**A world-anchored spring was built twice and merged neither time.** The second
+closing is the one worth remembering: the premise was wrong rather than the
+implementation. Reading a rest against a *different* frame is not a property of
+a spring -- it is one frame observed from another, which belongs to the
+expression system and is [0030](docs/issues/0030.md). A node with the reference
+frame baked into it is the special case arriving ahead of the general
+mechanism.
 
 **Standing fallback when the main line is blocked:** the expression graph viewer
 ([0018](docs/issues/0018.md)). It is a check on the representation as much as a
@@ -322,6 +337,11 @@ wrongly -- so it is worth early and is never urgent.
 
 ## Done
 
+- **A spring slack where its rest says** -- a `<Spring>` pulls its joint toward
+  `rest` in the joint's *own* coordinate rather than toward zero, which is the
+  whole of "hold the crane arm horizontal": that goal is relative to what the
+  arm is mounted on, and the coordinate is measured from there. It reads no
+  pose and names no other frame.
 - **A line between two points on different bodies** -- the wish list's own
   example, which no `<Line>` prop could express because its endpoints have no
   common frame. An expression is structural or signal; a signal reads where the

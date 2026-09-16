@@ -298,7 +298,11 @@ describeCrossValidation('fixed-frame scene', getFixedFrameScene);
 
 /**
  * Springs on both kinds of joint, under gravity and alongside resistance, so
- * the new force term is exercised where it has to coexist with the old ones.
+ * the force term is exercised where it has to coexist with the old ones.
+ *
+ * The rotational one is slack somewhere other than zero, which is the case a
+ * solver reading `-k q` instead of `-k (q - rest)` agrees with everywhere
+ * else.
  */
 function getSpringScene() {
   return new Scene({
@@ -313,7 +317,7 @@ function getSpringScene() {
           new RotationalFrame({
             id: 'arm',
             initialState: [0.9, 0],
-            springs: [new Spring(45)],
+            springs: [new Spring(45, 0.35)],
             weights: [new Weight(5, { position: [6, 0] })],
           }),
         ],
@@ -391,30 +395,56 @@ describe('a frame spring', () => {
    * The half is the sample that pins the *sign*: a spring that pushed would
    * have left rather than come back.
    */
-  function expectOscillation(solver: Solver, id: string): void {
-    expect(coordinateAfter(solver, id, Math.PI / 2)).toBeCloseTo(0, 10);
+  function expectOscillation(solver: Solver, id: string, centre = 0): void {
+    expect(coordinateAfter(solver, id, Math.PI / 2)).toBeCloseTo(centre, 10);
     expect(coordinateAfter(solver, id, Math.PI / 2)).toBeCloseTo(
-      -AMPLITUDE,
+      centre - AMPLITUDE,
       10,
     );
-    expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(AMPLITUDE, 10);
+    expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(
+      centre + AMPLITUDE,
+      10,
+    );
   }
 
   /**
-   * The same rotational arm, with its stiffness split across two springs.
+   * The same rotational arm, with its spring split in two at *different* rests.
    *
-   * While every spring is linear this is the *same* rig -- `18 = 11 + 7` --
-   * so it must oscillate identically, in both solvers. That is the claim the
-   * list shape rests on today, and it is the one that stops holding the moment
-   * a spring is not linear, which is what the list is for.
+   * `18 = 11 + 7` keeps the frequency, and the rests do not cancel: the pair
+   * is one spring slack at their stiffness-weighted mean, `(11*0.6 + 7*0.2)/18`.
+   * So this is still the same rig as the arm above, oscillating about a third
+   * place again -- and a solver that collapsed a frame's springs into one
+   * summed stiffness, discarding the rests, agrees with every other case here
+   * and fails only this one.
    */
+  const SPLIT_CENTRE = (11 * 0.6 + 7 * 0.2) / 18;
   const split = new Scene({
     gravity: 0,
     frames: [
       new RotationalFrame({
         id: 'arm',
-        initialState: [AMPLITUDE, 0],
-        springs: [new Spring(11), new Spring(7)],
+        initialState: [SPLIT_CENTRE + AMPLITUDE, 0],
+        springs: [new Spring(11, 0.6), new Spring(7, 0.2)],
+        weights: [new Weight(2, { position: [3, 0] })],
+      }),
+    ],
+  });
+
+  /**
+   * The same arm, slack about a third of a radian from zero rather than at it.
+   *
+   * Everything else is the rotational arm above, so it oscillates at the same
+   * frequency about a different place -- which is the whole claim: a rest
+   * moves where the spring is slack and changes nothing else.
+   */
+  const OFFSET = 0.35;
+  const offset = new Scene({
+    gravity: 0,
+    frames: [
+      new RotationalFrame({
+        id: 'arm',
+        initialState: [OFFSET + AMPLITUDE, 0],
+        springs: [new Spring(18, OFFSET)],
         weights: [new Weight(2, { position: [3, 0] })],
       }),
     ],
@@ -422,15 +452,26 @@ describe('a frame spring', () => {
 
   const arms = [
     { name: 'a rotational joint', scene: rotational, id: 'arm' },
+    {
+      name: 'a joint slack away from zero',
+      scene: offset,
+      id: 'arm',
+      centre: OFFSET,
+    },
     { name: 'a track joint', scene: linear, id: 'slider' },
-    { name: 'a joint with its spring split in two', scene: split, id: 'arm' },
+    {
+      name: 'a joint with its spring split in two at different rests',
+      scene: split,
+      id: 'arm',
+      centre: SPLIT_CENTRE,
+    },
   ];
 
-  for (const { name, scene, id } of arms) {
+  for (const { name, scene, id, centre } of arms) {
     test(`${name} oscillates at the frequency its stiffness sets`, async () => {
       const solver = new JsSolver(scene, { rungeKutta: true });
 
-      expectOscillation(solver, id);
+      expectOscillation(solver, id, centre);
     });
 
     test(`${name} does the same in Rust`, async () => {
@@ -438,7 +479,7 @@ describe('a frame spring', () => {
         rungeKutta: true,
       });
 
-      expectOscillation(solver, id);
+      expectOscillation(solver, id, centre);
     });
   }
 });

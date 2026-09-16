@@ -49,9 +49,10 @@ export default class Frame {
    * Springs acting on this frame's own coordinate -- see `Spring`.
    *
    * A list rather than a number, because a spring is a thing a person adds
-   * rather than a property the frame has. Several of them add up, which while
-   * each is linear is the same as one of their summed stiffness, and stops
-   * being so the moment one is not.
+   * rather than a property the frame has. Several add up: while each is linear
+   * their sum is one spring at the summed stiffness, slack at the
+   * stiffness-weighted mean of their rests -- so two at the same rest reduce to
+   * one and two at different rests do not.
    */
   readonly springs: Spring[];
 
@@ -116,9 +117,10 @@ export default class Frame {
    * What this frame's springs contribute to its generalised force, together.
    *
    * They add, which is what makes several of them meaningful: while every one
-   * is linear their sum is one spring of the summed stiffness, and the moment
-   * one is not -- a stop that engages past a threshold, a stiffness that rises
-   * with the angle -- the sum is the only thing that expresses it.
+   * is linear their sum is one spring at the summed stiffness, slack at the
+   * stiffness-weighted mean of their rests -- so two at *different* rests are
+   * already a rig one spring cannot express, and a non-linear one, when it
+   * arrives, will not reduce at all.
    *
    * Asked of the frame so the solver adds a term without knowing what is in
    * it, which is the seam a spring slack toward something other than zero

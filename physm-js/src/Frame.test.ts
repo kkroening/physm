@@ -56,17 +56,37 @@ describe('Frame', () => {
 });
 
 describe("a frame's springs", () => {
-  test('add, so several are one of their summed stiffness', () => {
-    // The property that makes the list shape cost nothing today: while every
-    // spring is linear, `[k1, k2]` and `[k1 + k2]` are the same spring. It is
-    // also the property that stops holding the moment one is not linear,
-    // which is the reason the list exists.
-    const several = new Frame({ springs: [new Spring(3), new Spring(5)] });
-    const one = new Frame({ springs: [new Spring(8)] });
+  test('add, so several at one rest are one spring of their summed stiffness', () => {
+    const several = new Frame({
+      springs: [new Spring(3, 0.25), new Spring(5, 0.25)],
+    });
+    const one = new Frame({ springs: [new Spring(8, 0.25)] });
 
     for (const q of [0, 0.4, -1.7]) {
       expect(several.springForce(q)).toBeCloseTo(one.springForce(q), 12);
     }
+  });
+
+  test('at different rests they reduce to the weighted mean, not to either', () => {
+    // Which is what makes the list worth something *today* rather than only
+    // once a spring is non-linear: two springs slack in different places are
+    // already a rig that one `Spring` cannot express, so the reduction lands
+    // at neither of their rests.
+    const several = new Frame({
+      springs: [new Spring(3, 0), new Spring(5, 1)],
+    });
+    const weighted = new Frame({ springs: [new Spring(8, 5 / 8)] });
+
+    for (const q of [0, 0.4, -1.7]) {
+      expect(several.springForce(q)).toBeCloseTo(weighted.springForce(q), 12);
+    }
+
+    // And not to a sum that kept either rest, which is what a solver
+    // collapsing the list into one stiffness would produce.
+    expect(several.springForce(0.5)).not.toBeCloseTo(
+      new Frame({ springs: [new Spring(8, 0)] }).springForce(0.5),
+      6,
+    );
   });
 
   test('a frame with none is a frame with no spring force', () => {
@@ -76,7 +96,8 @@ describe("a frame's springs", () => {
 
   test('reach the frame through its own serialization', () => {
     expect(
-      new Frame({ id: 'a', springs: [new Spring(6)] }).toJsonObj().springs,
-    ).toEqual([{ stiffness: 6 }]);
+      new Frame({ id: 'a', springs: [new Spring(6, 0.25)] }).toJsonObj()
+        .springs,
+    ).toEqual([{ stiffness: 6, rest: 0.25 }]);
   });
 });

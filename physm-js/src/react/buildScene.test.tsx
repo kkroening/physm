@@ -147,7 +147,7 @@ function fullRig(k: 1 | 2): ReactElement {
           initialState={[0.6 * k, -0.2 * k]}
           resistance={1.25 * k}
         >
-          <Spring stiffness={0.8 * k} />
+          <Spring stiffness={0.8 * k} rest={0.15 * k} />
           <Circle
             position={[3 * k, 0]}
             radius={0.3 * k}
@@ -264,7 +264,7 @@ function handBuilt(k: 1 | 2): CoreScene {
             position: [0, -k],
             initialState: [0.6 * k, -0.2 * k],
             resistance: 1.25 * k,
-            springs: [new CoreSpring(0.8 * k)],
+            springs: [new CoreSpring(0.8 * k, 0.15 * k)],
             decals: [
               new CoreCircleDecal({
                 position: [3 * k, 0],
