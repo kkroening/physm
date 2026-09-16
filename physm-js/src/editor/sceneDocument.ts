@@ -2,8 +2,14 @@ import coreComponents from './../react/coreComponents';
 import { BUILT_INS, IDENTIFIER, RESERVED } from './identifiers';
 import { Fragment, createElement, isValidElement } from 'react';
 import { canContain } from './../react/componentMeta';
-import { literalProps, parameterOf, resolvedProps } from './propValue';
-import type { ComponentMeta } from './../react/componentMeta';
+import {
+  literalIn,
+  literalOf,
+  literalProps,
+  parameterOf,
+  resolvedProps,
+} from './propValue';
+import type { ComponentMeta, PropSpec } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
 import type { DocProps, PropValue, Scope } from './propValue';
 
@@ -1040,6 +1046,201 @@ export function setParameterDefault(
 }
 
 /**
+ * What kind of parameter a prop of each kind becomes.
+ *
+ * The inverse of what the properties pane edits a parameter with, and it is
+ * partial where that one is total: `flag` and `state` have no parameter type
+ * to become. A boolean parameter is not in [0016 page
+ * 3](../../../docs/issues/0016/03-scope.md)'s set at all, and a `state` is a
+ * pair of a coordinate and its rate, which no single type covers -- so those
+ * two are refused rather than approximated.
+ */
+const PROMOTED_TYPES: Partial<Record<PropSpec['kind'], Parameter['type']>> = {
+  number: 'scalar',
+  length: 'scalar',
+  angle: 'angle',
+  point: 'point',
+  name: 'label',
+  end: 'label',
+  color: 'label',
+};
+
+/** What `prop` on `node` declares itself to be, for a caller that needs a type. */
+function specOf(
+  doc: SceneDocument,
+  node: DocNode,
+  prop: string,
+): { type: Parameter['type']; value: unknown } | null {
+  const { type } = node;
+
+  // A defined component's props *are* its parameters, so one passed to an
+  // instance already has a declared type -- which is how a value handed down
+  // to a sub-component is promoted into a parameter of the one holding it.
+  if (type.kind === 'defined') {
+    const declared = (definitionOf(doc, type.name).parameters ?? []).find(
+      ({ name }) => name === prop,
+    );
+
+    return declared
+      ? {
+          type: declared.type,
+          value: literalIn(node.props[prop]) ?? declared.default,
+        }
+      : null;
+  }
+
+  if (type.kind !== 'core') {
+    return null;
+  }
+
+  const spec = (
+    type.component.meta.props as Record<string, PropSpec | undefined>
+  )[prop];
+  const promoted = spec && PROMOTED_TYPES[spec.kind];
+
+  return promoted
+    ? { type: promoted, value: literalIn(node.props[prop]) ?? spec.default }
+    : null;
+}
+
+/**
+ * Why `prop` on the node at `path` cannot become a parameter, or `null`.
+ */
+export function promotionRefusal(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+  prop: string,
+): string | null {
+  const node = nodeAt(doc, definition, path);
+  const held = node.props[prop];
+  if (held?.kind === 'parameter') {
+    return `${prop} already refers to ${held.name}.`;
+  }
+
+  const promotable = specOf(doc, node, prop);
+  if (!promotable) {
+    return (
+      `${prop} has no type ${definition} could declare: a component from ` +
+      'another module states none, and a flag or an initial state is not ' +
+      'something a parameter can be.'
+    );
+  }
+
+  return promotable.value === undefined
+    ? `${prop} holds no value to carry into a parameter's default.`
+    : null;
+}
+
+/**
+ * `prop` on the node at `path`, turned into a parameter of `definition` and a
+ * reference to it.
+ *
+ * The parameter's default is what the prop held, so the scene is unchanged:
+ * every instance goes on getting that value without passing anything, and the
+ * one place it is written moves from the node to the declaration block. What
+ * changes is that an instance can now say otherwise.
+ *
+ * The name comes from the prop, which is the only thing here that knows what
+ * the value is *for* -- `docs/issues/0014/06-codegen.md` makes the same
+ * argument for a hoisted constant's name.
+ */
+export function promoteProp(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+  prop: string,
+): SceneDocument {
+  const refusal = promotionRefusal(doc, definition, path, prop);
+  if (refusal) {
+    throw new Error(refusal);
+  }
+
+  const { type, value } = specOf(doc, nodeAt(doc, definition, path), prop)!;
+  let name = prop;
+  for (
+    let n = 2;
+    parameterNameRefusal(doc, definition, null, name) !== null;
+    n += 1
+  ) {
+    name = `${prop}${n}`;
+  }
+
+  const declared = withParameters(doc, definition, (parameters) => [
+    ...parameters,
+    { name, type, default: value } as Parameter,
+  ]);
+
+  return setProp(declared, definition, path, prop, parameterOf(name));
+}
+
+/** What `prop` on the node at `path` refers to, when it refers to a parameter. */
+function referredParameter(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+  prop: string,
+): { name: string; declared: Parameter | undefined } | null {
+  const held = nodeAt(doc, definition, path).props[prop];
+
+  return held?.kind === 'parameter'
+    ? {
+        name: held.name,
+        declared: (definitionOf(doc, definition).parameters ?? []).find(
+          ({ name }) => name === held.name,
+        ),
+      }
+    : null;
+}
+
+/** Why `prop` on the node at `path` cannot go back to a value, or `null`. */
+export function demotionRefusal(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+  prop: string,
+): string | null {
+  const referred = referredParameter(doc, definition, path, prop);
+  if (!referred) {
+    return `${prop} is not a reference.`;
+  }
+
+  return referred.declared?.default === undefined
+    ? `${referred.name} has no default, so there is no value to put here.`
+    : null;
+}
+
+/**
+ * `prop` on the node at `path`, back to the value its parameter defaults to.
+ *
+ * The parameter stays declared, even where nothing refers to it any more: an
+ * unused one is visible in the declaration block and deleting it is a gesture
+ * of its own, where a delete folded into this one would take a declaration a
+ * person may have instances passing.
+ */
+export function demoteProp(
+  doc: SceneDocument,
+  definition: string,
+  path: NodePath,
+  prop: string,
+): SceneDocument {
+  const refusal = demotionRefusal(doc, definition, path, prop);
+  if (refusal) {
+    throw new Error(refusal);
+  }
+
+  const referred = referredParameter(doc, definition, path, prop)!;
+
+  return setProp(
+    doc,
+    definition,
+    path,
+    prop,
+    literalOf(referred.declared!.default),
+  );
+}
+
+/**
  * Why the node at `path` cannot be deleted, or `null` when it can: it holds
  * its body's place for children while an instance of the body's component has
  * some, which would be left with nowhere to go.
@@ -1094,18 +1295,21 @@ export function extractionRefusal(
     );
   }
 
-  // A reference names a parameter of the definition it sits in, and a new
-  // component declares none -- so moving one would resolve it against an empty
-  // scope and quietly fall back to the component's own default. That breaks
-  // the invariant this whole edit rests on: the scene it builds is unchanged.
-  // Carrying the declaration across instead is `docs/issues/0020.md`.
+  // A reference to a parameter the *enclosing* definition does not declare,
+  // which `carriedParameters` therefore cannot copy across. The editor cannot
+  // make one -- every reference it writes names a declaration -- but a
+  // document built in code can, and extracting it would resolve the name
+  // against an empty scope and quietly move whatever the prop placed.
+  const declared = new Set(
+    (definitionOf(doc, definition).parameters ?? []).map(({ name }) => name),
+  );
   for (const { type, props } of everyNode([node])) {
     for (const [prop, held] of Object.entries(props)) {
-      if (held.kind === 'parameter') {
+      if (held.kind === 'parameter' && !declared.has(held.name)) {
         return (
-          `${nodeName(type)}'s ${prop} refers to ${definition}'s ` +
-          `${held.name}, which a component of its own would not take: ` +
-          'extracting it would change the scene. Give it a value first.'
+          `${nodeName(type)}'s ${prop} refers to ${held.name}, which ` +
+          `${definition} does not take, so there is no declaration to carry ` +
+          'across. Give it a value first.'
         );
       }
     }
@@ -1122,6 +1326,35 @@ export function extractionRefusal(
     `A ${name} cannot be a component of its own: it has to go inside a ` +
     'frame, and a component goes wherever a frame can. Extract the frame ' +
     'that holds it instead.'
+  );
+}
+
+/**
+ * The parameters an extracted subtree refers to, in the order `definition`
+ * declares them.
+ *
+ * These come with it: the new component declares each, and the instance left
+ * behind passes the enclosing definition's parameter of the same name
+ * straight through -- so what each resolves to is what it resolved to before,
+ * and the scene is unchanged. That is `promoteProp`'s move in the other
+ * direction, and it is the reason extracting a parameterised subtree is an
+ * ordinary edit rather than a refusal.
+ */
+function carriedParameters(
+  doc: SceneDocument,
+  definition: string,
+  node: DocNode,
+): Parameter[] {
+  const referred = new Set(
+    everyNode([node]).flatMap(({ props }) =>
+      Object.values(props).flatMap((held) =>
+        held.kind === 'parameter' ? [held.name] : [],
+      ),
+    ),
+  );
+
+  return (definitionOf(doc, definition).parameters ?? []).filter(({ name }) =>
+    referred.has(name),
   );
 }
 
@@ -1175,9 +1408,16 @@ export function extractComponent(
     props: node.props,
     children: holds ? [...node.children, place] : node.children,
   };
+  const carried = carriedParameters(doc, definition, node);
   const instance: DocNode = {
     type: { kind: 'defined', name },
-    props: {},
+
+    // Threaded, not resolved: the instance passes on whatever its own
+    // definition was given, so the new component sees exactly what the
+    // subtree saw where it used to sit.
+    props: Object.fromEntries(
+      carried.map((parameter) => [parameter.name, parameterOf(parameter.name)]),
+    ),
     ...(node.key === undefined ? {} : { key: node.key }),
     children: [],
   };
@@ -1191,7 +1431,11 @@ export function extractComponent(
     ...replaced,
     definitions: [
       ...replaced.definitions,
-      { name, body: holds ? [root] : [root, place] },
+      {
+        name,
+        ...(carried.length ? { parameters: carried } : {}),
+        body: holds ? [root] : [root, place],
+      },
     ],
   };
 }

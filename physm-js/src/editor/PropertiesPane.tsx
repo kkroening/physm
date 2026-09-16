@@ -1,8 +1,13 @@
 import { Fragment, useId, useRef, useState } from 'react';
-import { literalOf, shownValueOf } from './propValue';
+import { literalIn, literalOf, shownValueOf } from './propValue';
 import {
+  definitionOf,
+  demoteProp,
+  demotionRefusal,
   nodeAt,
   nodeName,
+  promoteProp,
+  promotionRefusal,
   parameterAt,
   parameterNameRefusal,
   renameParameter,
@@ -272,9 +277,13 @@ function PropField({
   spec,
   value,
   names,
+  extra,
   onChange,
 }: Omit<FieldProps, 'onChange'> & {
   readonly names: readonly string[];
+
+  /** A control of the field's own, beside the reset: see `Carry`. */
+  readonly extra?: ReactElement;
 
   /** A new value -- `discrete` for a click, which is a step of its own to undo. */
   readonly onChange: (value: unknown, discrete?: boolean) => void;
@@ -301,6 +310,7 @@ function PropField({
         {input}
         {unit ? <span className="editor__unit">{unit}</span> : null}
         {reset}
+        {extra}
       </div>
     </div>
   );
@@ -318,6 +328,7 @@ function PropField({
             {spec.label}
           </label>
           {reset}
+          {extra}
         </div>
       );
     case 'point':
@@ -328,6 +339,7 @@ function PropField({
           <div className="editor__inputs">
             <PairInputs spec={spec} value={value} onChange={onChange} />
             {reset}
+            {extra}
           </div>
         </fieldset>
       );
@@ -400,13 +412,43 @@ function NodeProps({
 }): ReactElement {
   if (node.type.kind === 'defined') {
     const { name } = node.type;
+    const { parameters = [] } = definitionOf(doc, name);
 
     return (
       <>
         <h2 className="editor__selected">{nodeName(node.type)}</h2>
         <p className="editor__hint">
-          Defined in this scene. It takes no props.
+          {parameters.length
+            ? `Defined in this scene. What it takes is declared in ${name}.`
+            : 'Defined in this scene. It takes no props.'}
         </p>
+        {/* An instance's props are the parameters the definition declares, so
+            they are edited with the same fields a building block's are --
+            which is what a declared surface buys. */}
+        <div className="editor__fields">
+          {parameters.map((parameter) => (
+            <PropField
+              key={parameter.name}
+              spec={specFor(parameter)}
+              value={literalIn(node.props[parameter.name])}
+              names={[]}
+              onChange={(value, discrete) =>
+                onChange(
+                  setProp(
+                    doc,
+                    selection.definition,
+                    selection.path,
+                    parameter.name,
+                    value === undefined ? undefined : literalOf(value),
+                  ),
+                  discrete
+                    ? null
+                    : `${selection.definition}/${selection.path.join('.')}/${parameter.name}#${visit.current}`,
+                )
+              }
+            />
+          ))}
+        </div>
         <button
           type="button"
           className="editor__open"
@@ -474,7 +516,30 @@ function NodeProps({
           return held?.kind === 'parameter' ? (
             <div className="editor__field" key={name}>
               <span className="editor__label">{spec.label}</span>
-              <span className="editor__reference">{held.name}</span>
+              <div className="editor__inputs">
+                <span className="editor__reference">{held.name}</span>
+                <Carry
+                  label={`Replace ${spec.label} with its value`}
+                  glyph="⤵"
+                  refusal={demotionRefusal(
+                    doc,
+                    selection.definition,
+                    selection.path,
+                    name,
+                  )}
+                  onCarry={() =>
+                    onChange(
+                      demoteProp(
+                        doc,
+                        selection.definition,
+                        selection.path,
+                        name,
+                      ),
+                      null,
+                    )
+                  }
+                />
+              </div>
             </div>
           ) : (
             <PropField
@@ -482,6 +547,29 @@ function NodeProps({
               spec={spec}
               value={held?.value}
               names={names}
+              extra={
+                <Carry
+                  label={`Promote ${spec.label} to a prop`}
+                  glyph="⤴"
+                  refusal={promotionRefusal(
+                    doc,
+                    selection.definition,
+                    selection.path,
+                    name,
+                  )}
+                  onCarry={() =>
+                    onChange(
+                      promoteProp(
+                        doc,
+                        selection.definition,
+                        selection.path,
+                        name,
+                      ),
+                      null,
+                    )
+                  }
+                />
+              }
               onChange={(value, discrete) =>
                 onChange(
                   setProp(
@@ -655,6 +743,57 @@ function ParameterProps({
       </div>
     </>
   );
+}
+
+/**
+ * Carry a prop between a value written here and a parameter of the definition
+ * this node sits in.
+ *
+ * Both directions are one button with two labels, because they are one
+ * gesture seen from either end: promoting moves the value into the
+ * declaration block and leaves a reference, demoting puts the parameter's
+ * default back and leaves the declaration. Disabled rather than hidden, with
+ * the reason in its title -- a prop that cannot be promoted is a fact about
+ * the prop, and hiding the control says nothing.
+ */
+function Carry({
+  label,
+  glyph,
+  refusal,
+  onCarry,
+}: {
+  label: string;
+  glyph: string;
+  refusal: string | null;
+  onCarry: () => void;
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      className="editor__carry"
+      aria-label={label}
+      title={refusal ?? label}
+      disabled={refusal !== null}
+      onClick={onCarry}
+    >
+      {glyph}
+    </button>
+  );
+}
+
+/**
+ * A declared parameter as a field: what an instance passing one is editing.
+ *
+ * The label is the parameter's own name rather than a prose one, because the
+ * person who declared it chose that name and it is what the emitted source
+ * writes.
+ */
+function specFor(parameter: Parameter): PropSpec {
+  return {
+    kind: PARAMETER_KINDS[parameter.type],
+    label: parameter.name,
+    ...(parameter.default === undefined ? {} : { default: parameter.default }),
+  };
 }
 
 /** The selected node, or `null` once an edit has left the selection empty. */

@@ -1,3 +1,4 @@
+import Anchor from './../react/Anchor';
 import Box from './../react/Box';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './../react/Circle';
@@ -32,9 +33,18 @@ import {
   renameParameter,
   retypeParameter,
   setParameterDefault,
+  demoteProp,
+  demotionRefusal,
+  promoteProp,
+  promotionRefusal,
 } from './sceneDocument';
 import type CoreScene from './../Scene';
-import type { DocNode, ElementOrigin, SceneDocument } from './sceneDocument';
+import type {
+  DocNode,
+  ElementOrigin,
+  Parameter,
+  SceneDocument,
+} from './sceneDocument';
 import type { ReactElement } from 'react';
 
 /**
@@ -694,23 +704,20 @@ describe("a component's place for children", () => {
     expect(nameRefusal(doc, 'ReactNode')).not.toBeNull();
   });
 
-  test('a subtree that refers to a parameter cannot be extracted', () => {
-    // The new component would declare nothing, so the reference would resolve
-    // against an empty scope and the weight would quietly move to the
-    // component's own default -- an extraction that changes the scene, which
-    // is the one thing this edit promises not to do. The compiler does not
-    // raise it: the prop crosses whole rather than through `.value`.
+  /** A `Scene` taking `bob`, whose one weight's position refers to it. */
+  const referring = (parameters: readonly Parameter[]): SceneDocument => {
     const [frame] = nodesFrom(
       <RotationalFrame id="arm">
         <Weight mass={1} position={[1, 0]} />
       </RotationalFrame>,
     );
-    const doc: SceneDocument = {
+
+    return {
       root: 'Scene',
       definitions: [
         {
           name: 'Scene',
-          parameters: [{ name: 'bob', type: 'point' }],
+          parameters,
           body: [
             {
               ...frame!,
@@ -723,13 +730,45 @@ describe("a component's place for children", () => {
         },
       ],
     };
+  };
+
+  test('a subtree that refers to a parameter carries the declaration with it', () => {
+    const doc = referring([{ name: 'bob', type: 'point', default: [3, 0] }]);
+    const next = extractComponent(doc, 'Scene', [0], 'Arm');
+
+    // The new component declares what the subtree refers to, and the instance
+    // left behind passes the enclosing definition's parameter straight
+    // through -- so the reference resolves to what it always did.
+    expect(definitionOf(next, 'Arm').parameters).toEqual([
+      { name: 'bob', type: 'point', default: [3, 0] },
+    ]);
+    expect(nodeAt(next, 'Scene', [0]).props.bob).toEqual(parameterOf('bob'));
+    expect(extractionRefusal(doc, 'Scene', [0])).toBeNull();
+
+    // Which is the invariant this edit rests on: the scene is unchanged.
+    expect(
+      buildScene(elementOf(next)).frames[0]!.weights[0]!.position[0],
+    ).toBeCloseTo(3, 9);
+  });
+
+  test('a subtree that refers to nothing declared has nothing to carry', () => {
+    // Unreachable from the editor -- every reference it writes names a
+    // declaration -- but a document built in code can hold one, and the
+    // extraction would resolve it against an empty scope.
+    const doc = referring([]);
 
     expect(extractionRefusal(doc, 'Scene', [0])).toMatch(
-      /position refers to Scene's bob/,
+      /refers to bob, which Scene does not take/,
     );
     expect(() => extractComponent(doc, 'Scene', [0], 'Arm')).toThrow(
-      /position refers to Scene's bob/,
+      /which Scene does not take/,
     );
+  });
+
+  test('an extraction that refers to nothing declares nothing', () => {
+    const next = extractComponent(starterDocument(), 'Scene', [1], 'Cart');
+
+    expect(definitionOf(next, 'Cart').parameters).toBeUndefined();
   });
 });
 
@@ -965,6 +1004,156 @@ describe("a definition's parameters", () => {
     ).toEqual({ name: 'bob', type: 'point' });
     expect(() => parameterAt(doc, 'Scene', 4)).toThrow(
       /declares no parameter at 4/,
+    );
+  });
+});
+
+describe('carrying a prop to and from the declaration block', () => {
+  /** Two weights that state a position, a box with a flag, and an anchor. */
+  const rig = (): SceneDocument =>
+    documentFrom(
+      <RotationalFrame id="arm" initialState={[0.5, 0]}>
+        <Weight mass={3} position={[2, 0]} />
+        <Weight mass={1} position={[5, 0]} />
+        <Box width={1} height={1} solid />
+        <Anchor id="pin" />
+      </RotationalFrame>,
+    );
+
+  test('a promoted prop becomes a parameter defaulted to what it held', () => {
+    const doc = promoteProp(rig(), 'Scene', [0, 0], 'position');
+
+    expect(definitionOf(doc, 'Scene').parameters).toEqual([
+      { name: 'position', type: 'point', default: [2, 0] },
+    ]);
+    expect(nodeAt(doc, 'Scene', [0, 0]).props.position).toEqual(
+      parameterOf('position'),
+    );
+
+    // The value moved; it did not change. That is what makes promoting safe
+    // to try: nothing about the scene is different until an instance says so.
+    expect(
+      buildScene(elementOf(doc)).frames[0]!.weights[0]!.position[0],
+    ).toBeCloseTo(2, 9);
+  });
+
+  test('a prop with no value of its own promotes at the component default', () => {
+    // `width` is stated; `drag` is not, and the component behaves as though it
+    // were 0 -- which is the value the parameter has to carry for the scene to
+    // stay as it was.
+    const doc = promoteProp(rig(), 'Scene', [0, 0], 'drag');
+
+    expect(definitionOf(doc, 'Scene').parameters).toEqual([
+      { name: 'drag', type: 'scalar', default: 0 },
+    ]);
+  });
+
+  test('a second promotion of the same prop name is named around the first', () => {
+    const once = promoteProp(rig(), 'Scene', [0, 0], 'position');
+    const twice = promoteProp(once, 'Scene', [0, 1], 'position');
+
+    expect(
+      definitionOf(twice, 'Scene').parameters!.map(({ name }) => name),
+    ).toEqual(['position', 'position2']);
+    expect(nodeAt(twice, 'Scene', [0, 1]).props.position).toEqual(
+      parameterOf('position2'),
+    );
+  });
+
+  test('a prop the scene has no parameter type for says so rather than guessing', () => {
+    const doc = rig();
+
+    // A flag and an initial state are both absent from 0016 page 3's type set
+    // -- there is no boolean parameter, and a state is a coordinate and its
+    // rate, which no one type covers.
+    expect(promotionRefusal(doc, 'Scene', [0, 2], 'solid')).toMatch(
+      /no type Scene could declare/,
+    );
+    expect(promotionRefusal(doc, 'Scene', [0], 'initialState')).toMatch(
+      /no type Scene could declare/,
+    );
+
+    // An anchor's point is solved for when absent, which no value expresses,
+    // so there is nothing for a default to carry.
+    expect(promotionRefusal(doc, 'Scene', [0, 3], 'position')).toMatch(
+      /holds no value to carry/,
+    );
+    expect(() => promoteProp(doc, 'Scene', [0, 2], 'solid')).toThrow(
+      /no type Scene could declare/,
+    );
+  });
+
+  test('a prop already referring to a parameter is not promoted twice', () => {
+    const doc = promoteProp(rig(), 'Scene', [0, 0], 'position');
+
+    expect(promotionRefusal(doc, 'Scene', [0, 0], 'position')).toBe(
+      'position already refers to position.',
+    );
+  });
+
+  test("a value passed to an instance promotes at that definition's type", () => {
+    // The instance's props *are* the sub-component's parameters, so the type
+    // is declared even though no `meta` describes it -- which is how a value
+    // handed down is carried up into the enclosing definition's surface.
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: [
+            {
+              type: { kind: 'defined', name: 'Pendulum' },
+              props: { bob: literalOf([4, 0]) },
+              children: [],
+            },
+          ],
+        },
+        {
+          name: 'Pendulum',
+          parameters: [{ name: 'bob', type: 'point' }],
+          body: nodesFrom(<RotationalFrame />),
+        },
+      ],
+    };
+    const promoted = promoteProp(doc, 'Scene', [0], 'bob');
+
+    expect(definitionOf(promoted, 'Scene').parameters).toEqual([
+      { name: 'bob', type: 'point', default: [4, 0] },
+    ]);
+    expect(nodeAt(promoted, 'Scene', [0]).props.bob).toEqual(
+      parameterOf('bob'),
+    );
+  });
+
+  test('demoting puts the default back, and leaves the declaration', () => {
+    const doc = demoteProp(
+      promoteProp(rig(), 'Scene', [0, 0], 'position'),
+      'Scene',
+      [0, 0],
+      'position',
+    );
+
+    expect(nodeAt(doc, 'Scene', [0, 0]).props.position).toEqual(
+      literalOf([2, 0]),
+    );
+
+    // The parameter stays: an unused one is visible in the block, and taking
+    // it away here would take a declaration instances may be passing.
+    expect(definitionOf(doc, 'Scene').parameters).toHaveLength(1);
+  });
+
+  test('a reference with no default has no value to go back to', () => {
+    const promoted = promoteProp(rig(), 'Scene', [0, 0], 'position');
+    const undefaulted = setParameterDefault(promoted, 'Scene', 0, undefined);
+
+    expect(demotionRefusal(undefaulted, 'Scene', [0, 0], 'position')).toBe(
+      'position has no default, so there is no value to put here.',
+    );
+    expect(() => demoteProp(undefaulted, 'Scene', [0, 0], 'position')).toThrow(
+      /no default/,
+    );
+    expect(demotionRefusal(promoted, 'Scene', [0, 0], 'mass')).toBe(
+      'mass is not a reference.',
     );
   });
 });
