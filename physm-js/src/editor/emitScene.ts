@@ -125,11 +125,7 @@ function literal(value: unknown): string {
  * character references, so `&amp;` written in one would be read back as `&`:
  * a quote, an ampersand, a backslash or a line break has to be an expression.
  */
-function attribute(
-  name: string,
-  value: unknown,
-  constants: ReadonlyMap<string, string>,
-): string {
+function attribute(name: string, value: unknown): string {
   if (!PROP_NAME.test(name)) {
     throw new Error(`'${name}' cannot be written as a JSX attribute.`);
   }
@@ -147,9 +143,7 @@ function attribute(
     return `${name}="${value}"`;
   }
 
-  const text = literal(value);
-
-  return `${name}={${constants.get(text) ?? text}}`;
+  return `${name}={${literal(value)}}`;
 }
 
 /** Deep equality for the plain data a prop holds. */
@@ -337,31 +331,29 @@ function compound(value: unknown): boolean {
   );
 }
 
-/**
- * How many times a value is written before it earns a name.
- *
- * Three rather than two, from watching the demo: dragging the cart onto the
- * ground line's end makes its `position` equal that `endPos`, and at two the
- * coincidence was named -- `END_POS`, by a tie -- and the cart written
- * `position={END_POS}`. Twice can be two values that agree; three times is a
- * value used three times.
- */
-const REPEATS = 3;
-
 /** A prop's name as a constant's: `endPos` becomes `END_POS`. */
 function constantName(prop: string): string {
   return prop.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
 }
 
 /**
- * A name for each value the module writes more than once, keyed by the
- * literal that value prints as.
+ * A name for each value the module holds in more than one place, keyed by the
+ * *node* holding it.
+ *
+ * By node identity, not by what the value prints as. The document records that
+ * two props hold one value by holding one node, which is a fact the source
+ * stated -- and equality was only ever a guess at it, wrong in both
+ * directions. Two props that happen to agree used to be named together, which
+ * is how dragging the demo's cart onto the ground line's end produced
+ * `position={END_POS}`; and two props that genuinely were one value went
+ * unnamed until a third joined them, because a guess needs corroboration where
+ * a fact does not. Hence twice is enough now, where it needed three before.
  *
  * [0014 page 6](../../../docs/issues/0014/06-codegen.md) asks for this, and
- * says what it can and cannot be: the document is what the source *evaluated
- * to*, so the name a person wrote -- `TIP`, `SWEEP` -- is gone with the rest
- * of how the file was written. The name therefore comes from the prop that
- * carries the value, which is the mechanical recovery that page calls for
+ * says what the *name* can and cannot be: the document is what the source
+ * evaluated to, so the name a person wrote -- `TIP`, `SWEEP` -- is gone with
+ * the rest of how the file was written. The name therefore comes from the prop
+ * that carries the value, which is the mechanical recovery that page calls for
  * rather than a reconstruction of what was lost.
  *
  * The most common prop name among the uses, so a point used as three
@@ -373,8 +365,8 @@ function constantName(prop: string): string {
 function constantsOf(
   doc: SceneDocument,
   bound: ReadonlySet<string>,
-): Map<string, string> {
-  const uses = new Map<string, string[]>();
+): Map<PropValue, string> {
+  const uses = new Map<PropValue, string[]>();
   const visit = (nodes: readonly DocNode[]): void => {
     for (const node of nodes) {
       // Building blocks only. A hoisted literal is inferred on its own and
@@ -385,10 +377,9 @@ function constantsOf(
       if (node.type.kind === 'core') {
         for (const [prop, held] of writtenProps(node)) {
           if (held.kind === 'literal' && compound(held.value)) {
-            const value = held.value;
             try {
-              const text = literal(value);
-              uses.set(text, [...(uses.get(text) ?? []), prop]);
+              literal(held.value);
+              uses.set(held, [...(uses.get(held) ?? []), prop]);
             } catch {
               // Not writable at all: the write says so, with the node's path.
             }
@@ -404,10 +395,10 @@ function constantsOf(
     visit(body);
   }
 
-  const named = new Map<string, string>();
+  const named = new Map<PropValue, string>();
   const taken = new Set(bound);
-  for (const [text, props] of uses) {
-    if (props.length < REPEATS) {
+  for (const [held, props] of uses) {
+    if (props.length < 2) {
       continue;
     }
 
@@ -426,14 +417,14 @@ function constantsOf(
     }
 
     taken.add(name);
-    named.set(text, name);
+    named.set(held, name);
   }
 
   return named;
 }
 
 /** No constants at all: what a node the emitter cannot type is written with. */
-const NO_CONSTANTS: ReadonlyMap<string, string> = new Map();
+const NO_CONSTANTS: ReadonlyMap<PropValue, string> = new Map();
 
 /**
  * Every name a definition's parameters bind.
@@ -687,7 +678,15 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
           return `${name}={${held.name}}`;
         }
 
-        return attribute(name, held.value, usable);
+        // A value the module holds in more than one place is written by its
+        // name. Only on a building block: a hoisted literal is inferred on its
+        // own and widens -- `[4, 0]` becomes `number[]` -- where inline it was
+        // typed by the prop receiving it.
+        const shared = 'kind' in held ? usable.get(held) : undefined;
+
+        return shared === undefined
+          ? attribute(name, held.value)
+          : `${name}={${shared}}`;
       } catch (error) {
         throw new Error(
           `Cannot write '${name}' on <${tag}> at ${rangeKey(definition, path)}: ` +
@@ -751,8 +750,10 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
   write(`${importsOf(doc).join('\n')}\n`);
   if (constants.size) {
     write('\n');
-    for (const [text, name] of constants) {
-      write(`const ${name} = ${text};\n`);
+    for (const [held, name] of constants) {
+      write(
+        `const ${name} = ${literal(held.kind === 'literal' ? held.value : held)};\n`,
+      );
     }
   }
   for (const definition of declarationOrder(doc)) {

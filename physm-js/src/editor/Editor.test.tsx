@@ -3890,8 +3890,11 @@ describe('Editor, children on a fixed frame', () => {
     selectIn('Pendulum', 'FixedFrame');
     add('Children');
 
+    // Typed here rather than shared with the bob: the two values agree, and
+    // nothing says they are one -- so moving the bob later leaves this frame
+    // where it is, and the source says as much.
     expect(code()).toMatch(
-      /<FixedFrame position=\{POSITION\}>\s*\{children\}\s*<\/FixedFrame>/,
+      /<FixedFrame position=\{\[4, 0\]\}>\s*\{children\}\s*<\/FixedFrame>/,
     );
 
     // In the scene's tab, a pendulum hung in the pendulum.

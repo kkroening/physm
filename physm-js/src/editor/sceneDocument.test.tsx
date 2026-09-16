@@ -4,10 +4,12 @@ import Coincidence from './../react/Coincidence';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './../react/Circle';
 import Frame from './../Frame';
+import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
+import { newNode } from './insertion';
 import coreComponents from './../react/coreComponents';
 import emitScene from './emitScene';
 import starterDocument from './starterDocument';
@@ -1319,5 +1321,76 @@ describe('carrying a prop to and from the declaration block', () => {
     expect(demotionRefusal(promoted, 'Scene', [0, 0], 'mass')).toBe(
       'mass is not a reference.',
     );
+  });
+});
+
+describe('what a read records about sharing', () => {
+  test('two props given one value object hold one node', () => {
+    const bob = [4, 0] as const;
+    const [frame] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={bob} lineWidth={0.1} />
+        <Weight mass={1} position={bob} />
+      </RotationalFrame>,
+    );
+    const [line, weight] = frame!.children;
+
+    // One node, not two equal ones. The source said these are the same value
+    // and the document is where that has to survive -- the emitter guessing it
+    // back from equality is what this replaces.
+    expect(line!.props.endPos).toBe(weight!.props.position);
+  });
+
+  test('a value shared between a frame and what is under it holds together', () => {
+    // The sharing table follows the whole read rather than one list of
+    // siblings: a parent's prop and a grandchild's are as much one value as
+    // two siblings' are.
+    const at = [1, 0] as const;
+    const [frame] = nodesFrom(
+      <RotationalFrame id="arm" position={at}>
+        <RotationalFrame id="tip">
+          <Weight mass={1} position={at} />
+        </RotationalFrame>
+      </RotationalFrame>,
+    );
+
+    expect(frame!.props.position).toBe(
+      frame!.children[0]!.children[0]!.props.position,
+    );
+  });
+
+  test('two values that merely agree are two nodes', () => {
+    const [frame] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={[4, 0]} lineWidth={0.1} />
+        <Weight mass={1} position={[4, 0]} />
+      </RotationalFrame>,
+    );
+    const [line, weight] = frame!.children;
+
+    expect(line!.props.endPos).not.toBe(weight!.props.position);
+    expect(line!.props.endPos).toEqual(weight!.props.position);
+  });
+
+  test('a primitive never shares, and neither do two reads', () => {
+    const [first] = nodesFrom(<Weight mass={2} position={[1, 0]} />);
+    const [second] = nodesFrom(<Weight mass={2} position={[1, 0]} />);
+
+    // Two props holding `2` are two props holding two, not one value seen
+    // twice -- nothing in the source says otherwise.
+    expect(first!.props.mass).not.toBe(second!.props.mass);
+    expect(first!.props.position).not.toBe(second!.props.position);
+  });
+
+  test("a building block's declared initial is not a shared value", () => {
+    // A `meta`'s `initial` is one object across every instance of the
+    // component, which is a fact about the metadata rather than about the
+    // scene: two separately inserted lines are not two views of one endpoint.
+    // `newNode` therefore reads without a sharing table.
+    const first = newNode({ kind: 'core', component: Line });
+    const second = newNode({ kind: 'core', component: Line });
+
+    expect(first.props.endPos).toEqual(second.props.endPos);
+    expect(first.props.endPos).not.toBe(second.props.endPos);
   });
 });

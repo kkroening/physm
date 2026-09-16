@@ -14,18 +14,20 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**Structural expressions.** Parameters are done end to end -- declared, passed,
-referred to, promoted, demoted, carried through an extraction -- so the next
-thing a prop needs to hold is a *computation*: `mul(halfLength, 2)`, stored as
-a DAG and emitted in constructor form, so that signal and structural values
-share one node set.
+**Structural expressions.** A prop needs to hold a *computation*:
+`mul(halfLength, 2)`, stored as a DAG and emitted in constructor form, so that
+signal and structural values share one node set.
 
-It is the invasive one. A prop value grows its third variant, the emitter's
-constants heuristic is deleted rather than tuned -- expression identity is what
-it was guessing at -- and the properties pane needs somewhere to type an
-expression and something to show when a prop holds one. The expression graph
-viewer ([0018](docs/issues/0018.md)) stops being fallback work around here and
-starts being how the representation is checked.
+The prerequisite has landed -- the document now records that two props hold one
+value, where the emitter used to guess it back from equality -- so what is left
+is the node set itself: interior nodes and their constructors, evaluation
+against a scope, the emitter writing calls and binding a node used more than
+once, and a cycle refused rather than recursed into. The properties pane
+follows: somewhere to type `halfLength * 2`, and something to show when a prop
+holds one.
+
+The expression graph viewer ([0018](docs/issues/0018.md)) stops being fallback
+work around here and starts being how the representation is checked.
 
 **[0022](docs/issues/0022.md) wants deciding first, or with it.** Promoting a
 prop widens its contract -- a `length` becomes a `scalar` and stops being
@@ -52,8 +54,7 @@ risk rather than appetite; the
 3. **Structural expressions** (in view), stored as a DAG and emitted in constructor form
    -- `mul(halfLength, 2)`, never host arithmetic, so that signals and
    structural values share one node set. The emitter's constants heuristic is
-   deleted rather than tuned, since expression identity is what it was guessing
-   at.
+   already gone: what it guessed at, the document now records.
 4. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
    Rust path hands external forces across once per batch.
@@ -208,6 +209,11 @@ wrongly -- so it is worth early and is never urgent.
 
 ## Done
 
+- **Sharing, recorded rather than guessed** — a value object held by two props
+  is one node in the document, so the emitter names it because the document
+  says the two are one value rather than because they happen to agree. Two
+  props that merely agree stay two, however many of them there are, and the
+  sharing survives a round trip through emitted source.
 - **Parameters** — a definition declares typed parameters with optional
   defaults, an instance passes literals, and a child prop may be a reference to
   one, resolved against what that instance supplied. The emitted module writes

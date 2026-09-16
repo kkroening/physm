@@ -2,6 +2,7 @@ import coreComponents from './../react/coreComponents';
 import { BUILT_INS, IDENTIFIER, RESERVED } from './identifiers';
 import { Fragment, createElement, isValidElement } from 'react';
 import { canContain } from './../react/componentMeta';
+import type { Sharing } from './propValue';
 import {
   literalIn,
   literalOf,
@@ -201,11 +202,14 @@ function refuseRepeatedKeys(nodes: DocNode[]): DocNode[] {
  * frames with one id.
  */
 export function nodesFrom(children: ReactNode): DocNode[] {
-  return refuseRepeatedKeys(flatten(children));
+  // One sharing table per read, so what it records is what *this* tree states:
+  // a value object used in two places here is one value, and the same object
+  // reached from a later read is a separate statement.
+  return refuseRepeatedKeys(flatten(children, new WeakMap()));
 }
 
 /** `nodesFrom`, before the flattened list's keys are checked. */
-function flatten(children: ReactNode): DocNode[] {
+function flatten(children: ReactNode, sharing: Sharing): DocNode[] {
   if (children === null || children === undefined) {
     return [];
   }
@@ -215,7 +219,7 @@ function flatten(children: ReactNode): DocNode[] {
   }
 
   if (Array.isArray(children)) {
-    return children.flatMap((child: ReactNode) => flatten(child));
+    return children.flatMap((child: ReactNode) => flatten(child, sharing));
   }
 
   if (!isValidElement<{ children?: ReactNode }>(children)) {
@@ -225,7 +229,7 @@ function flatten(children: ReactNode): DocNode[] {
   }
 
   if (children.type === Fragment) {
-    return flatten(children.props.children);
+    return flatten(children.props.children, sharing);
   }
 
   const { children: grandchildren, ...props } = children.props;
@@ -233,9 +237,9 @@ function flatten(children: ReactNode): DocNode[] {
   return [
     {
       type: refOf(children.type),
-      props: literalProps(props),
+      props: literalProps(props, sharing),
       ...(children.key === null ? {} : { key: children.key }),
-      children: nodesFrom(grandchildren),
+      children: refuseRepeatedKeys(flatten(grandchildren, sharing)),
     },
   ];
 }
