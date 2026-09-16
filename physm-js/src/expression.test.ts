@@ -1,3 +1,4 @@
+import * as mat3 from './Mat3';
 import {
   add,
   computed,
@@ -7,14 +8,25 @@ import {
   isOperation,
   mul,
   neg,
+  operationNamed,
   scale,
   sqrt,
   sub,
   vec,
+  worldPoint,
   xOf,
   yOf,
 } from './expression';
 import type { ExpressionNode } from './expression';
+import type { PoseMap } from './Scene';
+
+/** A scene posed with one frame turned a quarter turn and moved to (3, 1). */
+function posed(): PoseMap {
+  return new Map([
+    ['arm', mat3.multiply(mat3.translation(3, 1), mat3.rotation(Math.PI / 2))],
+    ['base', mat3.translation(-1, 0)],
+  ]);
+}
 
 describe('an expression node', () => {
   test('a constructor builds a node rather than a result', () => {
@@ -207,6 +219,15 @@ describe('an expression node', () => {
     });
   });
 
+  test('a tick changes nothing about a structural expression', () => {
+    // Having somewhere to read is not the same as reading it: the operations
+    // that are functions of their operands answer the same either way.
+    expect(evaluate(mul(3, 2), { poses: posed() })).toBe(6);
+    expect(computed({ mass: mul(3, 2) }, { poses: posed() })).toEqual({
+      mass: 6,
+    });
+  });
+
   test('every refusal reaches a person on the prop that carries it', () => {
     // None of them can name a prop from inside the graph, and this is the only
     // place that knows which one it was.
@@ -214,5 +235,115 @@ describe('an expression node', () => {
     expect(() => computed({ radius: sqrt(neg(4)) })).toThrow(
       /^radius: sqrt produced NaN/,
     );
+  });
+});
+
+describe('a signal', () => {
+  test('reads where a point on a frame has got to', () => {
+    // The frame is turned a quarter turn and moved to (3, 1), so its own
+    // x axis points along the world's y: the point two along it lands at
+    // (3, 3). Nothing about the expression says so -- the pose does.
+    const tick = { poses: posed() };
+
+    expect(evaluate(worldPoint('arm', [2, 0]), tick)).toEqual([3, 3]);
+    expect(evaluate(worldPoint('base', [2, 0]), tick)).toEqual([1, 0]);
+  });
+
+  test('composes with the operations that are not signals', () => {
+    // The two halves of the wish list's line: two points with no common
+    // frame, and their separation, which only the pose knows.
+    const tick = { poses: posed() };
+    const gap = sub(worldPoint('arm', [2, 0]), worldPoint('base', [2, 0]));
+
+    expect(evaluate(gap, tick)).toEqual([2, 3]);
+    expect(evaluate(sqrt(dot(gap, gap)), tick)).toBeCloseTo(Math.hypot(2, 3));
+  });
+
+  test('is refused where nothing has posed the scene', () => {
+    expect(() => evaluate(worldPoint('arm', [2, 0]))).toThrow(
+      /worldPoint is a signal: it reads where the scene has got to/,
+    );
+  });
+
+  test('carries its kind up through whatever is built on it', () => {
+    // The kind belongs to the whole expression and comes up from its leaves:
+    // no operation turns a signal back into a value a build could work out, so
+    // burying one three deep does not make the thing above it structural.
+    const buried = xOf(scale(add([1, 0], worldPoint('arm', [0, 0])), 2));
+
+    expect(() => computed({ width: buried })).toThrow(
+      /^width: worldPoint is a signal/,
+    );
+    expect(computed({ width: buried }, { poses: posed() })).toEqual({
+      width: 8,
+    });
+    expect(computed({ width: xOf(scale(add([1, 0], vec(2, 3)), 2)) })).toEqual({
+      width: 6,
+    });
+  });
+
+  test('the pose is read once however many edges reach the node', () => {
+    const poses = posed();
+    const reads = vi.spyOn(poses, 'get');
+    const tip = worldPoint('arm', [2, 0]);
+
+    expect(evaluate(add(tip, tip), { poses })).toEqual([6, 6]);
+    expect(reads).toHaveBeenCalledTimes(1);
+  });
+
+  test('the tick is not an operand, and the count is checked without it', () => {
+    // The implementation declares three parameters and an author writes two.
+    // A parser reading `operationNamed` and the fold checking the count have to
+    // agree about which, or one hands `evaluate` a node the other will refuse.
+    expect(operationNamed('worldPoint')).toEqual({ arity: 2, signal: true });
+    expect(operationNamed('mul')).toEqual({ arity: 2, signal: false });
+    expect(operationNamed('lerp')).toBe(null);
+    expect(() =>
+      evaluate(
+        { kind: 'operation', op: 'worldPoint', operands: ['arm', [2, 0], 1] },
+        { poses: posed() },
+      ),
+    ).toThrow(/worldPoint takes 2 operands, and was given 3/);
+  });
+
+  test('names the frame it was pointed at when the scene has none', () => {
+    expect(() =>
+      evaluate(worldPoint('elbow', [2, 0]), { poses: posed() }),
+    ).toThrow(/worldPoint names the frame 'elbow', which this scene has none/);
+  });
+
+  test('says what it was handed when an operand is not what it takes', () => {
+    const tick = { poses: posed() };
+
+    expect(() => evaluate(worldPoint(7, [2, 0]), tick)).toThrow(
+      /Expected a frame's id, and found 7/,
+    );
+    expect(() => evaluate(worldPoint('arm', 2), tick)).toThrow(
+      /Expected a point, and found 2/,
+    );
+  });
+
+  test('a pose that has diverged is refused rather than drawn', () => {
+    const poses: PoseMap = new Map([['arm', mat3.translation(NaN, 0)]]);
+
+    expect(() => evaluate(worldPoint('arm', [2, 0]), { poses })).toThrow(
+      /worldPoint produced \[NaN, 0\]/,
+    );
+  });
+
+  test('a prop is the structural gate, and it names what it refused', () => {
+    // The whole rule of 0016 page 2, where it is enforced: a build folds with
+    // no tick, so a signal in a prop a build has to answer refuses there.
+    expect(() => computed({ position: worldPoint('arm', [2, 0]) })).toThrow(
+      /^position: worldPoint is a signal/,
+    );
+    expect(
+      computed(
+        { position: worldPoint('arm', [2, 0]), width: mul(2, 2) },
+        {
+          poses: posed(),
+        },
+      ),
+    ).toEqual({ position: [3, 3], width: 4 });
   });
 });

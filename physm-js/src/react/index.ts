@@ -51,6 +51,7 @@ export {
   sqrt,
   sub,
   vec,
+  worldPoint,
   xOf,
   yOf,
 } from './../expression';
