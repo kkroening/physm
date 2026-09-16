@@ -1,5 +1,6 @@
 import Anchor from './Anchor';
-import { div, mul, sqrt, vec, worldPoint, xOf } from './../expression';
+import * as vec3 from './../Vec3';
+import { div, mul, sqrt, tickOf, vec, worldPoint, xOf } from './../expression';
 import Box from './Box';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './Circle';
@@ -19,8 +20,10 @@ import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
+import WorldLine from './WorldLine';
 import buildScene from './buildScene';
 import coreComponents from './coreComponents';
+import { canContain } from './componentMeta';
 import { CoincidenceConstraint, DistanceConstraint } from './../Constraint';
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
@@ -528,7 +531,7 @@ describe('buildScene', () => {
     // its call would fail here rather than drop a weight's mass unseen.
     const leaves = coreComponents.filter(({ meta }) => meta.slot !== 'frame');
 
-    expect(leaves).toHaveLength(7);
+    expect(leaves).toHaveLength(8);
 
     for (const leaf of leaves) {
       const { meta } = leaf;
@@ -541,15 +544,18 @@ describe('buildScene', () => {
             spec.kind === 'end' ? 'host' : spec.initial,
           ]),
       );
-      const stray = createElement(
-        RotationalFrame,
-        { id: 'host' },
-        createElement(
-          leaf as unknown as (props: object) => null,
-          props,
-          createElement(Weight, { mass: 1 }),
-        ),
+      const holding = createElement(
+        leaf as unknown as (props: object) => null,
+        props,
+        createElement(Weight, { mass: 1 }),
       );
+      // In a frame, except for the one leaf a frame cannot hold: a
+      // world-space decal's coordinates are the world's, so it goes at the
+      // root, and hosting it in a frame would refuse for that reason instead
+      // of for the one under test.
+      const stray = canContain('frame', meta.slot)
+        ? createElement(RotationalFrame, { id: 'host' }, holding)
+        : holding;
       const refusal = new RegExp(
         `A <${meta.name}> is holding children, and only a frame can`,
       );
@@ -738,6 +744,58 @@ describe('a prop that is computed rather than stated', () => {
       </RotationalFrame>
     );
     const refusal = /mass: worldPoint is a signal/;
+
+    expect(() => buildScene(rig)).toThrow(refusal);
+    expect(() => assemble(rig)).toThrow(refusal);
+  });
+
+  test('a world-space line reaches both routes, and is not folded early', () => {
+    // The one building block whose props are *not* folded where they are
+    // handed over: its endpoints cannot be known until the scene is posed, so
+    // it carries the expression and folds it when it is drawn. Both routes
+    // have to leave it alone, and both have to collect it.
+    const rig = (
+      <>
+        <TrackFrame id="cart" initialState={[3, 0]} />
+        <WorldLine
+          startPos={worldPoint('cart', [0, 0])}
+          endPos={worldPoint('cart', [1, 2])}
+        />
+      </>
+    );
+    const drawn = (scene: CoreScene): unknown[] =>
+      scene.worldDecals.map((make) => {
+        const line = make(tickOf(scene)) as CoreLineDecal;
+
+        return [vec3.toPlanar(line.startPos), vec3.toPlanar(line.endPos)];
+      });
+
+    expect(drawn(buildScene(rig))).toEqual([
+      [
+        [3, 0],
+        [4, 2],
+      ],
+    ]);
+    expect(drawn(assemble(rig))).toEqual(drawn(buildScene(rig)));
+
+    // And it is the scene's, not the frame's: nothing landed in a frame's
+    // decals on the way past.
+    expect(
+      buildScene(rig).sortedFrames.flatMap(({ decals }) => decals),
+    ).toEqual([]);
+  });
+
+  test('a world-space line inside a frame is refused, in both routes', () => {
+    // Its coordinates are the world's. In a frame it would say its endpoints
+    // move with a body, which is the thing it exists not to do -- and the
+    // refusal says which of the two a person wanted.
+    const rig = (
+      <TrackFrame id="cart">
+        <WorldLine startPos={[0, 0]} endPos={[1, 0]} />
+      </TrackFrame>
+    );
+    const refusal =
+      /<WorldLine> is drawn in world coordinates.*inside the frame 'cart'/s;
 
     expect(() => buildScene(rig)).toThrow(refusal);
     expect(() => assemble(rig)).toThrow(refusal);

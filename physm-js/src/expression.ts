@@ -45,9 +45,9 @@
  * only place that rule can live.
  */
 
-import * as mat3 from './Mat3';
-import * as vec3 from './Vec3';
-import type { PoseMap } from './Scene';
+import type Scene from './Scene';
+import type { PoseMap, PositionLike } from './Scene';
+import type { StateMap } from './Frame';
 
 /**
  * Every operation, with how many operands it takes and what it does.
@@ -75,9 +75,31 @@ const OPERATIONS = {
   yOf: (v: unknown) => point(v)[1]!,
 } satisfies Record<string, (...operands: never[]) => unknown>;
 
-/** What a signal reads: where the scene has got to, as the pose walk left it. */
+/**
+ * What a signal reads: where the scene has got to.
+ *
+ * Both halves, and they belong together. The scene is what a frame id means,
+ * and the poses are where its frames are -- a pose map made from *another*
+ * scene answers a colliding id with a number from the wrong rig, silently and
+ * finitely, which neither the missing-frame refusal nor the result check can
+ * catch. `tickOf` is how one is made, so the two arrive paired.
+ */
 export interface Tick {
+  readonly scene: Scene;
   readonly poses: PoseMap;
+}
+
+/**
+ * The tick a scene is at, for a state it is in.
+ *
+ * The pose walk happens once here rather than once per signal: every
+ * `worldPoint` in a drawing reads the same map, which is the whole reason a
+ * world-space value is not a new mechanism -- it is one more consumer of the
+ * layout pass [0016 page 2](../../docs/issues/0016/02-values.md) says physm
+ * already owns.
+ */
+export function tickOf(scene: Scene, stateMap: StateMap | null = null): Tick {
+  return { scene, poses: scene.getPosMatrixMap(stateMap) };
 }
 
 /**
@@ -109,23 +131,16 @@ const SIGNALS = {
    * would make this the one place in the language where a scalar and a point
    * are the same thing.
    *
-   * **`Scene.getWorldPosition` is this arithmetic plus a check that the scene
-   * contains the frame**, and the two should be one. They are not yet because
-   * collapsing them means `Tick` carrying the scene rather than its poses,
-   * which is a decision the consumer makes -- and which page 2's force
-   * channels, evaluated inside a Rust batch, may want to make differently.
+   * **`Scene.getWorldPosition` is the arithmetic**, rather than this repeating
+   * it. That method already takes a caller's pose map for exactly this reason,
+   * and already refuses a frame the scene does not contain -- so the one thing
+   * this adds is the refusal naming what it was handed instead of a frame's
+   * id, which an operand can be and a method's argument cannot.
    */
-  worldPoint: (tick: Tick, frame: unknown, local: unknown) => {
-    const id = label(frame);
-    const pose = tick.poses.get(id);
-    if (!pose) {
-      throw new Error(
-        `worldPoint names the frame '${id}', which this scene has none of.`,
-      );
-    }
-
-    return vec3.toPlanar(mat3.apply(pose, vec3.coerce(point(local))));
-  },
+  worldPoint: (tick: Tick, frame: unknown, local: unknown) =>
+    tick.scene.getWorldPosition(label(frame), point(local) as PositionLike, {
+      posMatMap: tick.poses,
+    }),
 } satisfies Record<string, (tick: Tick, ...operands: never[]) => unknown>;
 
 /** What an operation is called, which is also what the emitter writes. */

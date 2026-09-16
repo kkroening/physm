@@ -13,6 +13,7 @@ import type {
 } from './sceneNodes';
 import type CoreScene from './../Scene';
 import type Decal from './../Decal';
+import type { WorldDecal } from './../Decal';
 import type Frame from './../Frame';
 import type { ComponentMeta } from './componentMeta';
 import type { FrameId } from './../Frame';
@@ -52,6 +53,7 @@ interface Walk {
 
   readonly anchors: Map<string, AnchorPoint>;
   readonly constraints: ConstraintNode[];
+  readonly worldDecals: WorldDecal[];
 
   /** The elements entered so far, the root's first -- for `trace`. */
   readonly trail: Trail;
@@ -124,6 +126,11 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
         addAnchor(walk.anchors, node.id, node.build());
       }
       return;
+    case 'worldDecal':
+      // Part of the scene rather than of a frame, and made afresh from each
+      // tick -- so unlike a `decal`, nothing is built here.
+      walk.worldDecals.push(node.build);
+      return;
     case 'constraint':
       // Built last, once every frame exists and every anchor is known.
       walk.constraints.push(node);
@@ -139,8 +146,15 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
  * yet. Named by the label a person sees, rather than left to whatever the
  * build trips over first.
  */
+/** A building block's own description of itself, where it carries one. */
+function metaOf(
+  type: unknown,
+): ComponentMeta<Record<string, unknown>> | undefined {
+  return (type as { meta?: ComponentMeta<Record<string, unknown>> }).meta;
+}
+
 function refuseMissingProps(type: unknown, props: object): void {
-  const { meta } = type as { meta?: ComponentMeta<Record<string, unknown>> };
+  const meta = metaOf(type);
   const missing = Object.entries(meta?.props ?? {})
     .filter(
       ([name, spec]) =>
@@ -217,15 +231,19 @@ function walkNode(node: ReactNode, index: number, walk: Walk): void {
     // built from is the value. Folded here, where the walk hands props over,
     // so the same node set works in a hand-written component and in a module
     // the editor wrote.
-    const node = sceneNode(computed(props), {
-      key: `@${path}`,
-      frameId: walk.frameId,
-    });
+    //
+    // The exception is a building block whose values are not knowable until
+    // the scene is posed: there is nothing here to fold them against, so it
+    // takes its props as written and folds them itself when it builds. Its
+    // slot is what says so, which is the same declaration the editor's
+    // containment rule reads. One exception is worth an `if`; a second would
+    // be worth moving the fold into every describer.
+    const node = sceneNode(
+      metaOf(type)?.slot === 'worldDecal' ? props : computed(props),
+      { key: `@${path}`, frameId: walk.frameId },
+    );
     if (node.slot !== 'frame') {
-      refuseChildren(
-        (type as { meta?: { name: string } }).meta?.name ?? 'building block',
-        props.children,
-      );
+      refuseChildren(metaOf(type)?.name ?? 'building block', props.children);
     }
 
     place(node, props.children, { ...walk, path, trail });
@@ -308,6 +326,7 @@ export default function buildScene(
   const root: FrameChildren = { decals: [], weights: [], frames: [] };
   const anchors = new Map<string, AnchorPoint>();
   const constraints: ConstraintNode[] = [];
+  const worldDecals: WorldDecal[] = [];
 
   walkNode(element, 0, {
     frameId: null,
@@ -316,12 +335,14 @@ export default function buildScene(
     into: root,
     anchors,
     constraints,
+    worldDecals,
     trail: [],
     trace,
   });
 
   return assembleScene(root, anchors, constraints, {
     gravity,
+    worldDecals,
     // A walked tree is complete when it is handed over, so nothing will come
     // along later to resolve a constraint that cannot be built now.
     unbuildable: {

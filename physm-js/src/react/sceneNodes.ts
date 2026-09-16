@@ -7,6 +7,7 @@ import {
 } from 'react';
 import type Constraint from './../Constraint';
 import type Decal from './../Decal';
+import type { WorldDecal } from './../Decal';
 import type Frame from './../Frame';
 import type { FrameId } from './../Frame';
 import type Weight from './../Weight';
@@ -77,6 +78,19 @@ export type SceneNode =
       readonly build: () => AnchorPoint;
     }
   | { readonly slot: 'decal'; readonly build: () => Decal }
+  | {
+      readonly slot: 'worldDecal';
+
+      /**
+       * A decal in world coordinates, made afresh from each tick.
+       *
+       * It belongs to the scene rather than to a frame, the way a constraint
+       * does, and for the same kind of reason: its endpoints may sit on two
+       * different bodies, so there is no frame whose coordinates they are
+       * both in. Collected separately, after the tree.
+       */
+      readonly build: WorldDecal;
+    }
   | { readonly slot: 'weight'; readonly build: () => Weight }
   | {
       readonly slot: 'constraint';
@@ -325,6 +339,11 @@ export function buildChildren(
         break;
       case 'frame':
         children.frames.push(node.build(buildChildren(entries, key)));
+        break;
+      case 'worldDecal':
+        // Part of no frame either, and refused inside one at the point of
+        // describing -- a world-space decal in a frame's coordinates is a
+        // contradiction rather than a thing to place somewhere sensible.
         break;
       case 'anchor':
         // Part of no frame. An id-named anchor's point is collected by

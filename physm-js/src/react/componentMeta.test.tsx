@@ -4,6 +4,7 @@ import Weight from './Weight';
 import buildScene from './buildScene';
 import coreComponents from './coreComponents';
 import { canContain } from './componentMeta';
+import { tickOf } from './../expression';
 import { createElement } from 'react';
 import type CoreScene from './../Scene';
 import type { ComponentMeta, PropSpecs } from './componentMeta';
@@ -42,6 +43,10 @@ function host(meta: Described['meta'], element: ReactNode): ReactNode {
   switch (meta.slot) {
     case 'frame':
       return element;
+    case 'worldDecal':
+      // Drawn in the world's coordinates, so a frame is the one place it
+      // cannot go -- which `canContain` says and the test below asserts.
+      return element;
     case 'constraint':
       return (
         <>
@@ -71,6 +76,10 @@ function snapshot(scene: CoreScene): unknown {
   return {
     json: scene.toJsonObj(),
     decals: [scene.decals, ...scene.sortedFrames.map((frame) => frame.decals)],
+    // Made from the scene's own initial pose, since a world-space decal is not
+    // a shape until something says where the scene has got to -- and a default
+    // that changed one would otherwise be compared against nothing.
+    worldDecals: scene.worldDecals.map((make) => make(tickOf(scene))),
     constraints: scene.constraints.map((constraint) => constraint.toJsonObj()),
   };
 }

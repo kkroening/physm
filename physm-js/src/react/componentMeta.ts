@@ -142,7 +142,10 @@ export interface ComponentMeta<P> {
 export function canContain(parent: Slot | 'root', child: Slot): boolean {
   switch (parent) {
     case 'frame':
-      return true;
+      // Everything but a world-space decal, whose coordinates are the world's
+      // and not the frame's -- putting one in a frame would say that its
+      // endpoints move with a body, which is the thing it exists not to do.
+      return child !== 'worldDecal';
     case 'root':
       return child !== 'weight' && child !== 'anchor';
     default:

@@ -27,37 +27,27 @@ sizes:
    build has to answer, naming the operation and the prop. That is one of the
    two decisions this slice was owed -- **a signal evaluated with no pose
    refuses**, rather than yielding a number from a pose it did not mean.
-2. **The consumer that never enters the tick loop** --
-   [page 9](docs/issues/0016/09-elements.md)'s world-space decal, a line
-   between two anchors in different frames, which is the wish list's own
-   example and has no frame in which its endpoints are fixed. Page 2 is
-   explicit that these are evaluated at render time, after the batch, so the
-   fast path is untouched.
-
-   A `PropSpec` saying which kind a prop admits lands here rather than with the
-   kind itself, because until a prop admits a signal the spec has nothing to
-   say: the prop box refuses every signal today, unconditionally, at the point
-   of typing. This is also where **paint order** gets decided -- a decal
-   produced after the walk rather than during assembly, which page 9 calls "a
-   decision to make rather than a thing to inherit".
-
-   What it needs first is a smaller thing than it looks: both build routes fold
-   a component's props *before* handing them over, and a prop that cannot be
-   folded until the scene is posed has to be folded by whoever knows that --
-   which is the component, not the boundary.
-
-   It also settles what a tick *is*. It carries a pose map today, which leaves
-   `worldPoint` duplicating `Scene.getWorldPosition` -- the same arithmetic,
-   minus that method's check that the scene contains the frame -- and leaves
-   nothing pairing a pose map with the scene it was made from. Carrying the
-   scene collapses both, and the reason not to do it sight unseen is that page
-   2's force channels are evaluated inside a Rust batch, where there may be no
-   `Scene` to carry.
-3. **Force channels**, which meet the Rust boundary: `tick_mut` holds its
+2. ~~**The consumer that never enters the tick loop**~~ -- done. `<WorldLine>`
+   is a decal in world coordinates, made afresh from each tick and drawn
+   *after* the frames, which is the second decision this slice owed: page 9
+   calls paint order "a decision to make rather than a thing to inherit", and
+   over the rig is what keeps a line visible when it exists to show a
+   relationship between the bodies it would otherwise hide behind. A tick
+   carries the scene as well as its poses, so `worldPoint` is
+   `Scene.getWorldPosition` rather than a second copy of it.
+3. **Which kind each property admits** -- the editor's half, and the last of
+   the kind work. [0027](docs/issues/0027.md) belongs with it: a world-space
+   decal cannot be clicked in the drawing, because the thing a person would
+   click does not exist when the trace that maps shapes back to nodes is made. A `PropSpec` says structural or signal, and the prop box
+   narrows its refusal to read it: today it refuses *every* signal, at the
+   point of typing, which is right for every property that exists but wrong for
+   a `<WorldLine>`'s endpoints as soon as a person wants to type one. Small,
+   and it is what makes the feature reachable without hand-writing TSX.
+4. **Force channels**, which meet the Rust boundary: `tick_mut` holds its
    external-force slice constant for a batch, so such an expression is
    evaluated per *batch*. That is the granularity the demo already ships, so it
    inherits rather than needing something new.
-4. **A spring whose rest direction is world-referenced**, which needs the
+5. **A spring whose rest direction is world-referenced**, which needs the
    accumulated pose and is core work on both sides.
 
 **Not taken here:** what survives a rebuild when structure changes at run time.
@@ -74,10 +64,10 @@ the gameplay case and says plainly that changing it is Karl's call.
   constrains the others -- a `Length` type wants to know whether `x**2` yields
   one, and an `Angle` carrying a unit wants to know what a power of it means.
 
-  **Half of 0025 is answered**: `**` was an example rather than a requirement,
-  and the spelling is the implementer's call _(Karl, 2026-09-16)_. What is left
-  of it is whether the operation should exist at all. Worth writing into the
-  issue itself, which has not happened yet.
+  **Half of 0025 is answered** and is written into the issue: `**` was an
+  example rather than a requirement, and the spelling is the implementer's call
+  _(Karl, 2026-09-16)_. What is left of it is whether the operation should
+  exist at all.
 - [0023](docs/issues/0023.md) -- whether to run a real mutation tester. Seven
   review rounds have found something the hand enumeration missed in five
   distinct ways, and a tool has no frame to miss things from.
@@ -290,6 +280,14 @@ wrongly -- so it is worth early and is never urgent.
 
 ## Done
 
+- **A line between two points on different bodies** -- the wish list's own
+  example, which no `<Line>` prop could express because its endpoints have no
+  common frame. An expression is structural or signal; a signal reads where the
+  scene has got to, and a build -- which has nowhere -- refuses one, naming the
+  operation and the prop. `<WorldLine>` is the consumer: a decal in world
+  coordinates, remade from each tick and drawn over the rig, and the one
+  building block that folds its own props rather than taking them folded. One
+  that cannot be made costs itself rather than the picture.
 - **A computed prop, in the document** — a prop value's third variant is an
   expression, resolution goes into the graph so a reference inside one finds
   the instance's argument, and the emitter writes `endPos={vec(mul(half, 2),

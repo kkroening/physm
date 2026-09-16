@@ -6,6 +6,7 @@ import { SingularMatrixError } from './solveLinearSystem';
 import { factor, fromRows, solveFactored } from './solveLinearSystem';
 import type Constraint from './Constraint';
 import type Decal from './Decal';
+import type { WorldDecal } from './Decal';
 import type Frame from './Frame';
 import type { ConstraintCtx } from './Constraint';
 import type { FrameId, StateMap } from './Frame';
@@ -78,6 +79,7 @@ export const DEFAULT_GRAVITY = 10;
 
 export interface SceneOptions {
   decals?: Decal[];
+  worldDecals?: WorldDecal[];
   frames?: Frame[];
   springs?: unknown[];
   constraints?: Constraint[];
@@ -159,6 +161,15 @@ function refuseRepeatedFrames(
 
 export default class Scene {
   readonly decals: Decal[];
+
+  /**
+   * Decals in world coordinates, each made afresh from the scene's pose.
+   *
+   * Held as makers rather than as shapes because there is no pose at assembly
+   * to make them from -- see `WorldDecal`. Nothing in the solver reads them,
+   * as nothing in it reads a decal.
+   */
+  readonly worldDecals: WorldDecal[];
   readonly frames: Frame[];
   readonly springs: unknown[];
   readonly constraints: Constraint[];
@@ -170,12 +181,14 @@ export default class Scene {
 
   constructor({
     decals = [],
+    worldDecals = [],
     frames = [],
     springs = [],
     constraints = [],
     gravity = DEFAULT_GRAVITY,
   }: SceneOptions = {}) {
     this.decals = decals;
+    this.worldDecals = worldDecals;
     this.frames = frames;
     this.springs = springs;
     // Constraints are added below rather than assigned: `addConstraint` is

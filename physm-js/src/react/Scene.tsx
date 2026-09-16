@@ -101,8 +101,16 @@ export default function Scene({
 
     const unresolved: Constraint[] = [];
     const unresolvedAnchors: string[] = [];
-    const constraints = [...registry.entries.values()].flatMap(
-      ({ node, live }) => (live && node.slot === 'constraint' ? [node] : []),
+    const live = [...registry.entries.values()].filter((entry) => entry.live);
+    const constraints = live.flatMap(({ node }) =>
+      node.slot === 'constraint' ? [node] : [],
+    );
+
+    // Part of the scene rather than of a frame, like a constraint and for a
+    // kindred reason: a world-space decal's endpoints may sit on two
+    // different bodies, so there is no frame whose coordinates they share.
+    const worldDecals = live.flatMap(({ node }) =>
+      node.slot === 'worldDecal' ? [node.build] : [],
     );
     const built = assembleScene(
       root,
@@ -110,6 +118,7 @@ export default function Scene({
       constraints,
       {
         gravity,
+        worldDecals,
         // A frame or anchor a constraint names may be mid-mount or
         // mid-unmount: registrations arrive and depart one effect at a time,
         // and assembly runs against whatever is registered now. Throwing here
