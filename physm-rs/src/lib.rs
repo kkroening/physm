@@ -19,6 +19,7 @@ pub use crate::frame::FrameId;
 pub use crate::rotational_frame::RotationalFrame;
 pub use crate::scene::Scene;
 pub use crate::solver::Solver;
+pub use crate::spring::Spring;
 pub use crate::track_frame::TrackFrame;
 pub use crate::weight::Weight;
 
@@ -29,6 +30,7 @@ mod json;
 mod rotational_frame;
 mod scene;
 mod solver;
+mod spring;
 mod track_frame;
 mod utils;
 mod weight;

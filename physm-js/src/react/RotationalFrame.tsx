@@ -15,14 +15,13 @@ interface RotationalFrameValues {
   position?: number | readonly number[];
   initialState?: number | readonly number[];
   resistance?: number;
-  stiffness?: number;
 }
 
 /** What an element may be given: any of them may be computed. */
 export type RotationalFrameProps = Computable<RotationalFrameValues>;
 
 function describeRotationalFrame(
-  { id, position, initialState, resistance, stiffness }: RotationalFrameValues,
+  { id, position, initialState, resistance }: RotationalFrameValues,
   { key }: SceneNodeContext,
 ): FrameNode {
   const frameId = id ?? key;
@@ -30,10 +29,11 @@ function describeRotationalFrame(
   return {
     slot: 'frame',
     id: frameId,
-    build: ({ decals, weights, frames }) =>
+    build: ({ decals, weights, springs, frames }) =>
       new CoreRotationalFrame({
         decals,
         weights,
+        springs,
         frames,
         // An omitted id defaults to this component's own key, not to a
         // fresh random one: the scene is rebuilt on every registration
@@ -45,7 +45,6 @@ function describeRotationalFrame(
         ...(position === undefined ? {} : { position }),
         ...(initialState === undefined ? {} : { initialState }),
         ...(resistance === undefined ? {} : { resistance }),
-        ...(stiffness === undefined ? {} : { stiffness }),
       }),
   };
 }
@@ -90,6 +89,5 @@ RotationalFrame.meta = {
       default: [0, 0],
     },
     resistance: { kind: 'number', label: 'Resistance', default: 0 },
-    stiffness: { kind: 'number', label: 'Stiffness', default: 0 },
   },
 } satisfies ComponentMeta<RotationalFrameValues>;

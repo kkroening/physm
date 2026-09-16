@@ -58,7 +58,7 @@ objects were already right.
 | **`coefficient_matrix`** | **Pullback metric** $`g = \varphi^*(\bigoplus_w m_w\delta)`$ — the joint-space inertia, i.e. the mass matrix | $`g_{ij}`$ |
 | **`force_vector`** | Generalized force minus the Christoffel term: $`Q_i - \Gamma_{i,jk}\dot q^j \dot q^k`$ | $`f_i`$ |
 | `resistance`, `drag` | Rayleigh dissipation coefficients — joint-space and task-space | $`c_i`$, $`b_w`$ |
-| `stiffness` | Joint spring constant. Conservative, so it enters $`U`$ with gravity rather than $`\mathcal{F}`$ with the two above | $`k_i`$ |
+| `springs[].stiffness` | Joint spring constants. Conservative, so they enter $`U`$ with gravity rather than $`\mathcal{F}`$ with the two above. A frame carries a list, and they add: $`k_i = \sum_s k_{i,s}`$ | $`k_i`$ |
 
 ---
 

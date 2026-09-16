@@ -284,7 +284,10 @@ export default class JsSolver extends Solver {
     }
     const [q, qd] = mapGet(stateMap, baseFrame.id, 'state');
     const resistanceForce = -baseFrame.resistance * qd;
-    const springForce = -baseFrame.stiffness * q;
+
+    // Asked of the frame rather than written out here: a frame may carry
+    // several springs, and what each is slack toward is its own business.
+    const springForce = baseFrame.springForce(q);
     const externalForce =
       (externalForceMap && externalForceMap.get(baseFrame.id)) || 0;
     result += externalForce + resistanceForce + springForce;

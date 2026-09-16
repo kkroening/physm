@@ -227,7 +227,7 @@ So $L$ belongs on the constraint from the first commit, defaulted at scene-build
 authored geometry, with an explicit override available.
 
 **In physm-rs it has to be explicit anyway.** `Scene::from_json_value` parses `frames` and
-`gravity`; the frame types parse `angle`, `children`, `id`, `position`, `resistance`, `stiffness`
+`gravity`; the frame types parse `angle`, `children`, `id`, `position`, `resistance`, `springs`
 and `weights`.
 There is no `initialState` — state arrives separately on every `tick`, so the solver never sees
 $`q_0`$. Capturing $L$ implicitly would mean latching a value on the first tick, which is stateful

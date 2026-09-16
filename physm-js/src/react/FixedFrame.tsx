@@ -28,8 +28,21 @@ function describeFixedFrame(
   return {
     slot: 'frame',
     id: frameId,
-    build: ({ decals, weights, frames }) =>
-      new CoreFixedFrame({
+    build: ({ decals, weights, springs, frames }) => {
+      // Its coordinate moves nothing, so a spring on it would pull on nothing
+      // -- silently, since the force would enter a row that changes no pose.
+      // `FixedFrameOptions` omits `resistance` for the same reason, and says
+      // so: a prop the type allowed would describe a scene the other solver
+      // cannot represent.
+      if (springs.length) {
+        throw new Error(
+          'A <Spring> is inside a <FixedFrame>, whose coordinate moves ' +
+            'nothing -- so the spring would pull on nothing. Put it in the ' +
+            'frame that actually turns or slides.',
+        );
+      }
+
+      return new CoreFixedFrame({
         decals,
         weights,
         frames,
@@ -38,7 +51,8 @@ function describeFixedFrame(
         id: frameId,
         ...(position === undefined ? {} : { position }),
         ...(angle === undefined ? {} : { angle }),
-      }),
+      });
+    },
   };
 }
 

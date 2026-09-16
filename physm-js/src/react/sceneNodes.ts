@@ -10,6 +10,7 @@ import type Decal from './../Decal';
 import type { WorldDecal } from './../Decal';
 import type Frame from './../Frame';
 import type { FrameId } from './../Frame';
+import type Spring from './../Spring';
 import type Weight from './../Weight';
 import type { PositionLike } from './../Scene';
 import type { ReactNode } from 'react';
@@ -92,6 +93,7 @@ export type SceneNode =
       readonly build: WorldDecal;
     }
   | { readonly slot: 'weight'; readonly build: () => Weight }
+  | { readonly slot: 'spring'; readonly build: () => Spring }
   | {
       readonly slot: 'constraint';
       /**
@@ -158,6 +160,7 @@ export type SceneNodeSource<P> = (
 export interface FrameChildren {
   readonly decals: Decal[];
   readonly weights: Weight[];
+  readonly springs: Spring[];
   readonly frames: Frame[];
 }
 
@@ -323,7 +326,12 @@ export function buildChildren(
   entries: Map<string, Registration>,
   parentKey: string | null,
 ): FrameChildren {
-  const children: FrameChildren = { decals: [], weights: [], frames: [] };
+  const children: FrameChildren = {
+    decals: [],
+    weights: [],
+    springs: [],
+    frames: [],
+  };
 
   for (const [key, { parentKey: entryParent, node, live }] of entries) {
     if (!live || entryParent !== parentKey) {
@@ -336,6 +344,9 @@ export function buildChildren(
         break;
       case 'weight':
         children.weights.push(node.build());
+        break;
+      case 'spring':
+        children.springs.push(node.build());
         break;
       case 'frame':
         children.frames.push(node.build(buildChildren(entries, key)));

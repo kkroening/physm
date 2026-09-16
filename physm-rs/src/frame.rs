@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use crate::Mat3;
+use crate::Spring;
 use crate::Weight;
 
 pub type FrameId = String;
@@ -12,9 +13,10 @@ pub trait Frame: Debug {
 
     fn get_resistance(&self) -> f64;
 
-    /// A spring on the frame's own coordinate, slack at zero: the restoring
-    /// force is `-stiffness * q`. Local -- it reads `q` and nothing else.
-    fn get_stiffness(&self) -> f64;
+    /// Springs on the frame's own coordinate -- see `Spring`. A list rather
+    /// than a number, because a spring is a thing a person adds rather than a
+    /// property the frame has.
+    fn get_springs(&self) -> &[Spring];
 
     fn get_weights(&self) -> &[Weight];
 
@@ -36,6 +38,18 @@ pub trait Frame: Debug {
     /// own. Required, not defaulted: a joint that forgot to say so would have
     /// its inertia replaced.
     fn is_joint(&self) -> bool;
+
+    /// What this frame's springs contribute to its generalised force, together.
+    ///
+    /// They add, which is what makes several of them meaningful. Asked of the
+    /// frame so the solver adds a term without knowing what is in it, and
+    /// mirrors `Frame.springForce` in `physm-js`.
+    fn get_spring_force(&self, q: f64) -> f64 {
+        self.get_springs()
+            .iter()
+            .map(|spring| spring.get_force(q))
+            .sum()
+    }
 }
 
 pub type FrameBox = Box<dyn Frame>;

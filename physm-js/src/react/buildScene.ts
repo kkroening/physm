@@ -105,7 +105,12 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
   switch (node.slot) {
     case 'frame': {
       // Children first, because a `Frame` takes them as constructor arguments.
-      const into: FrameChildren = { decals: [], weights: [], frames: [] };
+      const into: FrameChildren = {
+        decals: [],
+        weights: [],
+        springs: [],
+        frames: [],
+      };
       walkChildren(children, { ...walk, frameId: node.id, into });
       const frame = node.build(into);
       walk.into.frames.push(frame);
@@ -120,6 +125,9 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
     }
     case 'weight':
       walk.into.weights.push(node.build());
+      return;
+    case 'spring':
+      walk.into.springs.push(node.build());
       return;
     case 'anchor':
       if (node.id !== undefined) {
@@ -323,7 +331,12 @@ export default function buildScene(
   element: ReactNode,
   { gravity, trace }: { gravity?: number; trace?: Trace } = {},
 ): CoreScene {
-  const root: FrameChildren = { decals: [], weights: [], frames: [] };
+  const root: FrameChildren = {
+    decals: [],
+    weights: [],
+    springs: [],
+    frames: [],
+  };
   const anchors = new Map<string, AnchorPoint>();
   const constraints: ConstraintNode[] = [];
   const worldDecals: WorldDecal[] = [];

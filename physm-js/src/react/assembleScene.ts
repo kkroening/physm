@@ -55,6 +55,18 @@ export default function assembleScene(
     );
   }
 
+  // A spring acts on a frame's own coordinate, and the scene has none -- so a
+  // root spring is collected by both routes and read by neither. Dropping it
+  // silently takes a force out of a rig, which changes the answer rather than
+  // the picture, and `<Spring>` sits beside `<Weight>` in the library.
+  if (root.springs.length) {
+    throw new Error(
+      `A <Spring> must be inside a frame: a spring acts on a frame's own ` +
+        `coordinate, and ${root.springs.length} was placed at the root of ` +
+        'the scene.',
+    );
+  }
+
   const scene = new CoreScene({
     decals: root.decals,
     worldDecals: [...worldDecals],

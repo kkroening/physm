@@ -20,6 +20,7 @@ import CoreFixedFrame from './../FixedFrame';
 import CoreLineDecal from './../LineDecal';
 import CoreRotationalFrame from './../RotationalFrame';
 import CoreScene from './../Scene';
+import CoreSpring from './../Spring';
 import CoreTrackFrame from './../TrackFrame';
 import CoreWeight from './../Weight';
 import Distance from './Distance';
@@ -27,6 +28,7 @@ import FixedFrame from './FixedFrame';
 import Line from './Line';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
+import Spring from './Spring';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import WorldLine from './WorldLine';
@@ -36,7 +38,7 @@ import buildScene from './buildScene';
 import coreComponents from './coreComponents';
 import { canContain } from './componentMeta';
 import { CoincidenceConstraint, DistanceConstraint } from './../Constraint';
-import { createElement } from 'react';
+import { Children, createElement, isValidElement } from 'react';
 import { render } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 
@@ -89,7 +91,7 @@ function normalized(scene: CoreScene): unknown {
 }
 
 /**
- * All eleven building blocks with every prop set: none at its default when `k`
+ * All twelve building blocks with every prop set: none at its default when `k`
  * is 1, and every one different between `k` = 1 and 2.
  *
  * The constraints join three pairs of weighted pivots set `gap` apart at
@@ -145,6 +147,7 @@ function fullRig(k: 1 | 2): ReactElement {
           initialState={[0.6 * k, -0.2 * k]}
           resistance={1.25 * k}
         >
+          <Spring stiffness={0.8 * k} />
           <Circle
             position={[3 * k, 0]}
             radius={0.3 * k}
@@ -261,6 +264,7 @@ function handBuilt(k: 1 | 2): CoreScene {
             position: [0, -k],
             initialState: [0.6 * k, -0.2 * k],
             resistance: 1.25 * k,
+            springs: [new CoreSpring(0.8 * k)],
             decals: [
               new CoreCircleDecal({
                 position: [3 * k, 0],
@@ -401,6 +405,35 @@ describe('buildScene', () => {
       ['cart', 'right'],
     ]);
     expect(ends(assemble(rig))).toEqual(ends(buildScene(rig)));
+  });
+
+  test('covers every building block the library lists', () => {
+    // The docstring above claims `fullRig` is exhaustive, and that claim was
+    // prose until this: a building block left out of the rig failed nothing,
+    // so the guarantee the rig is cited for -- that a binding cannot quietly
+    // stop carrying a prop -- held only for the ones somebody remembered.
+    const named = (node: ReactNode, into: Set<string>): Set<string> => {
+      for (const child of Children.toArray(node)) {
+        if (!isValidElement(child)) {
+          continue;
+        }
+
+        // A fragment carries no `meta` and is not a building block; every
+        // binding component does, and its name is the tag a person writes.
+        const { meta } = child.type as { meta?: { name: string } };
+        if (meta) {
+          into.add(meta.name);
+        }
+
+        named((child.props as { children?: ReactNode }).children, into);
+      }
+
+      return into;
+    };
+
+    expect([...named(fullRig(1), new Set())].sort()).toEqual(
+      coreComponents.map(({ meta }) => meta.name).sort(),
+    );
   });
 
   test('builds every prop of every component as the constructors do', () => {
@@ -569,7 +602,7 @@ describe('buildScene', () => {
     // its call would fail here rather than drop a weight's mass unseen.
     const leaves = coreComponents.filter(({ meta }) => meta.slot !== 'frame');
 
-    expect(leaves).toHaveLength(8);
+    expect(leaves).toHaveLength(9);
 
     for (const leaf of leaves) {
       const { meta } = leaf;
@@ -625,6 +658,17 @@ describe('buildScene', () => {
     expect(() => buildScene(<Weight mass={1} />)).toThrow(
       /must be inside a frame/,
     );
+  });
+
+  test('refuses a Spring at the root, as the mounted binding does', () => {
+    // Collected by both routes into the root's list and read by neither, so
+    // without this the spring is dropped and the rig quietly loses a force --
+    // the same outcome the `<FixedFrame>` refusal rules out, by another door.
+    const rig = <Spring stiffness={45} />;
+    const refusal = /<Spring> must be inside a frame/;
+
+    expect(() => buildScene(rig)).toThrow(refusal);
+    expect(() => assemble(rig)).toThrow(refusal);
   });
 
   test('refuses two anchors sharing an id, as the mounted binding does', () => {
@@ -782,6 +826,41 @@ describe('a prop that is computed rather than stated', () => {
       </RotationalFrame>
     );
     const refusal = /mass: worldPoint is a signal/;
+
+    expect(() => buildScene(rig)).toThrow(refusal);
+    expect(() => assemble(rig)).toThrow(refusal);
+  });
+
+  test('several springs on one joint reach both routes, and add', () => {
+    // A spring is a node a person adds rather than a number the frame holds,
+    // so the shape has to carry more than one -- and while every spring is
+    // linear, two of them are one of their summed stiffness, which is what
+    // makes the second one free today and expressible at all later.
+    const rig = (
+      <RotationalFrame id="arm">
+        <Spring stiffness={3} />
+        <Spring stiffness={5} />
+      </RotationalFrame>
+    );
+    const armOf = (scene: CoreScene) => scene.frameMap.get('arm')!;
+
+    for (const scene of [buildScene(rig), assemble(rig)]) {
+      expect(armOf(scene).springs.map(({ stiffness }) => stiffness)).toEqual([
+        3, 5,
+      ]);
+      expect(armOf(scene).springForce(0.5)).toBeCloseTo(-4, 12);
+    }
+  });
+
+  test('a spring inside a fixed frame is refused, in both routes', () => {
+    // Its coordinate moves nothing, so the spring would pull on nothing --
+    // silently, which is the one outcome worth ruling out.
+    const rig = (
+      <FixedFrame id="mount">
+        <Spring stiffness={3} />
+      </FixedFrame>
+    );
+    const refusal = /<Spring> is inside a <FixedFrame>, whose coordinate moves/;
 
     expect(() => buildScene(rig)).toThrow(refusal);
     expect(() => assemble(rig)).toThrow(refusal);

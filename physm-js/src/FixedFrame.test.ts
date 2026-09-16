@@ -3,6 +3,7 @@ import Frame from './Frame';
 import JsSolver from './JsSolver';
 import RotationalFrame from './RotationalFrame';
 import Scene from './Scene';
+import Spring from './Spring';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import { CoincidenceConstraint } from './Constraint';
@@ -183,5 +184,28 @@ describe('FixedFrame', () => {
     expect(() => scene.getStabilizedState(scene.getInitialStateMap())).toThrow(
       /over-determined: 2 constraint rows against 1 joints/,
     );
+  });
+});
+
+describe('what a fixed frame cannot be given', () => {
+  test('a spring, because its coordinate moves nothing', () => {
+    // The guard is the `Omit` in `FixedFrameOptions`, and it is the mechanism
+    // rather than a flourish: `physm-rs` reports no springs for a fixed frame,
+    // so a prop the type allowed would describe a scene the other solver
+    // cannot represent -- and it would be dropped in silence rather than
+    // refused.
+    //
+    // Pinned with `@ts-expect-error` because `Omit<T, K>` takes `K extends
+    // keyof any`: a key that stops existing on `FrameOptions` goes on being
+    // accepted in the list and quietly omits nothing, which is how this guard
+    // was retired once already without a word.
+    // @ts-expect-error -- a fixed frame's coordinate moves nothing
+    new FixedFrame({ springs: [new Spring(1)] });
+
+    // The same two it has always refused, for the same reason.
+    // @ts-expect-error -- nothing acts on a coordinate that moves nothing
+    new FixedFrame({ resistance: 1 });
+    // @ts-expect-error -- a coordinate that moves nothing starts where it is
+    new FixedFrame({ initialState: [1, 0] });
   });
 });

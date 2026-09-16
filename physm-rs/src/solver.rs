@@ -454,7 +454,10 @@ fn get_force_vector_entry(
     debug_assert_eq!(external_forces.len(), frames.len());
     let weight_force = (vel_mats[row_index].transpose() * composite_force_mats[row_index]).trace();
     let resistance_force = -states[row_index].qd * frames[row_index].get_resistance();
-    let spring_force = -states[row_index].q * frames[row_index].get_stiffness();
+
+    // Asked of the frame rather than written out here: a frame may carry
+    // several springs, and what each is slack toward is its own business.
+    let spring_force = frames[row_index].get_spring_force(states[row_index].q);
     resistance_force + spring_force + weight_force + external_forces[row_index]
 }
 
@@ -1074,6 +1077,7 @@ mod tests {
     use crate::Position;
     use crate::RotationalFrame;
     use crate::Scene;
+    use crate::Spring;
     use crate::TrackFrame;
     use crate::Weight;
 
@@ -1180,7 +1184,7 @@ mod tests {
                         .dot(&(kinetic_force_vec + drag_force_vec + gravity_force_vec))
                 });
             let resistance_force = -states[row_index].qd * frames[row_index].get_resistance();
-            let spring_force = -states[row_index].q * frames[row_index].get_stiffness();
+            let spring_force = frames[row_index].get_spring_force(states[row_index].q);
             resistance_force
                 + spring_force
                 + weight_forces.sum::<f64>()
@@ -1203,7 +1207,7 @@ mod tests {
             let mut link = RotationalFrame::new(format!("link{}", index))
                 .set_position(Position([if index == 0 { 0. } else { 3. }, 0.]))
                 .set_resistance(0.05 * index as f64)
-                .set_stiffness(0.07 * index as f64)
+                .add_spring(Spring::new(0.07 * index as f64))
                 .add_weight(
                     Weight::new(1. + index as f64)
                         .set_position(Position([3., 0.]))
@@ -1242,13 +1246,13 @@ mod tests {
         let mut hub = TrackFrame::new("hub".into())
             .set_angle(PI / 6.)
             .set_resistance(0.4)
-            .set_stiffness(0.9)
+            .add_spring(Spring::new(0.9))
             .add_weight(Weight::new(4.).set_drag(0.1));
         for index in 0..arm_count {
             hub = hub.add_child(Box::new(
                 RotationalFrame::new(format!("arm{}", index))
                     .set_position(Position([2. * index as f64, 1.]))
-                    .set_stiffness(0.3 + 0.1 * index as f64)
+                    .add_spring(Spring::new(0.3 + 0.1 * index as f64))
                     .add_weight(
                         Weight::new(2. + index as f64)
                             .set_position(Position([4., -1.]))
