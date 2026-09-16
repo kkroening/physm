@@ -1070,14 +1070,69 @@ describe('Editor, a prop the document computes', () => {
     ).toBeVisible();
   });
 
-  test('the properties pane shows it, and offers no editor for it', () => {
+  /** A weight in a frame, with a mass written out rather than computed. */
+  const stating = (): SceneDocument =>
+    documentFrom(
+      <RotationalFrame id="arm">
+        <Weight mass={1} position={[1, 0]} />
+      </RotationalFrame>,
+    );
+
+  test('typing a computation into a prop box stores the graph', () => {
+    render(<Editor initialDocument={stating()} />);
+    const props = select('Weight');
+    fireEvent.change(within(props).getByLabelText('Mass'), {
+      target: { value: '2 * 3' },
+    });
+
+    // Infix in, constructor out: the two are the same expression, and only the
+    // printed form is the call.
+    expect(code()).toContain('mass={mul(2, 3)}');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(
+      within(select('Weight')).getByRole('img', { name: 'Mass as a graph' }),
+    ).toBeVisible();
+  });
+
+  test('a computation can be typed over, and cleared back to a value', () => {
+    render(<Editor initialDocument={computing()} />);
+    const mass = () => within(select('Weight')).getByLabelText('Mass');
+    fireEvent.change(mass(), { target: { value: 'mul(2, 4)' } });
+
+    expect(code()).toContain('mass={mul(2, 4)}');
+
+    fireEvent.change(mass(), { target: { value: '7' } });
+
+    expect(code()).toContain('mass={7}');
+    expect(
+      within(select('Weight')).queryByRole('img', { name: 'Mass as a graph' }),
+    ).toBeNull();
+  });
+
+  test('text that is not an expression is refused, and nothing is stored', () => {
+    render(<Editor initialDocument={stating()} />);
+    const mass = within(select('Weight')).getByLabelText('Mass');
+    fireEvent.change(mass, { target: { value: '2 +' } });
+
+    // The same posture as a number that does not parse: marked, kept as typed,
+    // and the document left alone.
+    expect(mass).toHaveAttribute('aria-invalid', 'true');
+    expect(mass).toHaveValue('2 +');
+    expect(code()).toContain('mass={1}');
+  });
+
+  test('the properties pane shows it as the text that would type it', () => {
     render(<Editor initialDocument={computing()} />);
     const props = select('Weight');
 
-    expect(props.querySelector('.editor__reference')).toHaveTextContent(
-      'mul(2, 3)',
-    );
-    expect(within(props).queryByLabelText('Mass')).toBeNull();
+    // A field that can parse an expression shows one, so it is editable where
+    // it is readable -- withholding the editor would withhold one that works.
+    expect(within(props).getByLabelText('Mass')).toHaveValue('mul(2, 3)');
+
+    // And the drawing goes with it.
+    expect(
+      within(props).getByRole('img', { name: 'Mass as a graph' }),
+    ).toBeVisible();
 
     // The props that are not computed are editable as ever.
     expect(within(props).getByLabelText('Position x')).toHaveValue('1');

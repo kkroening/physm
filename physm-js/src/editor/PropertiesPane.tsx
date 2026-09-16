@@ -1,4 +1,5 @@
 import ExpressionView from './ExpressionView';
+import parseExpression from './parseExpression';
 import { Fragment, useId, useRef, useState } from 'react';
 import { isOperation } from './../expression';
 import { literalOf, shownValueOf } from './propValue';
@@ -24,6 +25,7 @@ import type {
   SceneDocument,
 } from './sceneDocument';
 import type { PropSpec } from './../react/componentMeta';
+import type { PropValue } from './propValue';
 import type { ReactElement } from 'react';
 
 /**
@@ -56,6 +58,16 @@ interface ParameterSelection {
   readonly definition: string;
   readonly at: number;
 }
+
+/**
+ * The prop kinds a field shows as text a person can type back.
+ *
+ * Which is what decides whether a *computed* prop of that kind is editable:
+ * the field can print the expression and parse a new one, so showing it
+ * read-only would withhold an editor that works. A pair or a flag field
+ * cannot, so a computed prop of those kinds is shown rather than edited.
+ */
+const TYPED_TEXT = new Set(['number', 'length', 'angle']);
 
 /** Degrees per radian. An angle is held in radians and shown in degrees. */
 const DEGREES = 180 / Math.PI;
@@ -161,8 +173,14 @@ function NumberInput({
   id,
   spec,
   value,
+  held,
   onChange,
-}: FieldProps & { readonly id: string }): ReactElement {
+  onHeld,
+}: FieldProps & {
+  readonly id: string;
+  readonly held?: PropValue | undefined;
+  readonly onHeld?: ((node: PropValue) => void) | undefined;
+}): ReactElement {
   const scale = spec.kind === 'angle' ? DEGREES : 1;
   const parse = (text: string): number | undefined => {
     const parsed = parseNumber(text);
@@ -176,13 +194,42 @@ function NumberInput({
     <DraftInput
       id={id}
       inputMode="decimal"
-      shown={typeof value === 'number' ? formatNumber(value * scale) : ''}
+      shown={
+        held && isOperation(held)
+          ? shownValueOf(held)!
+          : typeof value === 'number'
+            ? formatNumber(value * scale)
+            : ''
+      }
       placeholder={
         typeof spec.default === 'number'
           ? formatNumber(spec.default * scale)
           : absenceOf(spec)
       }
-      commit={(text) => commitText(spec, text, parse, onChange)}
+      commit={(text) => {
+        if (commitText(spec, text, parse, onChange)) {
+          return true;
+        }
+
+        // Not a number, so perhaps a computation. Typed in the surface syntax
+        // -- `halfLength * 2` -- and stored as the graph the emitter writes as
+        // `mul(halfLength, 2)`; the two are the same expression, and only the
+        // printed form is the constructor.
+        //
+        // No angle scaling, which is a gap rather than a decision: `45` in
+        // this box is degrees and `30 + 15` is radians, and scaling the node
+        // would put the surface's unit into the stored graph and still be
+        // wrong for `halfTurn * 2`. `docs/issues/0024.md` carries it.
+        const parsed = onHeld ? parseExpression(text) : { refusal: '' };
+
+        if ('refusal' in parsed || parsed.node.kind === 'literal') {
+          return false;
+        }
+
+        onHeld!(parsed.node);
+
+        return true;
+      }}
     />
   );
 }
@@ -280,12 +327,24 @@ function PropField({
   value,
   names,
   extra,
+  below,
+  held,
   onChange,
+  onHeld,
 }: Omit<FieldProps, 'onChange'> & {
   readonly names: readonly string[];
 
+  /** The prop as the document holds it, for a field that shows more than a value. */
+  readonly held?: PropValue | undefined;
+
+  /** A computation typed into the field, rather than a value. */
+  readonly onHeld?: ((node: PropValue) => void) | undefined;
+
+  /** What goes under the field rather than beside it: a drawing, say. */
+  readonly below?: ReactElement | undefined;
+
   /** A control of the field's own, beside the reset: see `Carry`. */
-  readonly extra?: ReactElement;
+  readonly extra?: ReactElement | undefined;
 
   /** A new value -- `discrete` for a click, which is a step of its own to undo. */
   readonly onChange: (value: unknown, discrete?: boolean) => void;
@@ -314,6 +373,7 @@ function PropField({
         {reset}
         {extra}
       </div>
+      {below}
     </div>
   );
 
@@ -348,11 +408,25 @@ function PropField({
     case 'number':
     case 'length':
       return labelled(
-        <NumberInput id={id} spec={spec} value={value} onChange={onChange} />,
+        <NumberInput
+          id={id}
+          spec={spec}
+          value={value}
+          held={held}
+          onChange={onChange}
+          onHeld={onHeld}
+        />,
       );
     case 'angle':
       return labelled(
-        <NumberInput id={id} spec={spec} value={value} onChange={onChange} />,
+        <NumberInput
+          id={id}
+          spec={spec}
+          value={value}
+          held={held}
+          onChange={onChange}
+          onHeld={onHeld}
+        />,
         '°',
       );
     case 'color':
@@ -560,10 +634,11 @@ function NodeProps({
         {Object.entries(meta.props).map(([name, spec]) => {
           const held = node.props[name];
 
-          // Computed, so neither a literal to edit nor a name to carry back.
-          // Shown as the call that built it, which is what the emitted module
-          // writes and what a prop box will one day parse.
-          if (isOperation(held)) {
+          // Computed. A field that can parse one shows it as text and takes a
+          // new one, so an expression is editable where it is readable -- and
+          // where it cannot be parsed back, the call is shown rather than
+          // edited, which is the posture a reference has for the same reason.
+          if (isOperation(held) && !TYPED_TEXT.has(spec.kind)) {
             return (
               <div className="editor__field" key={name}>
                 <span className="editor__label">{spec.label}</span>
@@ -609,30 +684,45 @@ function NodeProps({
             <PropField
               key={name}
               spec={spec}
-              value={held?.value}
+              value={held?.kind === 'literal' ? held.value : undefined}
+              held={held}
               names={names}
-              extra={
-                <Carry
-                  label={`Promote ${spec.label} to a prop`}
-                  glyph="⤴"
-                  refusal={promotionRefusal(
+              onHeld={(node) =>
+                onChange(
+                  setProp(
                     doc,
                     selection.definition,
                     selection.path,
                     name,
-                  )}
-                  onCarry={() =>
-                    onChange(
-                      promoteProp(
-                        doc,
-                        selection.definition,
-                        selection.path,
-                        name,
-                      ),
-                      null,
-                    )
-                  }
-                />
+                    node,
+                  ),
+                  null,
+                )
+              }
+              extra={
+                isOperation(held) ? undefined : (
+                  <Carry
+                    label={`Promote ${spec.label} to a prop`}
+                    glyph="⤴"
+                    refusal={promotionRefusal(
+                      doc,
+                      selection.definition,
+                      selection.path,
+                      name,
+                    )}
+                    onCarry={() =>
+                      onChange(
+                        promoteProp(
+                          doc,
+                          selection.definition,
+                          selection.path,
+                          name,
+                        ),
+                        null,
+                      )
+                    }
+                  />
+                )
               }
               onChange={(value, discrete) =>
                 onChange(
@@ -647,6 +737,13 @@ function NodeProps({
                     ? null
                     : `${selection.definition}/${selection.path.join('.')}/${name}#${visit.current}`,
                 )
+              }
+              // Below the field rather than beside it: a drawing is as wide as
+              // the expression is deep.
+              below={
+                isOperation(held) ? (
+                  <ExpressionView prop={held} label={spec.label} />
+                ) : undefined
               }
             />
           );

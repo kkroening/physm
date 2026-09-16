@@ -14,17 +14,26 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**Typing `halfLength * 2` into a prop box**, which is the last of what a person
-touches. The pane shows a computed prop and draws it; what it cannot do is take
-one. That wants a parser from the surface syntax to the node set -- infix and
-calls in, a graph out -- and a refusal that reads like the length field's
-rather than a stack trace.
+**Signals** -- 0016's step 4, and the first thing since parameters that the
+solver has to know about. A value that varies per tick, hanging off the pose
+map, with decals drawn in world space; and with them, the kind propagation the
+expressions design says must land *with* the node set and has been waiting for
+a producer. It also has to say which solver a per-tick value is specified
+against, since the Rust path hands external forces across once per batch.
 
-The viewer is done and is the reason to do the parser next rather than first:
-it is the thing that makes a graph nobody hand-wrote inspectable on the day it
-first exists.
+Expressions are done end to end: stored, resolved, emitted, drawn, and typed.
+What is left of them is the wish list rather than the feature -- `rotate`,
+comparison and selection, and the two open questions below.
 
 **Still open, and owed an answer around here:**
+
+- [0024](docs/issues/0024.md) -- an angle typed as an expression skips the
+  field's degree scaling, so `45` and `30 + 15` differ by 57.3 in the same box.
+  Scaling the node would put the surface's unit into the stored graph, so it
+  wants the same answer as [0022](docs/issues/0022.md) rather than a multiply.
+- [0023](docs/issues/0023.md) -- whether to run a real mutation tester. Seven
+  review rounds have found something the hand enumeration missed in five
+  distinct ways, and a tool has no frame to miss things from.
 
 - **Whether the emitter binds a shared subexpression.** The original step said
   it would, and this is the part of it that did not land: one node in two props
@@ -243,6 +252,10 @@ wrongly -- so it is worth early and is never urgent.
   identity, never per equal subtree, which is what makes it a check on the
   representation rather than a second opinion about it. Resolves
   [0018](docs/issues/0018.md).
+- **Expressions, typed** — `halfLength * 2` in a prop box becomes the graph the
+  emitter writes as `mul(halfLength, 2)`, refused with a sentence rather than a
+  stack trace while it is half-typed, and editable where it is readable: a
+  field that can print an expression takes a new one.
 - **Expression nodes** — a prop can be computed rather than stated:
   `position={vec(3, mul(halfLength, 2))}`. A constructor returns a node rather
   than a result, so one form serves a hand-written component, the module the
