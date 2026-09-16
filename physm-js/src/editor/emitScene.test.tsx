@@ -276,6 +276,9 @@ function demo(): SceneDocument {
 }
 
 /** One point, under three tuple-typed props of an imported composite. */
+/** One point object, so the props holding it hold *it* and not a copy. */
+const AT = [4, 0] as const;
+
 function struts(): SceneDocument {
   return documentFrom(
     <TrackFrame id="cart">
@@ -285,9 +288,6 @@ function struts(): SceneDocument {
     </TrackFrame>,
   );
 }
-
-/** One point object, so the props holding it hold *it* and not a copy. */
-const AT = [4, 0] as const;
 
 /**
  * One point carried three times by building blocks and once by an imported
@@ -798,6 +798,58 @@ describe('emitScene', () => {
     );
   });
 
+  test('refuses a name it cannot write even where the value has one', () => {
+    // A prop whose value the module holds by name never reaches `attribute`,
+    // so the two refusals in there had to come out of it: whether a prop is
+    // checked must not depend on whether its value is shared with another.
+    // Both are reachable from ordinary JSX -- on React 19 a `ref` arrives in
+    // `props` like any other prop.
+    const shared = (prop: string, value: unknown): SceneDocument => {
+      const held = literalOf(value);
+      const [frame] = nodesFrom(
+        <RotationalFrame id="arm">
+          <Box width={1} height={1} />
+          <Circle radius={1} />
+        </RotationalFrame>,
+      );
+
+      return {
+        root: 'Scene',
+        definitions: [
+          {
+            name: 'Scene',
+            body: [
+              {
+                ...frame!,
+                children: frame!.children.map((child) => ({
+                  ...child,
+                  props: { ...child.props, [prop]: held },
+                })),
+              },
+            ],
+          },
+        ],
+      };
+    };
+
+    expect(() => emitScene(shared('ref', { current: null }))).toThrow(
+      /A ref cannot be written/,
+    );
+
+    // `const DATA-FOO = …` is a module that does not parse, which is worse
+    // than one that says the wrong thing.
+    expect(() => emitScene(shared('data-foo', { a: 1 }))).toThrow(
+      /'data-foo' cannot be written as a JSX attribute/,
+    );
+
+    // A value the emitter cannot write is no candidate for a name either.
+    // Named, the `const` write would throw from outside the per-node `try`,
+    // and the error would arrive without the node it came from.
+    expect(() => emitScene(shared('color', { at: () => 1 }))).toThrow(
+      /Cannot write 'color' on <Box> at Scene\/0\.0:/,
+    );
+  });
+
   test('records where each node landed', () => {
     const { source, ranges } = emitScene(
       documentFrom(
@@ -934,9 +986,9 @@ describe('emitScene, repeated values', () => {
     const source = expectRoundTrip(struts());
 
     // One point in three props, and still inline: the emitter cannot see
-    // `Strut`'s types,
-    // and a hoisted `const AT = [4, 0]` widens to `number[]`, which its
-    // tuple-typed prop would refuse. The type-check test emits this one too.
+    // `Strut`'s types, and a hoisted `const AT = [4, 0]` widens to `number[]`,
+    // which its tuple-typed prop would refuse. The type-check test emits this
+    // one too.
     expect(source).not.toContain('const ');
     expect(source).toContain('at={[4, 0]}');
   });

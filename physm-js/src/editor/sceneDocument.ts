@@ -1298,12 +1298,44 @@ export function demotionRefusal(
 }
 
 /**
+ * A literal node already in `definition` holding this very value object.
+ *
+ * Identity, not equality: a parameter's default is the object the promoted
+ * prop held, so the props that shared it are still holding it, and rejoining
+ * them is a statement of fact rather than the guess this document stopped
+ * making. Without it a promote and a demote would leave the emitted module
+ * with a fourth copy of a value three props name.
+ */
+function nodeHolding(
+  doc: SceneDocument,
+  definition: string,
+  value: unknown,
+): PropValue | undefined {
+  if (value === null || typeof value !== 'object') {
+    return undefined;
+  }
+
+  for (const node of everyNode(definitionOf(doc, definition).body)) {
+    for (const held of Object.values(node.props)) {
+      if (held.kind === 'literal' && held.value === value) {
+        return held;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * `prop` on the node at `path`, back to the value its parameter defaults to.
  *
  * The parameter stays declared, even where nothing refers to it any more: an
  * unused one is visible in the declaration block and deleting it is a gesture
  * of its own, where a delete folded into this one would take a declaration a
  * person may have instances passing.
+ *
+ * And the prop rejoins whatever else already holds that value, so a promote
+ * followed by a demote leaves the emitted module as it found it.
  */
 export function demoteProp(
   doc: SceneDocument,
@@ -1317,13 +1349,14 @@ export function demoteProp(
   }
 
   const referred = referredParameter(doc, definition, path, prop)!;
+  const { default: value } = referred.declared!;
 
   return setProp(
     doc,
     definition,
     path,
     prop,
-    literalOf(referred.declared!.default),
+    nodeHolding(doc, definition, value) ?? literalOf(value),
   );
 }
 

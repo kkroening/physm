@@ -64,6 +64,12 @@ export default function starterDocument(): SceneDocument {
 
   // The pendulum hangs from a fixed frame on the cart, so where it hangs is
   // the cart's business rather than the pendulum's.
+  //
+  // A second read, and so a second statement about what is one value: a
+  // constant used in both would come back as two. Nothing here is -- `BOB`
+  // lives entirely above and `CART_MOUNT` is used once -- but it is a property
+  // of splitting the read rather than a coincidence, so keep it that way while
+  // sharing is recorded per read.
   const [ground, cart] = nodesFrom(
     <>
       <Line startPos={[-12, -0.5]} endPos={[12, -0.5]} lineWidth={0.05} />

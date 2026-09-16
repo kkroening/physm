@@ -20,6 +20,15 @@
  */
 export type PropValue = LiteralValue | ParameterValue;
 
+/**
+ * A prop value the module can hold by name.
+ *
+ * Only a literal: a reference is already a name, and there is nothing to
+ * hoist. Named here rather than narrowed at each use, so the emitter's
+ * constants map carries the fact in its type.
+ */
+export type SharedValue = LiteralValue;
+
 /** A plain value, written where it is used. */
 type LiteralValue = {
   readonly kind: 'literal';

@@ -29,6 +29,16 @@ holds one.
 The expression graph viewer ([0018](docs/issues/0018.md)) stops being fallback
 work around here and starts being how the representation is checked.
 
+**And the node set needs an owner, which decides where sharing lives.** Today
+the table that records it follows one *read* -- which is the right scope for
+what a read can state, and narrower than what the emitter can already write:
+`constantsOf` hoists across every definition, and `extractComponent` produces a
+node shared between two of them, where no reader can take that back because
+`documentFrom` yields one definition. A node set that outlives a single read
+has to be keyed to the document instead, which is a different object with a
+different lifetime rather than a widened parameter. Settle it with the node
+set, not after.
+
 **[0022](docs/issues/0022.md) wants deciding first, or with it.** Promoting a
 prop widens its contract -- a `length` becomes a `scalar` and stops being
 non-negative -- and an expression on a `length` prop asks the same question from

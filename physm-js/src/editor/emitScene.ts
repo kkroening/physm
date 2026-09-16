@@ -1,6 +1,6 @@
 import { BUILT_INS, IDENTIFIER, RESERVED } from './identifiers';
 import { definitionOf, placeholderPath } from './sceneDocument';
-import type { PropValue } from './propValue';
+import type { PropValue, SharedValue } from './propValue';
 import type {
   ComponentRef,
   Definition,
@@ -125,20 +125,29 @@ function literal(value: unknown): string {
  * character references, so `&amp;` written in one would be read back as `&`:
  * a quote, an ampersand, a backslash or a line break has to be an expression.
  */
-function attribute(name: string, value: unknown): string {
+/**
+ * Why `name` cannot be written as a JSX attribute, or `null`.
+ *
+ * Apart from `attribute`, because a prop whose value the module holds by name
+ * never reaches it -- and whether a prop is checked must not depend on whether
+ * its value happens to be shared with another one.
+ */
+function attributeRefusal(name: string): string | null {
   if (!PROP_NAME.test(name)) {
-    throw new Error(`'${name}' cannot be written as a JSX attribute.`);
+    return `'${name}' cannot be written as a JSX attribute.`;
   }
 
   // A ref is filled in by an effect. Written out, it would be a fresh object
-  // with the ref's contents at the moment of writing, not the ref.
-  if (name === 'ref') {
-    throw new Error(
-      'A ref cannot be written as source: it is filled in by an effect. ' +
-        'Name what it points at by id instead.',
-    );
-  }
+  // with the ref's contents at the moment of writing, not the ref -- and on
+  // React 19 it arrives in `props` like any other, so this is reachable from
+  // ordinary JSX rather than only from a hand-built document.
+  return name === 'ref'
+    ? 'A ref cannot be written as source: it is filled in by an effect. ' +
+        'Name what it points at by id instead.'
+    : null;
+}
 
+function attribute(name: string, value: unknown): string {
   if (typeof value === 'string' && !/["&\\\n\r]/.test(value)) {
     return `${name}="${value}"`;
   }
@@ -365,8 +374,8 @@ function constantName(prop: string): string {
 function constantsOf(
   doc: SceneDocument,
   bound: ReadonlySet<string>,
-): Map<PropValue, string> {
-  const uses = new Map<PropValue, string[]>();
+): Map<SharedValue, string> {
+  const uses = new Map<SharedValue, string[]>();
   const visit = (nodes: readonly DocNode[]): void => {
     for (const node of nodes) {
       // Building blocks only. A hoisted literal is inferred on its own and
@@ -378,6 +387,10 @@ function constantsOf(
         for (const [prop, held] of writtenProps(node)) {
           if (held.kind === 'literal' && compound(held.value)) {
             try {
+              // For the throw. A value that cannot be written is no candidate
+              // for a name -- and leaving it in would have it *named* at two
+              // uses, where the `const` write throws from outside `written`'s
+              // `try` and the error loses the node's path.
               literal(held.value);
               uses.set(held, [...(uses.get(held) ?? []), prop]);
             } catch {
@@ -395,7 +408,7 @@ function constantsOf(
     visit(body);
   }
 
-  const named = new Map<PropValue, string>();
+  const named = new Map<SharedValue, string>();
   const taken = new Set(bound);
   for (const [held, props] of uses) {
     if (props.length < 2) {
@@ -424,7 +437,7 @@ function constantsOf(
 }
 
 /** No constants at all: what a node the emitter cannot type is written with. */
-const NO_CONSTANTS: ReadonlyMap<PropValue, string> = new Map();
+const NO_CONSTANTS: ReadonlyMap<SharedValue, string> = new Map();
 
 /**
  * Every name a definition's parameters bind.
@@ -678,6 +691,11 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
           return `${name}={${held.name}}`;
         }
 
+        const refusal = attributeRefusal(name);
+        if (refusal) {
+          throw new Error(refusal);
+        }
+
         // A value the module holds in more than one place is written by its
         // name. Only on a building block: a hoisted literal is inferred on its
         // own and widens -- `[4, 0]` becomes `number[]` -- where inline it was
@@ -751,9 +769,7 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
   if (constants.size) {
     write('\n');
     for (const [held, name] of constants) {
-      write(
-        `const ${name} = ${literal(held.kind === 'literal' ? held.value : held)};\n`,
-      );
+      write(`const ${name} = ${literal(held.value)};\n`);
     }
   }
   for (const definition of declarationOrder(doc)) {

@@ -1308,6 +1308,54 @@ describe('carrying a prop to and from the declaration block', () => {
     expect(definitionOf(doc, 'Scene').parameters).toHaveLength(1);
   });
 
+  test('demoting rejoins whatever else holds that value', () => {
+    // A parameter's default *is* the object the promoted prop held, so the
+    // props that shared it are still holding it. Rejoining them is identity
+    // rather than the equality this document stopped guessing from -- and
+    // without it a promote and a demote would leave the module with a third
+    // copy of a value two props name.
+    const at = [2, 0] as const;
+    const doc = documentFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={at} lineWidth={0.1} />
+        <Circle position={at} radius={0.5} />
+        <Weight mass={1} position={at} />
+      </RotationalFrame>,
+    );
+    const promoted = promoteProp(doc, 'Scene', [0, 1], 'position');
+    const { source } = emitScene(
+      demoteProp(promoted, 'Scene', [0, 1], 'position'),
+    );
+    const body = (text: string): string => text.slice(text.indexOf('return ('));
+
+    // The body comes back as it was. What is left over is the declaration,
+    // which demoting deliberately keeps.
+    expect(body(source)).toBe(body(emitScene(doc).source));
+    expect(source).toContain('function Scene({ position = [2, 0] }');
+
+    // And a prop that was the only holder gets a node of its own -- even
+    // beside a prop holding an equal value, which is what separates rejoining
+    // by identity from rejoining by the equality this document stopped
+    // guessing from. Joining that one would say the two are one value, which
+    // is exactly what nobody said.
+    const apart = documentFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={[2, 0]} lineWidth={0.1} />
+        <Circle position={[2, 0]} radius={0.5} />
+      </RotationalFrame>,
+    );
+    const alone = promoteProp(apart, 'Scene', [0, 1], 'position');
+    const back = demoteProp(alone, 'Scene', [0, 1], 'position');
+
+    expect(nodeAt(back, 'Scene', [0, 1]).props.position).toEqual(
+      literalOf([2, 0]),
+    );
+    expect(nodeAt(back, 'Scene', [0, 1]).props.position).not.toBe(
+      nodeAt(back, 'Scene', [0, 0]).props.endPos,
+    );
+    expect(emitScene(back).source).not.toContain('const ');
+  });
+
   test('a reference with no default has no value to go back to', () => {
     const promoted = promoteProp(rig(), 'Scene', [0, 0], 'position');
     const undefaulted = setParameterDefault(promoted, 'Scene', 0, undefined);
@@ -1372,14 +1420,32 @@ describe('what a read records about sharing', () => {
     expect(line!.props.endPos).toEqual(weight!.props.position);
   });
 
-  test('a primitive never shares, and neither do two reads', () => {
-    const [first] = nodesFrom(<Weight mass={2} position={[1, 0]} />);
-    const [second] = nodesFrom(<Weight mass={2} position={[1, 0]} />);
+  test('two reads of one value object are two statements', () => {
+    // The object is shared, which is the only thing that can tell the scopes
+    // apart: two separately written `[1, 0]`s are two arrays whether the table
+    // follows a read, a document, or the whole module.
+    const at = [1, 0] as const;
+    const [first] = nodesFrom(<Weight mass={2} position={at} />);
+    const [second] = nodesFrom(<Weight mass={2} position={at} />);
 
-    // Two props holding `2` are two props holding two, not one value seen
-    // twice -- nothing in the source says otherwise.
-    expect(first!.props.mass).not.toBe(second!.props.mass);
     expect(first!.props.position).not.toBe(second!.props.position);
+    expect(first!.props.position).toEqual(second!.props.position);
+  });
+
+  test('a primitive takes the early return, rather than the table', () => {
+    // Two props holding `2` are two props holding two, not one value seen
+    // twice -- and a `WeakMap` would refuse a number as a key, so what holds
+    // this up is the test above the lookup rather than the lookup failing.
+    const [frame] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Weight mass={2} position={[1, 0]} />
+        <Weight mass={2} position={[2, 0]} />
+      </RotationalFrame>,
+    );
+    const [first, second] = frame!.children;
+
+    expect(first!.props.mass).not.toBe(second!.props.mass);
+    expect(() => literalOf(2, new WeakMap())).not.toThrow();
   });
 
   test("a building block's declared initial is not a shared value", () => {
