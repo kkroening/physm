@@ -20,23 +20,24 @@ Addressing is settled -- a slot lives on the child node, `NodePath` never
 changes, and children bind by Python's keyword-argument rule. See
 [Decisions](#decisions).
 
-What the same conversation turned up is larger, and goes to the tracker before
-anything is built on the answer: **does physm own its element type, or keep
-borrowing React's?** A JSX factory of our own would make `<Multiply a={x} b={y}/>`
-produce a physm node rather than a React element -- which is not a tidying-up, it
-is the common cause behind several open problems. `emitScene` cannot write
-element-valued props because it meets React's `$$typeof` symbol; a hand-written
-component cannot be called in a worker because structured clone refuses the
-function references in `type`; hooks are a dilemma only because components must
-survive being walked outside React; and [0005](docs/issues/0005.md) exists *only*
-because the mounted route orders siblings by registration. If the walk is the
-only route, 0005 does not get fixed -- it stops existing.
+What the same conversation turned up is filed as [0019](docs/issues/0019.md),
+and a first review of it split the question in two. **What names a component**
+is small and looks ready: a node records a function reference, nothing records a
+module or a name that survives minification, and four separate things want that
+missing fact -- 0017's `imported` ref, the frontier item below, worker
+transport, and re-keying `origins` off element identity.
 
-Expressions must not be built on React elements and then rebuilt, so the RFC
-comes first. **Parameters proceed alongside it** -- promote-to-prop, which
-touches the document rather than the element type and is safe whichever way the
-node question goes. It is also the first thing in this effort a person using the
-editor can see.
+**Whether physm owns its element type** is the larger half and is three
+decisions rather than one. Only the *representation* leg genuinely needs it;
+sibling ordering has 0005's own recorded answer (a custom reconciler, which
+keeps React's element), and hooks are reachable by physm setting its own
+dispatcher around the call site `buildScene` already owns. What would settle the
+rest is evidence rather than argument: whether anything besides the demo ever
+wants the mounted route.
+
+**Parameters proceed regardless** -- promote-to-prop, which touches the document
+rather than the element type and is safe whichever way 0019 goes. It is also the
+first thing in this effort a person using the editor can see.
 
 ## Next — 0016
 
