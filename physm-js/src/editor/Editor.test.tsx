@@ -12,8 +12,10 @@ import coreComponents from './../react/coreComponents';
 import emitScene, { rangeKey } from './emitScene';
 import starterDocument from './starterDocument';
 import { InvalidStateMapError } from './../Solver';
-import { documentFrom, nodesFrom } from './sceneDocument';
+import buildScene from './../react/buildScene';
+import { documentFrom, elementOf, nodesFrom } from './sceneDocument';
 import { literalOf, parameterOf } from './propValue';
+import { mul, vec } from './../expression';
 import type { DocNode, SceneDocument } from './sceneDocument';
 import type { PropValue } from './propValue';
 import { vi } from 'vitest';
@@ -1045,6 +1047,103 @@ function twoPendulums(): SceneDocument {
     ],
   };
 }
+
+describe('Editor, a prop the document computes', () => {
+  /** A weight whose mass is computed, in a frame that can hold it. */
+  const computing = (): SceneDocument =>
+    documentFrom(
+      <RotationalFrame id="arm">
+        <Weight mass={mul(2, 3)} position={[1, 0]} />
+      </RotationalFrame>,
+    );
+
+  test('a tree row shows the call that built it', () => {
+    render(<Editor initialDocument={computing()} />);
+
+    // Constructor form, which is what the emitted module writes -- so the same
+    // expression reads the same wherever a person meets it.
+    expect(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText(
+        'mass=mul(2, 3)',
+      ),
+    ).toBeVisible();
+  });
+
+  test('the properties pane shows it, and offers no editor for it', () => {
+    render(<Editor initialDocument={computing()} />);
+    const props = select('Weight');
+
+    expect(within(props).getByText('mul(2, 3)')).toBeVisible();
+    expect(within(props).queryByLabelText('Mass')).toBeNull();
+
+    // The props that are not computed are editable as ever.
+    expect(within(props).getByLabelText('Position x')).toHaveValue('1');
+  });
+
+  test('the code says what it computes, and the scene is built from it', () => {
+    render(<Editor initialDocument={computing()} />);
+
+    expect(code()).toContain('mass={mul(2, 3)}');
+    expect(code()).toMatch(/^import \{ RotationalFrame, Weight, mul \}/m);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(
+      buildScene(elementOf(computing())).frames[0]!.weights[0]!.mass,
+    ).toBeCloseTo(6, 9);
+  });
+
+  test('a computed point offers no handle for a drag to overwrite', () => {
+    const { container } = render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame id="arm">
+            <Weight mass={1} position={vec(mul(1, 1), 0)} />
+          </RotationalFrame>,
+        )}
+      />,
+    );
+    select('Weight');
+
+    // From where a handle *would* be if one were offered: the mark places a
+    // computed point at the component's default, which is the frame origin,
+    // while the weight is drawn at what the expression computes.
+    dragScene(container, [0, 0], [18, 0], [36, 0]);
+
+    // Whatever the drag caught, it was not the weight's position: there is no
+    // value there to move, and writing one would replace the graph.
+    expect(code()).toContain('position={vec(mul(1, 1), 0)}');
+  });
+
+  test("an instance's computed argument is shown, and offers no editor", () => {
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+            ...cart,
+            children: [
+              {
+                type: { kind: 'defined', name: 'Pendulum' },
+                props: { half: mul(2, 3) },
+                children: [],
+              } as DocNode,
+            ],
+          })),
+        },
+        {
+          name: 'Pendulum',
+          parameters: [{ name: 'half', type: 'scalar' }],
+          body: nodesFrom(<RotationalFrame />),
+        },
+      ],
+    };
+    render(<Editor initialDocument={doc} />);
+    const props = select('Pendulum');
+
+    expect(within(props).getByText('mul(2, 3)')).toBeVisible();
+    expect(within(props).queryByLabelText('half')).toBeNull();
+  });
+});
 
 /** The library pane. */
 function library(): HTMLElement {

@@ -1,4 +1,5 @@
 import { Fragment, useId, useRef, useState } from 'react';
+import { isOperation } from './../expression';
 import { literalOf, shownValueOf } from './propValue';
 import {
   definitionOf,
@@ -439,6 +440,17 @@ function NodeProps({
             // the literal editor would let a keystroke replace it. An
             // instance reaches that state through an extraction, which passes
             // the enclosing definition's parameter straight through.
+            if (isOperation(held)) {
+              return (
+                <div className="editor__field" key={parameter.name}>
+                  <span className="editor__label">{parameter.name}</span>
+                  <span className="editor__reference">
+                    {shownValueOf(held)}
+                  </span>
+                </div>
+              );
+            }
+
             return held?.kind === 'parameter' ? (
               <div className="editor__field" key={parameter.name}>
                 <span className="editor__label">{parameter.name}</span>
@@ -546,10 +558,22 @@ function NodeProps({
         {Object.entries(meta.props).map(([name, spec]) => {
           const held = node.props[name];
 
-          // A prop holding a reference is not a literal to edit, and offering
-          // the literal editor would let a keystroke silently replace the
-          // reference with whatever was typed. Shown, not edited -- which is
-          // the same posture as an imported component's props above.
+          // Computed, so neither a literal to edit nor a name to carry back.
+          // Shown as the call that built it, which is what the emitted module
+          // writes and what a prop box will one day parse.
+          if (isOperation(held)) {
+            return (
+              <div className="editor__field" key={name}>
+                <span className="editor__label">{spec.label}</span>
+                <span className="editor__reference">{shownValueOf(held)}</span>
+              </div>
+            );
+          }
+
+          // A prop holding a reference is not a literal to edit, and
+          // offering the literal editor would let a keystroke silently
+          // replace the reference with whatever was typed. Shown, not
+          // edited -- the same posture as an imported component's props.
           return held?.kind === 'parameter' ? (
             <div className="editor__field" key={name}>
               <span className="editor__label">{spec.label}</span>

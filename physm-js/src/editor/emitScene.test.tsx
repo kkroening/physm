@@ -13,9 +13,15 @@ import TrackFrame from './../react/TrackFrame';
 import { literalOf, parameterOf } from './propValue';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
+import { mul, vec } from './../expression';
 import emitScene, { rangeKey } from './emitScene';
 import ts from 'typescript';
-import { documentFrom, elementOf, nodesFrom } from './sceneDocument';
+import {
+  definitionOf,
+  documentFrom,
+  elementOf,
+  nodesFrom,
+} from './sceneDocument';
 import type CoreScene from './../Scene';
 import type { DocNode, Parameter, SceneDocument } from './sceneDocument';
 import type { ReactElement } from 'react';
@@ -1184,5 +1190,132 @@ describe('emitScene, children', () => {
     const [start, end] = ranges.get(rangeKey('Pendulum', [0, 2]))!;
 
     expect(source.slice(start, end)).toBe('{children}');
+  });
+});
+
+describe('a prop the document computes', () => {
+  /** A `Pendulum` whose bob hangs at twice what the instance passes. */
+  const computing = (): SceneDocument => {
+    // One node in two props, written as the JSX it describes -- which works
+    // because `literalOf` hands an expression back rather than wrapping it.
+    const reach = vec(mul(parameterOf('half'), 2), 0);
+    const [arm] = nodesFrom(
+      <RotationalFrame>
+        <Line endPos={reach} lineWidth={0.1} />
+        <Weight mass={3} position={reach} />
+      </RotationalFrame>,
+    );
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+            ...cart,
+            children: [
+              { ...instance('Pendulum'), props: { half: literalOf(2) } },
+              { ...instance('Pendulum'), props: { half: literalOf(5) } },
+            ],
+          })),
+        },
+        {
+          name: 'Pendulum',
+          parameters: [{ name: 'half', type: 'scalar' }],
+          body: [arm!],
+        },
+      ],
+    };
+  };
+
+  test("a reference inside an expression finds the instance's argument", () => {
+    const scene = buildScene(elementOf(computing()));
+    const [first, second] = scene.frames[0]!.frames;
+
+    // Resolution goes into the graph: `mul(half, 2)` holds the reference as an
+    // operand, so stopping at the prop would hand the node to an operation.
+    expect(first!.weights[0]!.position[0]).toBeCloseTo(4, 9);
+    expect(second!.weights[0]!.position[0]).toBeCloseTo(10, 9);
+  });
+
+  test('the emitted module writes the call, not the value it folds to', () => {
+    const source = expectRoundTrip(computing());
+
+    // What a prop is computed *from* is what the module says, the same way the
+    // document does -- and the operations come from the binding beside the
+    // components that use them.
+    expect(source).toContain('endPos={vec(mul(half, 2), 0)}');
+    expect(source).toContain('position={vec(mul(half, 2), 0)}');
+    expect(source).toMatch(
+      /^import \{ Line, RotationalFrame, TrackFrame, Weight, mul, vec \} from '\.\/react';$/m,
+    );
+    expect(source).not.toContain('endPos={[4, 0]}');
+  });
+
+  test('it type-checks as the repo would', () => {
+    expect(typeCheck({ 'Scene.tsx': emitScene(computing()).source })).toEqual(
+      [],
+    );
+  });
+
+  test('a reference the definition does not take is refused inside one too', () => {
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        { name: 'Scene', body: [instance('Dial')] },
+        {
+          name: 'Dial',
+          body: nodesFrom(<RotationalFrame />).map((frame) => ({
+            ...frame,
+            props: { position: vec(mul(parameterOf('reach'), 2), 0) },
+          })),
+        },
+      ],
+    };
+
+    expect(() => emitScene(doc)).toThrow(
+      /refers to 'reach', which Dial does not take/,
+    );
+  });
+
+  test('a shared subexpression stays one node through a whole render', () => {
+    // These two props sit on two *sibling* nodes, and the build route resolves
+    // one node at a time -- so a table per node would say they are two
+    // computations, where the document says they are one. The table belongs to
+    // the render.
+    const doc = computing();
+    const arm = definitionOf(doc, 'Pendulum').body[0]!;
+    const [rod, bob] = arm.children;
+
+    expect(rod!.props.endPos).toBe(bob!.props.position);
+
+    // Through `elementOf`, which is the only way a document is resolved:
+    // walk what it builds, calling each definition as React would.
+    const found: Record<string, unknown>[] = [];
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+
+      if (!React.isValidElement(node)) {
+        return;
+      }
+
+      const held = node.props as Record<string, unknown>;
+      found.push(held);
+      if (typeof node.type === 'function' && !('meta' in node.type)) {
+        walk((node.type as (props: object) => unknown)(held));
+        return;
+      }
+
+      walk(held.children);
+    };
+    walk(elementOf(doc));
+
+    const line = found.find(({ endPos }) => endPos !== undefined)!;
+    const weight = found.find(({ mass }) => mass !== undefined)!;
+
+    expect(line.endPos).toBe(weight.position);
   });
 });

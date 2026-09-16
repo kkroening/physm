@@ -13,7 +13,14 @@ import { newNode } from './insertion';
 import coreComponents from './../react/coreComponents';
 import emitScene from './emitScene';
 import starterDocument from './starterDocument';
-import { literalOf, parameterOf } from './propValue';
+import {
+  literalOf,
+  parameterOf,
+  referencesIn,
+  resolvedProps,
+} from './propValue';
+import { mul, vec } from './../expression';
+import type { PropValue } from './propValue';
 import {
   definitionOf,
   deletionRefusal,
@@ -1458,5 +1465,121 @@ describe('what a read records about sharing', () => {
 
     expect(first.props.endPos).toEqual(second.props.endPos);
     expect(first.props.endPos).not.toBe(second.props.endPos);
+  });
+});
+
+describe('a reference nested inside an expression', () => {
+  /** A `Pendulum` whose rod reaches twice what the instance passes. */
+  const nesting = (): SceneDocument => {
+    const reach = vec(mul(parameterOf('half'), 2), 0);
+    const [arm] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={reach} lineWidth={0.1} />
+        <Weight mass={1} position={reach} />
+      </RotationalFrame>,
+    );
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+            ...cart,
+            children: [
+              {
+                type: { kind: 'defined', name: 'Pendulum' },
+                props: { half: literalOf(2) },
+                children: [],
+              } as DocNode,
+            ],
+          })),
+        },
+        {
+          name: 'Pendulum',
+          parameters: [{ name: 'half', type: 'scalar' }],
+          body: [arm!],
+        },
+      ],
+    };
+  };
+
+  test('a rename carries it, however deep it is', () => {
+    // The sites that reason about references read the *tag*, and a tag says
+    // `operation` for a prop holding a reference three operands down. A rename
+    // that stopped there would leave `mul(half, 2)` naming a parameter the
+    // definition no longer declares.
+    const renamed = renameParameter(nesting(), 'Pendulum', 0, 'halfLength');
+
+    expect(
+      referencesIn(nodeAt(renamed, 'Pendulum', [0, 0]).props.endPos),
+    ).toEqual(['halfLength']);
+    expect(
+      buildScene(elementOf(renamed)).frames[0]!.frames[0]!.weights[0]!
+        .position[0],
+    ).toBeCloseTo(4, 9);
+    expect(() => emitScene(renamed)).not.toThrow();
+  });
+
+  test('a delete is refused by it, and an extraction carries it', () => {
+    const doc = nesting();
+
+    expect(parameterRemovalRefusal(doc, 'Pendulum', 0)).toMatch(
+      /refers to half/,
+    );
+
+    const next = extractComponent(doc, 'Pendulum', [0], 'Arm');
+
+    expect(definitionOf(next, 'Arm').parameters).toEqual([
+      { name: 'half', type: 'scalar' },
+    ]);
+    expect(nodeAt(next, 'Pendulum', [0]).props.half).toEqual(
+      parameterOf('half'),
+    );
+    expect(
+      buildScene(elementOf(next)).frames[0]!.frames[0]!.weights[0]!.position[0],
+    ).toBeCloseTo(4, 9);
+  });
+
+  test('an extraction that cannot carry it says so', () => {
+    const doc = nesting();
+    const undeclared: SceneDocument = {
+      ...doc,
+      definitions: doc.definitions.map((definition) =>
+        definition.name === 'Pendulum'
+          ? { ...definition, parameters: [] }
+          : definition,
+      ),
+    };
+
+    expect(extractionRefusal(undeclared, 'Pendulum', [0])).toMatch(
+      /refers to half, which Pendulum does not take/,
+    );
+  });
+
+  test('a graph that reaches itself is refused before it is resolved', () => {
+    // Resolution now runs ahead of evaluation over the same graph, so without
+    // its own guard the stack overflows here and evaluation's guard retires
+    // nothing.
+    const loop = { kind: 'operation', op: 'neg', operands: [] } as {
+      kind: 'operation';
+      op: 'neg';
+      operands: unknown[];
+    };
+    loop.operands.push(loop);
+
+    expect(() => resolvedProps({ mass: loop as PropValue }, {})).toThrow(
+      /An expression reaches itself: neg -> neg/,
+    );
+  });
+
+  test('a computed prop has no value to promote', () => {
+    // Promoting one would declare a parameter at the *component's* default and
+    // write a reference over the expression -- a silent scene change. The pane
+    // offers no button beside a computed prop; a document built in code can
+    // still ask.
+    expect(promotionRefusal(nesting(), 'Pendulum', [0, 1], 'position')).toMatch(
+      /position is computed, so there is no value to carry/,
+    );
   });
 });

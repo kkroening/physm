@@ -1,4 +1,5 @@
 import coreComponents from './../react/coreComponents';
+import { isOperation } from './../expression';
 import { BUILT_INS, IDENTIFIER, RESERVED } from './identifiers';
 import { Fragment, createElement, isValidElement } from 'react';
 import { canContain } from './../react/componentMeta';
@@ -8,6 +9,8 @@ import {
   literalOf,
   literalProps,
   parameterOf,
+  referencesIn,
+  renamedReferences,
   resolvedProps,
   shownValueOf,
 } from './propValue';
@@ -317,19 +320,26 @@ export function elementOf(
     const component: FunctionComponent<{ children?: ReactNode } & Scope> = ({
       children,
       ...passed
-    }) =>
-      createElement(
+    }) => {
+      // One table across the whole body, so two props on two sibling nodes
+      // holding one computation resolve to one node -- which is what the
+      // document said, and what a viewer of the resolved graph would draw.
+      const seen = new Map<unknown, unknown>();
+      const scope = {
+        ...defaults,
+        ...Object.fromEntries(
+          Object.entries(passed).filter(([, value]) => value !== undefined),
+        ),
+      };
+
+      return createElement(
         Fragment,
         null,
         ...body.map((node, index) =>
-          render(definitionName, node, [index], children, {
-            ...defaults,
-            ...Object.fromEntries(
-              Object.entries(passed).filter(([, value]) => value !== undefined),
-            ),
-          }),
+          render(definitionName, node, [index], children, scope, seen),
         ),
       );
+    };
 
     // Named, so an error from inside it says which definition it came from.
     Object.defineProperty(component, 'name', { value: definitionName });
@@ -356,6 +366,7 @@ export function elementOf(
     path: NodePath,
     given: ReactNode,
     scope: Scope,
+    seen: Map<unknown, unknown>,
   ): ReactElement => {
     if (node.type.kind === 'children') {
       return createElement(
@@ -365,12 +376,12 @@ export function elementOf(
       );
     }
 
-    const plain = resolvedProps(node.props, scope);
+    const plain = resolvedProps(node.props, scope, seen);
     const element = createElement(
       typeOf(node.type),
       node.key === undefined ? plain : { ...plain, key: node.key },
       ...node.children.map((child, index) =>
-        render(definition, child, [...path, index], given, scope),
+        render(definition, child, [...path, index], given, scope, seen),
       ),
     );
     origins?.set(element, { definition, path });
@@ -781,7 +792,7 @@ function referencesTo(
 ): { node: DocNode; prop: string }[] {
   return everyNode(definitionOf(doc, definition).body).flatMap((node) =>
     Object.entries(node.props).flatMap(([prop, held]) =>
-      held.kind === 'parameter' && held.name === name ? [{ node, prop }] : [],
+      referencesIn(held).includes(name) ? [{ node, prop }] : [],
     ),
   );
 }
@@ -967,9 +978,7 @@ export function renameParameter(
       props: Object.fromEntries(
         Object.entries(node.props).map(([prop, held]) => [
           prop,
-          held.kind === 'parameter' && held.name === was
-            ? parameterOf(name)
-            : held,
+          renamedReferences(held, was, name),
         ]),
       ),
       children: rewrite(node.children),
@@ -1146,6 +1155,15 @@ export function promotionRefusal(
   const held = node.props[prop];
   if (held?.kind === 'parameter') {
     return `${prop} already refers to ${held.name}.`;
+  }
+
+  // A computed prop has no literal to carry into a default, so promoting it
+  // would declare a parameter at the *component's* default and write a
+  // reference over the expression -- a silent scene change, against what this
+  // edit promises. Unreachable from the pane, which offers no button beside a
+  // computed prop, and a document built in code can still ask.
+  if (isOperation(held)) {
+    return `${prop} is computed, so there is no value to carry into a default.`;
   }
 
   const carried = promotable(doc, node, prop);
@@ -1425,9 +1443,10 @@ export function extractionRefusal(
   );
   for (const { type, props } of everyNode([node])) {
     for (const [prop, held] of Object.entries(props)) {
-      if (held.kind === 'parameter' && !declared.has(held.name)) {
+      const dangling = referencesIn(held).find((name) => !declared.has(name));
+      if (dangling !== undefined) {
         return (
-          `${nodeName(type)}'s ${prop} refers to ${held.name}, which ` +
+          `${nodeName(type)}'s ${prop} refers to ${dangling}, which ` +
           `${definition} does not take, so there is no declaration to carry ` +
           'across. Give it a value first.'
         );
@@ -1467,9 +1486,7 @@ function carriedParameters(
 ): Parameter[] {
   const referred = new Set(
     everyNode([node]).flatMap(({ props }) =>
-      Object.values(props).flatMap((held) =>
-        held.kind === 'parameter' ? [held.name] : [],
-      ),
+      Object.values(props).flatMap((held) => referencesIn(held)),
     ),
   );
 
