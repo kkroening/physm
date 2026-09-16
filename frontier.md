@@ -35,21 +35,28 @@ sizes:
    relationship between the bodies it would otherwise hide behind. A tick
    carries the scene as well as its poses, so `worldPoint` is
    `Scene.getWorldPosition` rather than a second copy of it.
-3. **Which kind each property admits** -- the editor's half, and the last of
-   the kind work. [0027](docs/issues/0027.md) belongs with it: a world-space
-   decal cannot be clicked in the drawing, because the thing a person would
-   click does not exist when the trace that maps shapes back to nodes is made.
+3. **The editor's half -- blocked, and not small, which is a correction of
+   what this said.** The plan was a `PropSpec` saying structural or signal and
+   the prop box narrowing its refusal to read it. That part is a few lines and
+   it would change nothing observable, because a person cannot type a signal at
+   all: a point property is not offered as text, and the grammar has no string
+   or point literal to spell `worldPoint('cart', [0, 0])` with. Underneath both
+   is a question nobody had asked -- whether a frame id should be *typed*
+   rather than picked, when the editor is the one party that knows which ids
+   exist, and page 2's own example is a line between two *anchors*, which are
+   already named things here. [0028](docs/issues/0028.md) is that question, and
+   it is Karl's.
 
-   A question to *ask* there rather than answer: a `Scene` now holds a closure,
-   and `toJsonObj` has no term for one. The editor's round trip is document ->
-   elements -> `Scene` and never `Scene` -> JSON, so nothing needs it yet --
-   but a save format ([0017](docs/issues/0017.md)) does, and it is the one that
-   decides whether a world decal serializes as the expression it was built
-   from or whether scene serialization stays honestly partial. A `PropSpec` says structural or signal, and the prop box
-   narrows its refusal to read it: today it refuses *every* signal, at the
-   point of typing, which is right for every property that exists but wrong for
-   a `<WorldLine>`'s endpoints as soon as a person wants to type one. Small,
-   and it is what makes the feature reachable without hand-writing TSX.
+   [0027](docs/issues/0027.md) belongs with this too: a world-space decal
+   cannot be clicked in the drawing, because the thing a person would click
+   does not exist when the trace that maps shapes back to nodes is made.
+
+   And a question to *ask* here rather than answer: a `Scene` now holds a
+   closure, and `toJsonObj` has no term for one. The editor's round trip is
+   document -> elements -> `Scene` and never `Scene` -> JSON, so nothing needs
+   it yet -- but a save format ([0017](docs/issues/0017.md)) does, and it is
+   what decides whether a world decal serializes as the expression it was built
+   from or whether scene serialization stays honestly partial.
 4. **Force channels**, which meet the Rust boundary: `tick_mut` holds its
    external-force slice constant for a batch, so such an expression is
    evaluated per *batch*. That is the granularity the demo already ships, so it
@@ -63,8 +70,8 @@ the gameplay case and says plainly that changing it is Karl's call.
 
 **Still open, and owed an answer around here:**
 
-- **What the language admits**, which is three issues asking one question and
-  is cheaper answered together than three times:
+- **What the language admits**, which is now four issues asking one question
+  and is cheaper answered together than four times:
   [0022](docs/issues/0022.md) (do the parameter types grow toward the prop
   kinds), [0024](docs/issues/0024.md) (what unit is an angle expression in) and
   [0025](docs/issues/0025.md) (is there exponentiation). An answer to any
@@ -75,6 +82,11 @@ the gameplay case and says plainly that changing it is Karl's call.
   example rather than a requirement, and the spelling is the implementer's call
   _(Karl, 2026-09-16)_. What is left of it is whether the operation should
   exist at all.
+
+  [0028](docs/issues/0028.md) joined them, and is the one with a feature
+  waiting on it: `<WorldLine>` is reachable from hand-written TSX and not from
+  the editor, and what unblocks it is a decision about whether a signal is
+  typed, picked, or both.
 - [0023](docs/issues/0023.md) -- whether to run a real mutation tester. Seven
   review rounds have found something the hand enumeration missed in five
   distinct ways, and a tool has no frame to miss things from.
@@ -117,8 +129,11 @@ the demo ever wants the mounted route.
 
 ## Next — 0016
 
-**Where it stands: three of seven steps are done, signals are started, and the
-three after them are untouched.** The three that landed came first because each
+**Where it stands: three of seven steps are done, signals are two slices in
+with the third blocked on a decision, and the three steps after them are
+untouched.** With the editor's half waiting on
+[0028](docs/issues/0028.md), the next thing built is force channels -- keeping
+this list's order, and taking only the part page 11 does not record as open. The three that landed came first because each
 grows more expensive with every site built before it. What remains of
 expressions themselves is the wish list rather than the feature -- `rotate`,
 comparison and selection, and the open questions above. Roughly one PR each,
@@ -134,8 +149,9 @@ ordered by risk rather than appetite; the
    the binding of a shared subexpression, below.
 4. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
-   Rust path hands external forces across once per batch. *Started: the kind
-   and its leaf are in, and the slices left are in view above.*
+   Rust path hands external forces across once per batch. *Two slices in: the
+   kind and its leaf, and a line drawn between two bodies. The slices left are
+   in view above, one of them blocked.*
 5. **Named slots** -- where the `slot` field lands, and new work in both the
    emitter and the reader, neither of which handles an element-valued prop.
 6. **Repetition**, with the emitted form decided first.
