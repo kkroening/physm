@@ -10,7 +10,7 @@ import FixedFrame from './../react/FixedFrame';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
-import { literalOf, parameterOf, resolvedProps } from './propValue';
+import { literalOf, parameterOf } from './propValue';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
 import { mul, vec } from './../expression';
@@ -1196,14 +1196,15 @@ describe('emitScene, children', () => {
 describe('a prop the document computes', () => {
   /** A `Pendulum` whose bob hangs at twice what the instance passes. */
   const computing = (): SceneDocument => {
+    // One node in two props, written as the JSX it describes -- which works
+    // because `literalOf` hands an expression back rather than wrapping it.
+    const reach = vec(mul(parameterOf('half'), 2), 0);
     const [arm] = nodesFrom(
       <RotationalFrame>
-        <Line endPos={[0, -1]} lineWidth={0.1} />
-        <Weight mass={3} position={[0, -1]} />
+        <Line endPos={reach} lineWidth={0.1} />
+        <Weight mass={3} position={reach} />
       </RotationalFrame>,
     );
-    const [rod, bob] = arm!.children;
-    const reach = mul(parameterOf('half'), 2);
 
     return {
       root: 'Scene',
@@ -1221,15 +1222,7 @@ describe('a prop the document computes', () => {
         {
           name: 'Pendulum',
           parameters: [{ name: 'half', type: 'scalar' }],
-          body: [
-            {
-              ...arm!,
-              children: [
-                { ...rod!, props: { ...rod!.props, endPos: vec(reach, 0) } },
-                { ...bob!, props: { ...bob!.props, position: vec(reach, 0) } },
-              ],
-            },
-          ],
+          body: [arm!],
         },
       ],
     };
@@ -1285,26 +1278,44 @@ describe('a prop the document computes', () => {
     );
   });
 
-  test('a shared subexpression stays one node through resolution', () => {
-    // What the document says is that these two props hold *one* computation.
-    // Rebuilding the graph per prop would lose that, and with it the fold over
-    // nodes rather than edges.
+  test('a shared subexpression stays one node through a whole render', () => {
+    // These two props sit on two *sibling* nodes, and the build route resolves
+    // one node at a time -- so a table per node would say they are two
+    // computations, where the document says they are one. The table belongs to
+    // the render.
     const doc = computing();
     const arm = definitionOf(doc, 'Pendulum').body[0]!;
     const [rod, bob] = arm.children;
 
-    const operandsOf = (held: unknown): unknown[] =>
-      (held as { operands: unknown[] }).operands;
+    expect(rod!.props.endPos).toBe(bob!.props.position);
 
-    expect(operandsOf(rod!.props.endPos)[0]).toBe(
-      operandsOf(bob!.props.position)[0],
-    );
+    // Through `elementOf`, which is the only way a document is resolved:
+    // walk what it builds, calling each definition as React would.
+    const found: Record<string, unknown>[] = [];
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
 
-    const resolved = resolvedProps(
-      { a: rod!.props.endPos!, b: bob!.props.position! },
-      { half: 2 },
-    );
+      if (!React.isValidElement(node)) {
+        return;
+      }
 
-    expect(operandsOf(resolved.a)[0]).toBe(operandsOf(resolved.b)[0]);
+      const held = node.props as Record<string, unknown>;
+      found.push(held);
+      if (typeof node.type === 'function' && !('meta' in node.type)) {
+        walk((node.type as (props: object) => unknown)(held));
+        return;
+      }
+
+      walk(held.children);
+    };
+    walk(elementOf(doc));
+
+    const line = found.find(({ endPos }) => endPos !== undefined)!;
+    const weight = found.find(({ mass }) => mass !== undefined)!;
+
+    expect(line.endPos).toBe(weight.position);
   });
 });

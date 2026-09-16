@@ -34,6 +34,15 @@ hand-wrote.
 
 **Still open, and owed an answer around here:**
 
+- **Whether the emitter binds a shared subexpression.** The original step said
+  it would, and this is the part of it that did not land: one node in two props
+  emits as `vec(mul(half, 2), 0)` twice, so the sharing the document records
+  stops at the source. It is a decision rather than a leftover -- a `const`
+  binding inside the function is what the expressions design shows, and it is
+  only now expressible, because the node set gives the source a form for it.
+  What it needs first is a resolved shared node surviving the build route,
+  which it now does.
+
 - [0022](docs/issues/0022.md) -- promoting a prop widens its contract, and an
   expression on a `length` prop asks the same question from the other side.
   One answer serves both.
@@ -63,8 +72,8 @@ the demo ever wants the mounted route.
 
 ## Next — 0016
 
-**Where it stands: both prep steps are done, and the next one is the invasive
-one they were for.** Both came first because each grows
+**Where it stands: the three steps the rest was waiting on are done, and what
+is left of expressions is the half a person touches.** Both came first because each grows
 more expensive with every site built before it. Roughly one PR each, ordered by
 risk rather than appetite; the
 [staging page](docs/issues/0016/10-staging.md) argues the order.
@@ -72,8 +81,10 @@ risk rather than appetite; the
 1. ~~**A prop value becomes a tagged thing**~~ — done.
 2. ~~**Parameters, literal values only**~~ — done.
 3. ~~**Structural expressions**~~ -- the node set, evaluation, and a document
-   that holds one. What is left is the half a person touches: a viewer, and a
-   prop box that parses `halfLength * 2`. Both are in view above.
+   that holds one. What is left of it is the half a person touches: a viewer,
+   and a prop box that parses `halfLength * 2`. Both are in view above. One
+   piece of the original item is *not* done and is not in view either -- see
+   the binding of a shared subexpression, below.
 4. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
    Rust path hands external forces across once per batch.

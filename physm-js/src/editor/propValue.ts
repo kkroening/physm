@@ -95,6 +95,15 @@ export type Sharing = WeakMap<object, PropValue>;
  * otherwise.
  */
 export function literalOf(value: unknown, sharing?: Sharing): PropValue {
+  // An expression is already a prop value, so wrapping it would make a literal
+  // that happens to contain a graph -- shown as its serialised self, walked
+  // past by resolution, and written out as an object literal. This is the one
+  // constructor that takes a prop value whole, and so the one place the
+  // compiler could not name when the union grew.
+  if (isOperation(value)) {
+    return value;
+  }
+
   if (!sharing || value === null || typeof value !== 'object') {
     return { kind: 'literal', value };
   }
@@ -126,6 +135,59 @@ export function parameterOf(name: string): PropValue {
   return { kind: 'parameter', name };
 }
 
+/** Whether `held` is a reference to a parameter rather than a value. */
+function isReference(
+  held: unknown,
+): held is { kind: 'parameter'; name: string } {
+  return (
+    held !== null &&
+    typeof held === 'object' &&
+    (held as { kind?: unknown }).kind === 'parameter'
+  );
+}
+
+/**
+ * Every parameter `prop` names, however deep.
+ *
+ * The sites that reason about references read the *tag*, and a tag says
+ * `'operation'` for a prop that holds a reference three operands down. That is
+ * the half of the union the compiler cannot name: reaching for a field fails
+ * to type-check, and asking a question gets an honest wrong answer. So the
+ * walk lives here once rather than in each of them.
+ */
+export function referencesIn(prop: PropValue | undefined): string[] {
+  if (isReference(prop)) {
+    return [prop.name];
+  }
+
+  return isOperation(prop)
+    ? prop.operands.flatMap((operand) =>
+        referencesIn(operand as PropValue | undefined),
+      )
+    : [];
+}
+
+/** `prop` with every reference to `from` renamed to `to`, however deep. */
+export function renamedReferences(
+  prop: PropValue,
+  from: string,
+  to: string,
+): PropValue {
+  if (isReference(prop)) {
+    return prop.name === from ? parameterOf(to) : prop;
+  }
+
+  return isOperation(prop)
+    ? {
+        kind: 'operation',
+        op: prop.op,
+        operands: prop.operands.map((operand) =>
+          renamedReferences(operand as PropValue, from, to),
+        ),
+      }
+    : prop;
+}
+
 /**
  * `prop` with every reference in it replaced by what `scope` holds.
  *
@@ -136,11 +198,15 @@ export function parameterOf(name: string): PropValue {
  * `seen` keeps one resolved node per original, so a graph shared before
  * resolution is shared after it -- which is what keeps evaluation over nodes
  * rather than edges, and what a viewer of a resolved graph would need to draw.
+ * It is the *caller's* map, and the caller is one render of one definition:
+ * two props on two sibling nodes hold one computation as readily as two props
+ * on one node do, and a map per node would say otherwise.
  */
 function resolved(
   prop: unknown,
   scope: Scope,
   seen: Map<unknown, unknown>,
+  path: readonly ExpressionNode[] = [],
 ): unknown {
   if (isOperation(prop)) {
     const already = seen.get(prop);
@@ -148,10 +214,25 @@ function resolved(
       return already;
     }
 
+    // The same refusal `evaluate` makes, because this pass now runs ahead of
+    // it over the same graph: without it a cycle overflows the stack here and
+    // the guard downstream retires nothing. Memoising before the recursion
+    // would stop the overflow and hand back a node whose operands are still
+    // being filled, which surfaces later as an odd graph rather than a
+    // sentence.
+    if (path.includes(prop)) {
+      const cycle = [...path, prop].map(({ op }) => op).join(' -> ');
+
+      throw new Error(`An expression reaches itself: ${cycle}.`);
+    }
+
+    const within = [...path, prop];
     const node: ExpressionNode = {
       kind: 'operation',
       op: prop.op,
-      operands: prop.operands.map((operand) => resolved(operand, scope, seen)),
+      operands: prop.operands.map((operand) =>
+        resolved(operand, scope, seen, within),
+      ),
     };
     seen.set(prop, node);
 
@@ -164,7 +245,7 @@ function resolved(
 
   const held = prop as PropValue;
 
-  return held.kind === 'parameter'
+  return isReference(held)
     ? scope[held.name]
     : held.kind === 'literal'
       ? held.value
@@ -195,17 +276,23 @@ export type Scope = Readonly<Record<string, unknown>>;
  *
  * What comes out is a plain value or an *expression over plain values*: the
  * references are gone, and the operations are left standing for whoever
- * consumes them to fold. A building block's is folded where the build route
- * hands props over, and a composite's by the composite being a function that
- * receives what a person would have written -- which is why a parameter has to
- * arrive as a value rather than a node.
+ * consumes them to fold. A building block's is folded where each build route
+ * hands props over. A *defined* composite's is folded downstream, because its
+ * body reaches a building block. An **imported** composite's is not: it is a
+ * function the document only calls, so an operation arrives at it whole, and
+ * `half * 2` there is `NaN`. Nothing the editor offers sets a prop on one
+ * today -- an imported node's props are read-only, and an inserted one gets
+ * none -- so that is the consumer to fold for when something does.
+ *
+ * A reference, by contrast, never reaches a composite of either sort: it is
+ * substituted here, which is what the expressions design requires for a
+ * hand-written `if (halfLength > 3)` to mean anything.
  */
 export function resolvedProps(
   props: DocProps,
   scope: Scope,
+  seen: Map<unknown, unknown> = new Map(),
 ): Record<string, unknown> {
-  const seen = new Map<unknown, unknown>();
-
   return Object.fromEntries(
     Object.entries(props).map(([name, prop]) => [
       name,

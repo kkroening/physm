@@ -1668,12 +1668,24 @@ function ScenePane({
         // A point read in an end's frame -- a constraint's -- is not read in the
         // one drawing it, which is the only frame this places against.
         .filter(([, spec]) => spec.kind === 'point' && !spec.relativeTo)
-        // A point that depends on what an instance passes has no fixed place
-        // to put a handle, and a drag would write a literal over the reference.
-        // Withholding the handle here is what makes that unreachable: a prop
-        // absent from `points` is absent from `handles`, from `nearestHandle`,
-        // and from the bodily drag, which reads `points` directly.
-        .filter(([prop]) => node.props[prop]?.kind !== 'parameter')
+        // A literal to move, or no handle. A point that depends on what an
+        // instance passes has no fixed place to put one, and a point the
+        // document *computes* has a place that is not a value to drag -- in
+        // both cases a drag would write a literal over what is there.
+        // Withholding the handle is what makes that unreachable: a prop absent
+        // from `points` is absent from `handles`, from `nearestHandle`, and
+        // from the bodily drag, which reads `points` directly.
+        //
+        // Stated as what it needs rather than as what it excludes, so a fourth
+        // kind of prop value is right here by default rather than by someone
+        // remembering to come back. An *absent* prop still gets one, which the
+        // filter below decides: what is ruled out here is a prop that is there
+        // and is not a value.
+        .filter(([prop]) => {
+          const held = node.props[prop];
+
+          return held === undefined || held.kind === 'literal';
+        })
         // And one absent with no default says something no value can: an
         // anchor's point, a constraint's second end, are solved for. Writing a
         // value would freeze it, and the scene would stop building.
@@ -1954,9 +1966,9 @@ function ScenePane({
     event.preventDefault();
     blurAway();
     drags.current += 1;
-    // A referenced prop contributes no handle and no bodily drag target, so
-    // `literalIn` here is reading a prop that is a literal or absent -- the
-    // `[0, 0]` is the absent case, not a stand-in for a reference.
+    // Only a prop holding a literal contributes a handle or a bodily drag
+    // target, so `literalIn` here is reading a literal or an absent prop --
+    // the `[0, 0]` is the absent case, not a stand-in for anything else.
     const position = vec3.coerce(
       (literalIn(nodeAt(doc, focus, target.path).props[target.prop]) ?? [
         0, 0,
