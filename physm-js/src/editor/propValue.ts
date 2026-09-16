@@ -347,11 +347,19 @@ export function expressionSource(
       return expressionSource(held, write);
     }
 
-    return held !== null &&
-      typeof held === 'object' &&
-      (held as PropValue).kind === 'parameter'
-      ? write.reference((held as { name: string }).name)
-      : write.value(held);
+    if (isReference(held)) {
+      return write.reference(held.name);
+    }
+
+    // A leaf is plain, but a document can hold a wrapped one -- `resolved`
+    // unwraps one too rather than passing the wrapper down.
+    return write.value(
+      held !== null &&
+        typeof held === 'object' &&
+        (held as PropValue).kind === 'literal'
+        ? (held as { value: unknown }).value
+        : held,
+    );
   };
 
   return `${node.op}(${node.operands.map(operand).join(', ')})`;

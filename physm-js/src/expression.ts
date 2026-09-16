@@ -318,6 +318,36 @@ export function computed<T extends object>(props: Computable<T>): T {
  */
 type Operands<K extends Operation> = Parameters<(typeof OPERATIONS)[K]>;
 
+/**
+ * How many operands the operation `name` takes, or `null` for no such name.
+ *
+ * For a caller building a node from text rather than from a constructor: the
+ * arity is the implementation's own parameter count, so a parser checking
+ * against it cannot drift from what `evaluate` will refuse *about the count*.
+ * It says nothing about the operands themselves -- a parser that accepted a
+ * non-finite number would still be handing over what `scalar` refuses.
+ */
+export function arityOf(name: string): number | null {
+  return Object.hasOwn(OPERATIONS, name)
+    ? (OPERATIONS[name as Operation] as (...operands: never[]) => unknown)
+        .length
+    : null;
+}
+
+/**
+ * An operation node built from a name checked at runtime.
+ *
+ * The constructors below are the spelling for code, where the name is known as
+ * it is written. This is for a caller that has the name as a string -- a
+ * parser, or a document being read back -- and has already checked it.
+ */
+export function operationOf(
+  op: Operation,
+  operands: readonly unknown[],
+): ExpressionNode {
+  return { kind: 'operation', op, operands };
+}
+
 /** An operation node, for each operation in turn. */
 function constructorFor<K extends Operation>(
   op: K,

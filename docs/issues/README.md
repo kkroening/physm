@@ -7,6 +7,9 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0025](0025.md) | Decide whether the expression language has exponentiation | RFC | Open |
+| [0024](0024.md) | Say what unit an angle typed as an expression is in | Bug | Open |
+| [0023](0023.md) | Run a real mutation tester, instead of enumerating mutants by hand | Enhancement | Open |
 | [0022](0022.md) | Decide whether the parameter types grow toward the prop kinds | RFC | Open |
 | [0021](0021.md) | Let a definition's parameters be reordered | Enhancement | Open |
 | [0020](0020.md) | Carry a parameter across an extraction, instead of refusing one | Enhancement | Resolved |
