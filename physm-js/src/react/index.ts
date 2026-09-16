@@ -28,6 +28,7 @@ export { default as TrackFrame } from './TrackFrame';
 export { default as Box } from './Box';
 export { default as Circle } from './Circle';
 export { default as Line } from './Line';
+export { default as WorldLine } from './WorldLine';
 export { default as Weight } from './Weight';
 
 export { default as Anchor } from './Anchor';

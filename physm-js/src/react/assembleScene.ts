@@ -1,6 +1,7 @@
 import CoreScene from './../Scene';
 import { refuseAnchorFrameCollisions } from './resolveAnchor';
 import type Constraint from './../Constraint';
+import type { WorldDecal } from './../Decal';
 import type { AnchorLookup, ConstraintNode, FrameChildren } from './sceneNodes';
 
 /**
@@ -34,8 +35,13 @@ export default function assembleScene(
   constraints: readonly ConstraintNode[],
   {
     gravity,
+    worldDecals = [],
     unbuildable,
-  }: { gravity?: number | undefined; unbuildable: Unbuildable },
+  }: {
+    gravity?: number | undefined;
+    worldDecals?: readonly WorldDecal[];
+    unbuildable: Unbuildable;
+  },
 ): CoreScene {
   // A scene carries no mass of its own, so there is nowhere for a root
   // `<Weight>` to go. Silently dropping it would remove mass from a rig, which
@@ -51,6 +57,7 @@ export default function assembleScene(
 
   const scene = new CoreScene({
     decals: root.decals,
+    worldDecals: [...worldDecals],
     frames: root.frames,
     ...(gravity === undefined ? {} : { gravity }),
   });

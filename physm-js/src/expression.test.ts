@@ -1,4 +1,5 @@
-import * as mat3 from './Mat3';
+import CoreScene from './Scene';
+import FixedFrame from './FixedFrame';
 import {
   add,
   computed,
@@ -12,20 +13,32 @@ import {
   scale,
   sqrt,
   sub,
+  tickOf,
   vec,
   worldPoint,
   xOf,
   yOf,
 } from './expression';
-import type { ExpressionNode } from './expression';
-import type { PoseMap } from './Scene';
+import type { ExpressionNode, Tick } from './expression';
 
-/** A scene posed with one frame turned a quarter turn and moved to (3, 1). */
-function posed(): PoseMap {
-  return new Map([
-    ['arm', mat3.multiply(mat3.translation(3, 1), mat3.rotation(Math.PI / 2))],
-    ['base', mat3.translation(-1, 0)],
-  ]);
+/**
+ * A scene with one frame turned a quarter turn and moved to (3, 1), at a tick.
+ *
+ * A real scene rather than a hand-made pose map, because a tick is the two
+ * together: the frames are what an id means, and a map made from some other
+ * scene would answer a colliding id with a number from the wrong rig.
+ */
+function posed(...frames: FixedFrame[]): Tick {
+  return tickOf(
+    new CoreScene({
+      frames: frames.length
+        ? frames
+        : [
+            new FixedFrame({ id: 'arm', position: [3, 1], angle: Math.PI / 2 }),
+            new FixedFrame({ id: 'base', position: [-1, 0] }),
+          ],
+    }),
+  );
 }
 
 describe('an expression node', () => {
@@ -222,8 +235,8 @@ describe('an expression node', () => {
   test('a tick changes nothing about a structural expression', () => {
     // Having somewhere to read is not the same as reading it: the operations
     // that are functions of their operands answer the same either way.
-    expect(evaluate(mul(3, 2), { poses: posed() })).toBe(6);
-    expect(computed({ mass: mul(3, 2) }, { poses: posed() })).toEqual({
+    expect(evaluate(mul(3, 2), posed())).toBe(6);
+    expect(computed({ mass: mul(3, 2) }, posed())).toEqual({
       mass: 6,
     });
   });
@@ -243,7 +256,7 @@ describe('a signal', () => {
     // The frame is turned a quarter turn and moved to (3, 1), so its own
     // x axis points along the world's y: the point two along it lands at
     // (3, 3). Nothing about the expression says so -- the pose does.
-    const tick = { poses: posed() };
+    const tick = posed();
 
     expect(evaluate(worldPoint('arm', [2, 0]), tick)).toEqual([3, 3]);
     expect(evaluate(worldPoint('base', [2, 0]), tick)).toEqual([1, 0]);
@@ -252,7 +265,7 @@ describe('a signal', () => {
   test('composes with the operations that are not signals', () => {
     // The two halves of the wish list's line: two points with no common
     // frame, and their separation, which only the pose knows.
-    const tick = { poses: posed() };
+    const tick = posed();
     const gap = sub(worldPoint('arm', [2, 0]), worldPoint('base', [2, 0]));
 
     expect(evaluate(gap, tick)).toEqual([2, 3]);
@@ -274,7 +287,7 @@ describe('a signal', () => {
     expect(() => computed({ width: buried })).toThrow(
       /^width: worldPoint is a signal/,
     );
-    expect(computed({ width: buried }, { poses: posed() })).toEqual({
+    expect(computed({ width: buried }, posed())).toEqual({
       width: 8,
     });
     expect(computed({ width: xOf(scale(add([1, 0], vec(2, 3)), 2)) })).toEqual({
@@ -283,11 +296,11 @@ describe('a signal', () => {
   });
 
   test('the pose is read once however many edges reach the node', () => {
-    const poses = posed();
-    const reads = vi.spyOn(poses, 'get');
+    const tick = posed();
+    const reads = vi.spyOn(tick.poses, 'get');
     const tip = worldPoint('arm', [2, 0]);
 
-    expect(evaluate(add(tip, tip), { poses })).toEqual([6, 6]);
+    expect(evaluate(add(tip, tip), tick)).toEqual([6, 6]);
     expect(reads).toHaveBeenCalledTimes(1);
   });
 
@@ -301,19 +314,19 @@ describe('a signal', () => {
     expect(() =>
       evaluate(
         { kind: 'operation', op: 'worldPoint', operands: ['arm', [2, 0], 1] },
-        { poses: posed() },
+        posed(),
       ),
     ).toThrow(/worldPoint takes 2 operands, and was given 3/);
   });
 
   test('names the frame it was pointed at when the scene has none', () => {
-    expect(() =>
-      evaluate(worldPoint('elbow', [2, 0]), { poses: posed() }),
-    ).toThrow(/worldPoint names the frame 'elbow', which this scene has none/);
+    expect(() => evaluate(worldPoint('elbow', [2, 0]), posed())).toThrow(
+      /No such frame in scene: elbow/,
+    );
   });
 
   test('says what it was handed when an operand is not what it takes', () => {
-    const tick = { poses: posed() };
+    const tick = posed();
 
     expect(() => evaluate(worldPoint(7, [2, 0]), tick)).toThrow(
       /Expected a frame's id, and found 7/,
@@ -324,9 +337,9 @@ describe('a signal', () => {
   });
 
   test('a pose that has diverged is refused rather than drawn', () => {
-    const poses: PoseMap = new Map([['arm', mat3.translation(NaN, 0)]]);
+    const diverged = posed(new FixedFrame({ id: 'arm', position: [NaN, 0] }));
 
-    expect(() => evaluate(worldPoint('arm', [2, 0]), { poses })).toThrow(
+    expect(() => evaluate(worldPoint('arm', [2, 0]), diverged)).toThrow(
       /worldPoint produced \[NaN, 0\]/,
     );
   });
@@ -340,9 +353,7 @@ describe('a signal', () => {
     expect(
       computed(
         { position: worldPoint('arm', [2, 0]), width: mul(2, 2) },
-        {
-          poses: posed(),
-        },
+        posed(),
       ),
     ).toEqual({ position: [3, 3], width: 4 });
   });

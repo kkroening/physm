@@ -8,6 +8,7 @@ import Line from './Line';
 import RotationalFrame from './RotationalFrame';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
+import WorldLine from './WorldLine';
 
 /**
  * The binding's building blocks, in the order a library lists them.
@@ -23,6 +24,7 @@ const coreComponents = [
   Box,
   Circle,
   Line,
+  WorldLine,
   Weight,
   Anchor,
   Coincidence,

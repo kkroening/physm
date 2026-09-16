@@ -6,6 +6,7 @@ import { SingularMatrixError } from './solveLinearSystem';
 import { factor, fromRows, solveFactored } from './solveLinearSystem';
 import type Constraint from './Constraint';
 import type Decal from './Decal';
+import type { WorldDecal } from './Decal';
 import type Frame from './Frame';
 import type { ConstraintCtx } from './Constraint';
 import type { FrameId, StateMap } from './Frame';
@@ -78,6 +79,7 @@ export const DEFAULT_GRAVITY = 10;
 
 export interface SceneOptions {
   decals?: Decal[];
+  worldDecals?: WorldDecal[];
   frames?: Frame[];
   springs?: unknown[];
   constraints?: Constraint[];
@@ -159,6 +161,25 @@ function refuseRepeatedFrames(
 
 export default class Scene {
   readonly decals: Decal[];
+
+  /**
+   * Decals in world coordinates, each made afresh from the scene's pose.
+   *
+   * Held as makers rather than as shapes because there is no pose at assembly
+   * to make them from -- see `WorldDecal`. Nothing in the solver reads them,
+   * as nothing in it reads a decal.
+   *
+   * **`toJsonObj` has no term for one**, so a scene serializes less of itself
+   * than it holds. That is a widening of an existing gap rather than a new one
+   * -- decals are opt-in there, and `Decal.toJsonObj` is unimplemented -- but
+   * it is the first part of a scene that is a function rather than data, and
+   * the two ways out differ: a maker could carry the expression it was built
+   * from and serialize as that, or this could stay honestly partial and say
+   * so. Which is right is a question for the save format
+   * (`docs/issues/0017.md`), since neither means anything until something
+   * reads a scene back.
+   */
+  readonly worldDecals: WorldDecal[];
   readonly frames: Frame[];
   readonly springs: unknown[];
   readonly constraints: Constraint[];
@@ -170,12 +191,14 @@ export default class Scene {
 
   constructor({
     decals = [],
+    worldDecals = [],
     frames = [],
     springs = [],
     constraints = [],
     gravity = DEFAULT_GRAVITY,
   }: SceneOptions = {}) {
     this.decals = decals;
+    this.worldDecals = worldDecals;
     this.frames = frames;
     this.springs = springs;
     // Constraints are added below rather than assigned: `addConstraint` is

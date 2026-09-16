@@ -7,6 +7,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 
 | # | Title | Kind | Status |
 |---|---|---|---|
+| [0027](0027.md) | Let a world-space decal be picked in the scene view | Enhancement | Open |
 | [0026](0026.md) | Hold the emitter's operation imports and the binding's exports together | Bug | Open |
 | [0025](0025.md) | Decide whether the expression language has exponentiation | RFC | Open |
 | [0024](0024.md) | Say what unit an angle typed as an expression is in | Bug | Open |
