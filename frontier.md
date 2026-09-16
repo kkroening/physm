@@ -32,6 +32,16 @@ sharing is recorded, and a shared node is already written by name.
 - [0022](docs/issues/0022.md) -- promoting a prop widens its contract, and an
   expression on a `length` prop asks the same question from the other side.
   One answer serves both.
+- **A composite's props are not folded, and will have to be.** Both build
+  routes call a composite with what it was given, and neither can do otherwise:
+  `computed` folds a *value*, and page 4 requires a parameter to arrive as a
+  value rather than a node so a hand-written component can write
+  `if (halfLength > 3)`. Unreachable today, because a composite's props are the
+  author's own plain type -- and live the moment the document can hold an
+  operation, since `sceneDocument` builds a defined component's props exactly
+  as it builds a core one's. Then `halfLength * 2` is `NaN` and
+  `halfLength > 3` is `false`, both silently. A requirement of the step that
+  lands it, not a thing to guard before there is anything to fold.
 - **Where a node set lives, once a reader can produce a multi-definition
   document.** Sharing is recorded per *read* today, which is narrower than what
   the emitter can already write -- `constantsOf` hoists across definitions, and
@@ -40,13 +50,6 @@ sharing is recorded, and a shared node is already written by name.
   wider scope is a reader that does not: a save format
   ([0017](docs/issues/0017.md)), rather than the node set, which needs nothing
   the read scope does not already give it.
-
-**[0022](docs/issues/0022.md) wants deciding first, or with it.** Promoting a
-prop widens its contract -- a `length` becomes a `scalar` and stops being
-non-negative -- and an expression on a `length` prop asks the same question from
-the other side. Whether the parameter types grow toward the prop kinds, or
-promotion stays deliberately lossy and says so, is one answer for both, and
-answering it twice would leave two rules about what a prop's kind guarantees.
 
 **[0019](docs/issues/0019.md) is filed and waiting**, and nothing here depends
 on it. Its small half -- what *names* a component -- looks ready to decide; its

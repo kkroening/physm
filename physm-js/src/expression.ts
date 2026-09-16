@@ -20,7 +20,16 @@
  * and what lets the emitter write the binding rather than three copies.
  */
 
-/** Every operation, with how many operands it takes and what it does. */
+/**
+ * Every operation, with how many operands it takes and what it does.
+ *
+ * **Each declares its operands as plain parameters**, because `Function.length`
+ * is the arity for both the check in `evaluate` and the `Operands<K>` a
+ * constructor is typed by. A default or a rest would stop counting there, and
+ * the two would loosen together -- the runtime check passing nodes it should
+ * refuse, and the constructor stopping constraining them -- so neither would
+ * catch the other.
+ */
 const OPERATIONS = {
   add: (a: unknown, b: unknown) => pointwise(a, b, (x, y) => x + y),
   sub: (a: unknown, b: unknown) => pointwise(a, b, (x, y) => x - y),
@@ -55,8 +64,8 @@ export interface ExpressionNode {
   readonly operands: readonly unknown[];
 }
 
-/** Whether `value` is an operation node rather than something to compute with. */
-export function isOperation(value: unknown): value is ExpressionNode {
+/** Whether `value` carries the tag an operation node does. */
+function isTagged(value: unknown): value is { kind: 'operation' } {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -64,10 +73,55 @@ export function isOperation(value: unknown): value is ExpressionNode {
   );
 }
 
+/**
+ * Whether `value` is an operation node rather than something to compute with.
+ *
+ * The whole shape, not the tag alone: every caller below reads `op` and walks
+ * `operands`, and a node carrying the tag without them would otherwise reach
+ * those reads and fail with a message naming neither the node nor the prop.
+ * `operands: 'ab'` is the case that shows why the shape has to be checked
+ * before the arity is -- a string has a length, so it passes that check and
+ * dies at the walk.
+ */
+export function isOperation(value: unknown): value is ExpressionNode {
+  return (
+    isTagged(value) &&
+    typeof (value as { op?: unknown }).op === 'string' &&
+    Array.isArray((value as { operands?: unknown }).operands)
+  );
+}
+
+/**
+ * A value as a refusal should name it.
+ *
+ * Not `JSON.stringify` alone, which is wrong on exactly the values a refusal
+ * is most likely to be holding: it renders `Infinity` and `NaN` as `null`,
+ * sending a reader after a null they never wrote; a `symbol` or a function as
+ * `undefined`, which is what an absent operand looks like; and it throws
+ * outright on a `bigint`, so the refusal dies inside its own message.
+ */
+function describe(value: unknown): string {
+  if (typeof value === 'number') {
+    return String(value);
+  }
+
+  // Through an array too, or a point that overflowed in one component reads
+  // back as `[null, 1]` -- the same lie one level out.
+  if (Array.isArray(value)) {
+    return `[${value.map(describe).join(', ')}]`;
+  }
+
+  return typeof value === 'symbol' ||
+    typeof value === 'function' ||
+    typeof value === 'bigint'
+    ? String(value)
+    : JSON.stringify(value);
+}
+
 /** A number an operation was given, or a throw naming what it got instead. */
 function scalar(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`Expected a number, and found ${JSON.stringify(value)}.`);
+    throw new Error(`Expected a number, and found ${describe(value)}.`);
   }
 
   return value;
@@ -80,7 +134,7 @@ function point(value: unknown): readonly number[] {
     value.length !== 2 ||
     !value.every((each) => typeof each === 'number' && Number.isFinite(each))
   ) {
-    throw new Error(`Expected a point, and found ${JSON.stringify(value)}.`);
+    throw new Error(`Expected a point, and found ${describe(value)}.`);
   }
 
   return value as readonly number[];
@@ -111,22 +165,80 @@ function pointwise(
  * writes a fresh node over an existing graph -- but a hand-written component
  * can, and the failure without this is a stack overflow naming nothing.
  */
+/**
+ * A result an operation produced, or a throw naming the operation that did.
+ *
+ * Operands are checked and results have to be too, or `div(1, 0)` puts
+ * `Infinity` into a mass and `sqrt(neg(4))` draws a circle of radius `NaN`,
+ * neither saying anything. Caught one node up rather than at the next
+ * operation, so the message names what produced the value instead of
+ * complaining about what it was handed.
+ */
+function produced(op: Operation, result: unknown): unknown {
+  const bad =
+    typeof result === 'number'
+      ? !Number.isFinite(result)
+      : Array.isArray(result) &&
+        result.some(
+          (each) => typeof each === 'number' && !Number.isFinite(each),
+        );
+
+  if (bad) {
+    throw new Error(`${op} produced ${describe(result)}.`);
+  }
+
+  return result;
+}
+
+/** How far a fold has got: the path it is on, and what it has already worked out. */
+interface Fold {
+  /** The operations above this one, so a graph reaching itself is named. */
+  readonly path: readonly ExpressionNode[];
+
+  /**
+   * What each node evaluated to, so a node with two edges is evaluated once.
+   *
+   * A graph is not a tree, and folding it as one costs a doubling per level of
+   * shared structure -- on the very shape sharing is *for*, "compute the rod
+   * length once and use it in four places". Safe because evaluation is pure,
+   * and because every non-terminating graph is refused before the fold starts.
+   */
+  readonly done: Map<unknown, unknown>;
+}
+
 export function evaluate(
   node: unknown,
-  visiting: Set<unknown> = new Set(),
+  fold: Fold = { path: [], done: new Map() },
 ): unknown {
+  if (isTagged(node) && !isOperation(node)) {
+    throw new Error(
+      `An operation needs a name and its operands, and found ${describe(node)}.`,
+    );
+  }
+
   if (!isOperation(node)) {
     return node;
   }
 
-  if (visiting.has(node)) {
-    throw new Error(
-      `An expression reaches itself: ${node.op} is one of its own operands.`,
-    );
+  if (fold.path.includes(node)) {
+    // The path, not the kind: `add is one of its own operands` says nothing in
+    // a rig holding a dozen of them, where `mul -> add -> neg -> add` says
+    // where to look. Page 4 asks for the participants to be named.
+    const cycle = [...fold.path, node].map(({ op }) => op).join(' -> ');
+
+    throw new Error(`An expression reaches itself: ${cycle}.`);
   }
 
-  const operation = OPERATIONS[node.op] as
-    ((...operands: unknown[]) => unknown) | undefined;
+  if (fold.done.has(node)) {
+    return fold.done.get(node);
+  }
+
+  // Own properties only. A bracket lookup on an object literal reaches
+  // `Object.prototype`, so `op: 'constructor'` would find a function, pass the
+  // refusal below, and hand back a boxed operand as a prop value.
+  const operation = (
+    Object.hasOwn(OPERATIONS, node.op) ? OPERATIONS[node.op] : undefined
+  ) as ((...operands: unknown[]) => unknown) | undefined;
   if (!operation) {
     throw new Error(`'${node.op}' is not an operation.`);
   }
@@ -141,12 +253,18 @@ export function evaluate(
     );
   }
 
-  const within = new Set(visiting).add(node);
-
-  return operation(
-    ...node.operands.map((operand) => evaluate(operand, within)),
+  const within = { path: [...fold.path, node], done: fold.done };
+  const result = produced(
+    node.op,
+    operation(...node.operands.map((operand) => evaluate(operand, within))),
   );
+  fold.done.set(node, result);
+
+  return result;
 }
+
+/** What evaluating an expression can yield: a scalar, or a point. */
+type Computed = number | readonly number[];
 
 /**
  * A component's props, where any of them may instead be computed.
@@ -155,17 +273,40 @@ export function evaluate(
  * its defaults, what its `build` receives -- and this is the wider thing an
  * element may be given. So a default the prop would not accept still fails to
  * compile, where widening the declared type would have let one through.
+ *
+ * **Only the props an expression could produce a value for.** The operations
+ * yield a scalar or a point and nothing else, so a colour, a frame id, a
+ * constraint end and a flag are left exactly as they were -- widening those
+ * would trade a compile error for a silent coercion, and `color={mul(3, 2)}`
+ * setting a stroke to `6` is not an improvement on it not compiling.
+ *
+ * `children` and `ref` are excluded by name as well, because `ReactNode`
+ * includes `number` and so would pass the test above: an expression there has
+ * a consumer that would take it as a child.
  */
 export type Computable<T> = {
   readonly [K in keyof T]: K extends 'children' | 'ref'
     ? T[K]
-    : T[K] | ExpressionNode;
+    : [Extract<T[K], Computed>] extends [never]
+      ? T[K]
+      : T[K] | ExpressionNode;
 };
 
 /** Every prop value in `props`, with any expression among them computed. */
 export function computed<T extends object>(props: Computable<T>): T {
   return Object.fromEntries(
-    Object.entries(props).map(([name, value]) => [name, evaluate(value)]),
+    Object.entries(props).map(([name, value]) => {
+      try {
+        return [name, evaluate(value)];
+      } catch (error) {
+        // Every refusal in this module reaches a person through a prop, and
+        // none of them can name one from inside the graph. This is the only
+        // place that knows, so it is where they all get it.
+        throw new Error(
+          `${name}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }),
   ) as T;
 }
 

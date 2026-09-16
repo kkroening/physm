@@ -726,6 +726,34 @@ describe('a prop that is computed rather than stated', () => {
     ).toThrow(/Expected a point, and found 3/);
   });
 
+  test('a prop no operation can produce a value for is not widened', () => {
+    // Each of these compiles only if `Computable` widened a prop it should
+    // not have -- `@ts-expect-error` fails the build when there is no error,
+    // which is the assertion. A guarantee the binding had before expressions
+    // existed, and the kind that disappears silently without a test.
+    const refused = [
+      // @ts-expect-error -- a colour is not something an expression produces
+      <Box key="a" width={1} height={1} color={mul(3, 2)} />,
+      // @ts-expect-error -- nor is a flag
+      <Box key="b" width={1} height={1} solid={mul(1, 0)} />,
+      // @ts-expect-error -- nor a frame's id
+      <RotationalFrame key="c" id={mul(3, 2)} />,
+      // @ts-expect-error -- nor a constraint's end
+      <Coincidence key="d" frame1={mul(1, 2)} frame2="b" />,
+    ];
+
+    expect(refused).toHaveLength(4);
+
+    // And the props this change is for still take one.
+    expect(() =>
+      buildScene(
+        <RotationalFrame id="arm" resistance={mul(1, 2)}>
+          <Box width={sqrt(4)} height={div(4, 2)} position={vec(0, 0)} />
+        </RotationalFrame>,
+      ),
+    ).not.toThrow();
+  });
+
   test('a required prop is satisfied by an expression', () => {
     // `refuseMissingProps` runs before the fold and asks only whether the prop
     // is there, which an expression is.
