@@ -39,13 +39,17 @@ sizes:
    what this said.** The plan was a `PropSpec` saying structural or signal and
    the prop box narrowing its refusal to read it. That part is a few lines and
    it would change nothing observable, because a person cannot type a signal at
-   all: a point property is not offered as text, and the grammar has no string
-   or point literal to spell `worldPoint('cart', [0, 0])` with. Underneath both
-   is a question nobody had asked -- whether a frame id should be *typed*
-   rather than picked, when the editor is the one party that knows which ids
-   exist, and page 2's own example is a line between two *anchors*, which are
-   already named things here. [0028](docs/issues/0028.md) is that question, and
-   it is Karl's.
+   all: a point property is not offered as text, and the grammar has no way to
+   write down a frame's id, which is `worldPoint`'s first operand. (The point
+   half *is* already reachable -- `worldPoint('cart', vec(0, 0))` is a
+   well-formed graph today.) Underneath both is a question nobody had asked --
+   whether an id should be *typed* rather than picked, when the editor is the
+   one party that knows which ids exist, and page 2's own example is a line
+   between two *anchors*, which are already named things here.
+   [0028](docs/issues/0028.md) is that question, and it is Karl's. It is not a
+   question about the editor alone: an anchor may deliberately have no point,
+   so a picker cannot generally write the leaf, and making it able to is core
+   work.
 
    [0027](docs/issues/0027.md) belongs with this too: a world-space decal
    cannot be clicked in the drawing, because the thing a person would click
