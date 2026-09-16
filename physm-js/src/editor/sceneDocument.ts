@@ -947,6 +947,52 @@ export function removeParameter(
 }
 
 /**
+ * `definition` with the parameter at `at` moved `by` places among its siblings.
+ *
+ * Order is not cosmetic here, which is why this is an edit rather than a view
+ * concern: the parameters are the emitted signature's order, so moving one
+ * rewrites `function Pendulum({ bob, heft })` and every reader of that source.
+ *
+ * Nothing else moves. A parameter is referred to **by name** -- by the props
+ * in this definition's body and by the argument each instance passes -- so
+ * unlike a rename there is nothing to carry, and unlike a removal there is
+ * nothing to drop.
+ *
+ * A move that would leave the list is clamped rather than refused, because the
+ * caller is a key held down: `Alt+Down` on the last parameter is an ordinary
+ * thing to do and means nothing happened, where a throw would mean the editor
+ * stopped.
+ */
+export function moveParameter(
+  doc: SceneDocument,
+  definition: string,
+  at: number,
+  by: number,
+): SceneDocument {
+  // Throws on an index the definition does not have, which is the one case a
+  // clamp must not swallow: `at` names what is being moved, and a bad one is a
+  // caller bug rather than the end of the list.
+  const moving = parameterAt(doc, definition, at);
+  const { parameters = [] } = definitionOf(doc, definition);
+  const to = Math.min(Math.max(at + by, 0), parameters.length - 1);
+
+  // The *document* back, not an equal one, so that a caller can tell nothing
+  // happened. `withParameters` rebuilds whatever its update returns, so
+  // clamping inside it would hand back a fresh document every time -- and the
+  // editor records one undo step per press of a key that is being held down at
+  // the end of the list.
+  if (to === at) {
+    return doc;
+  }
+
+  return withParameters(doc, definition, (declared) => {
+    const moved = declared.filter((_, index) => index !== at);
+
+    return [...moved.slice(0, to), moving, ...moved.slice(to)];
+  });
+}
+
+/**
  * The parameter at `at` renamed, along with every prop that names it: the
  * references in this definition's body, and the argument each instance passes.
  *

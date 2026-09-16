@@ -835,6 +835,50 @@ describe('Editor, the declaration block', () => {
     expect(code()).not.toContain('value');
   });
 
+  test('Alt+Arrow on a row reorders the declaration block', () => {
+    // The emitted signature is written in the block's order, so this is the
+    // same keystroke a node's row answers to and for the same reason.
+    render(<Editor initialDocument={referring()} />);
+
+    expect(code()).toContain('function Scene({ label, bob }');
+
+    const row = treeRows('Scene')[1]!;
+    row.focus();
+    fireEvent.keyDown(row, { key: 'ArrowUp', altKey: true });
+
+    expect(code()).toContain('function Scene({ bob, label }');
+    expect(treeRows('Scene')[0]).toHaveAccessibleName('bob point');
+
+    // The selection follows the parameter rather than the place, as a moved
+    // node's does -- so a second press carries on rather than moving the one
+    // that took its slot.
+    fireEvent.keyDown(treeRows('Scene')[0]!, { key: 'ArrowUp', altKey: true });
+
+    expect(code()).toContain('function Scene({ bob, label }');
+
+    fireEvent.click(undoButton());
+
+    expect(code()).toContain('function Scene({ label, bob }');
+  });
+
+  test('the toolbar arrows move a selected parameter, and stop at the ends', () => {
+    // The same two buttons serve a node and a parameter: a parameter's
+    // siblings are the declaration block rather than a frame's children.
+    render(<Editor initialDocument={referring()} />);
+    selectParameter('bob');
+
+    // Last of the two, so the ends are read off the declaration block rather
+    // than off a frame's children.
+    expect(screen.getByRole('button', { name: 'Move down' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move up' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move up' }));
+
+    expect(code()).toContain('function Scene({ bob, label }');
+    expect(screen.getByRole('button', { name: 'Move up' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move down' })).toBeEnabled();
+  });
+
   test('Delete on a row removes it, and undo brings it back', () => {
     render(<Editor initialDocument={referring()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Add a parameter' }));

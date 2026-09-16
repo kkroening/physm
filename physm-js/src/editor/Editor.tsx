@@ -35,8 +35,10 @@ import {
   extractionRefusal,
   insertNode,
   moveNode,
+  moveParameter,
   nameRefusal,
   nodeAt,
+  parameterAt,
   parameterRemovalRefusal,
   removeNode,
   removeParameter,
@@ -366,6 +368,7 @@ function ParameterRow({
   onSelect,
   onDeselect,
   onDelete,
+  onMove,
 }: {
   parameter: Parameter;
   at: number;
@@ -375,6 +378,7 @@ function ParameterRow({
   onSelect: (at: number) => void;
   onDeselect: () => void;
   onDelete: (at: number) => void;
+  onMove: (at: number, by: number) => void;
 }): ReactElement {
   const key = parameterKey(at);
   const isSelected = selected === key;
@@ -408,10 +412,20 @@ function ParameterRow({
         }
       }}
       onKeyDown={(event) => {
-        // The keys a node's row answers to, less the ones that move a node:
-        // a parameter's place in the block is its declaration order, and
-        // reordering one is `docs/issues/0021.md`.
-        if (plainKey(event) && NAVIGATION.has(event.key)) {
+        // The same keys a node's row answers to, including the ones that move
+        // it: a parameter's place in the block is its declaration order, and
+        // the emitted signature is written in that order. What it does not
+        // answer to is indent and outdent, which have no meaning in a flat
+        // list.
+        if (
+          event.altKey &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+        ) {
+          event.preventDefault();
+          onMove(at, event.key === 'ArrowUp' ? -1 : 1);
+        } else if (plainKey(event) && NAVIGATION.has(event.key)) {
           event.preventDefault();
           rowAfter(event.currentTarget, event.key)?.focus();
         } else if (event.key === 'Enter' || event.key === ' ') {
@@ -703,6 +717,7 @@ function TreePane({
   onSelectParameter,
   onAddParameter,
   onDeleteParameter,
+  onMoveParameter,
   ...actions
 }: TreeActions & {
   doc: SceneDocument;
@@ -715,6 +730,7 @@ function TreePane({
   onSelectParameter: (at: number) => void;
   onAddParameter: () => void;
   onDeleteParameter: (at: number) => void;
+  onMoveParameter: (at: number, by: number) => void;
 }): ReactElement {
   // The path the name is being typed for: the form shows only while that is
   // still the selection, and a new selection clears it -- one made in the tree,
@@ -902,13 +918,27 @@ function TreePane({
       : foundAt === -1
         ? `${found.length} found`
         : `${foundAt + 1} of ${found.length}`;
-  const index = selectedPath ? selectedPath[selectedPath.length - 1]! : null;
+  // The arrows move whatever is selected, and a parameter's siblings are the
+  // declaration block rather than a frame's children -- so the same two
+  // buttons serve both, and the disabled ends are read off whichever it is.
+  const index = selectedPath
+    ? selectedPath[selectedPath.length - 1]!
+    : selectedParameter;
   const count = selectedPath
     ? siblingCount(doc, focus, selectedPath.slice(0, -1))
-    : 0;
+    : selectedParameter !== null
+      ? parameters.length
+      : 0;
   const onSelected = (action: (path: NodePath) => void) => (): void => {
     if (selectedPath) {
       action(selectedPath);
+    }
+  };
+  const onMoveSelected = (by: 1 | -1) => (): void => {
+    if (selectedPath) {
+      actions.onMove(selectedPath, by);
+    } else if (selectedParameter !== null) {
+      onMoveParameter(selectedParameter, by);
     }
   };
 
@@ -935,7 +965,7 @@ function TreePane({
             aria-label="Move up"
             title="Move up (Alt+↑)"
             disabled={index === null || index === 0}
-            onClick={onSelected((path) => actions.onMove(path, -1))}
+            onClick={onMoveSelected(-1)}
           >
             ↑
           </button>
@@ -944,7 +974,7 @@ function TreePane({
             aria-label="Move down"
             title="Move down (Alt+↓)"
             disabled={index === null || index === count - 1}
-            onClick={onSelected((path) => actions.onMove(path, 1))}
+            onClick={onMoveSelected(1)}
           >
             ↓
           </button>
@@ -1142,6 +1172,7 @@ function TreePane({
                     onDeleteParameter(which);
                   }
                 }}
+                onMove={onMoveParameter}
                 key={parameterKey(at)}
               />
             ))}
@@ -2738,6 +2769,25 @@ export default function Editor({
               record(removeParameter(doc, focus, at), { structural: true });
               restructure();
               select(null);
+            }}
+            onMoveParameter={(at, by) => {
+              const next = moveParameter(doc, focus, at, by);
+              if (next === doc) {
+                return;
+              }
+
+              // Structural, because it rewrites the emitted signature -- and
+              // the selection follows the parameter rather than the place, as
+              // a moved node's does.
+              record(next, { structural: true });
+              restructure();
+              select({
+                kind: 'parameter',
+                definition: focus,
+                at: (definitionOf(next, focus).parameters ?? []).findIndex(
+                  ({ name }) => name === parameterAt(doc, focus, at).name,
+                ),
+              });
             }}
             onExtract={(path, name) => {
               record(extractComponent(doc, focus, path, name), {

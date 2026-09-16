@@ -40,6 +40,7 @@ import {
   parameterAt,
   parameterNameRefusal,
   parameterRemovalRefusal,
+  moveParameter,
   removeParameter,
   renameParameter,
   retypeParameter,
@@ -852,6 +853,100 @@ describe("a definition's parameters", () => {
       ],
     };
   };
+
+  describe('reordered', () => {
+    /** Three declared, so a move has somewhere to go in both directions. */
+    const three = (): SceneDocument => ({
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          parameters: [
+            { name: 'a', type: 'scalar', default: 1 },
+            { name: 'b', type: 'scalar', default: 2 },
+            { name: 'c', type: 'scalar', default: 3 },
+          ],
+          body: [],
+        },
+      ],
+    });
+    const order = (doc: SceneDocument): string[] =>
+      (definitionOf(doc, 'Scene').parameters ?? []).map(({ name }) => name);
+
+    test('moves one among its siblings, in both directions', () => {
+      expect(order(moveParameter(three(), 'Scene', 2, -1))).toEqual([
+        'a',
+        'c',
+        'b',
+      ]);
+      expect(order(moveParameter(three(), 'Scene', 0, 1))).toEqual([
+        'b',
+        'a',
+        'c',
+      ]);
+      expect(order(moveParameter(three(), 'Scene', 0, 2))).toEqual([
+        'b',
+        'c',
+        'a',
+      ]);
+    });
+
+    test('a move that goes nowhere hands the document back, not a copy', () => {
+      // So a caller can tell nothing happened. The editor records one undo
+      // step per press, and a key held down at the end of the list would
+      // otherwise fill the history with edits that changed nothing.
+      const doc = three();
+
+      expect(moveParameter(doc, 'Scene', 0, -1)).toBe(doc);
+      expect(moveParameter(doc, 'Scene', 2, 1)).toBe(doc);
+      expect(moveParameter(doc, 'Scene', 1, 0)).toBe(doc);
+      expect(moveParameter(doc, 'Scene', 1, 1)).not.toBe(doc);
+    });
+
+    test('clamps at either end rather than refusing', () => {
+      // The caller is a key held down, so running out of list means nothing
+      // happened -- where a throw would mean the editor stopped.
+      expect(order(moveParameter(three(), 'Scene', 0, -1))).toEqual([
+        'a',
+        'b',
+        'c',
+      ]);
+      expect(order(moveParameter(three(), 'Scene', 2, 5))).toEqual([
+        'a',
+        'b',
+        'c',
+      ]);
+    });
+
+    test('rewrites the emitted signature, which is the point of it', () => {
+      // Order is not cosmetic: the declaration block *is* the signature's
+      // order, so this is a document edit rather than a view concern.
+      expect(emitScene(three()).source).toContain('{ a = 1, b = 2, c = 3 }');
+      expect(
+        emitScene(moveParameter(three(), 'Scene', 2, -2)).source,
+      ).toContain('{ c = 3, a = 1, b = 2 }');
+    });
+
+    test('carries nothing, because a parameter is referred to by name', () => {
+      // Unlike a rename there is nothing to update and unlike a removal there
+      // is nothing to drop: the body's references and each instance's argument
+      // both name the parameter, and the name has not changed.
+      const doc = taking();
+      const moved = moveParameter(addParameter(doc, 'Scene'), 'Scene', 0, 1);
+      const [weight] = moved.definitions[0]!.body[0]!.children;
+
+      expect(order(moved)).toEqual(['value', 'bob']);
+      expect(weight!.props.position).toEqual(parameterOf('bob'));
+      expect(emitScene(moved).source).toContain('position={bob}');
+    });
+
+    test('an index the definition does not have is a caller bug', () => {
+      // The one case the clamp must not swallow: `at` names what is being
+      // moved, and a bad one is not the end of the list.
+      expect(() => moveParameter(three(), 'Scene', 3, -1)).toThrow();
+      expect(() => moveParameter(three(), 'Scene', 0, 1)).not.toThrow();
+    });
+  });
 
   test('a new one is named around the ones already declared', () => {
     const once = addParameter(taking(), 'Scene');
