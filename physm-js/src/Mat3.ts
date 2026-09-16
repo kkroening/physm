@@ -246,6 +246,30 @@ export function rotationAngle(m: Mat3): number {
   return Math.atan2(m[1], -m[0]);
 }
 
+/**
+ * Which way the transform points, in radians: `atan2(m10, m00)`.
+ *
+ * The rotation as trigonometry means it -- `orientation(rotation(a))` is `a`.
+ * That is *not* what `rotationAngle` above returns, which is a half turn away
+ * and is kept that way because the drawing is calibrated against it.
+ *
+ * Two functions differing by pi is a trap, and this one exists rather than a
+ * correction because the difference is load-bearing for the older callers: a
+ * spring pulling a frame toward a world direction has to agree with the
+ * geometry, and a half turn of disagreement points the crane arm at the
+ * ground.
+ */
+export function orientation(m: Mat3): number {
+  return Math.atan2(m[3], m[0]);
+}
+
+/** An angle folded into `(-pi, pi]`, so a difference takes the short way round. */
+export function wrapAngle(angle: number): number {
+  const turned = (angle + Math.PI) % (2 * Math.PI);
+
+  return (turned <= 0 ? turned + 2 * Math.PI : turned) - Math.PI;
+}
+
 /** The translation column, as a plain `[x, y]`. */
 export function translationOf(m: Mat3): readonly [number, number] {
   return [m[2], m[5]];

@@ -236,6 +236,7 @@ export default class JsSolver extends Solver {
 
   _getForceVectorEntry(
     baseFrame: Frame,
+    posMatMap: Map<FrameId, Mat3>,
     velMatMap: Map<FrameId, Mat3>,
     velSumMatMap: Map<FrameId, Mat3>,
     accelSumMatMap: Map<FrameId, Mat3>,
@@ -284,7 +285,15 @@ export default class JsSolver extends Solver {
     }
     const [q, qd] = mapGet(stateMap, baseFrame.id, 'state');
     const resistanceForce = -baseFrame.resistance * qd;
-    const springForce = -baseFrame.stiffness * q;
+
+    // Asked of the frame rather than written out here, because what a spring
+    // is slack toward is the frame's own business -- a base frame answers
+    // about its coordinate, and a rotational one may answer about a direction
+    // in the world.
+    const springForce = baseFrame.springForce(
+      q,
+      mapGet(posMatMap, baseFrame.id, 'pose'),
+    );
     const externalForce =
       (externalForceMap && externalForceMap.get(baseFrame.id)) || 0;
     result += externalForce + resistanceForce + springForce;
@@ -292,6 +301,7 @@ export default class JsSolver extends Solver {
   }
 
   _getForceVector(
+    posMatMap: Map<FrameId, Mat3>,
     velMatMap: Map<FrameId, Mat3>,
     velSumMatMap: Map<FrameId, Mat3>,
     accelSumMatMap: Map<FrameId, Mat3>,
@@ -309,6 +319,7 @@ export default class JsSolver extends Solver {
 
       array[index] = this._getForceVectorEntry(
         frame,
+        posMatMap,
         velMatMap,
         velSumMatMap,
         accelSumMatMap,
@@ -406,6 +417,7 @@ export default class JsSolver extends Solver {
     // );
     let massMatrix: number[][] = this._getCoefficientMatrix(stateMap);
     let forceVector: number[] = this._getForceVector(
+      posMatMap,
       velMatMap,
       velSumMatMap,
       accelSumMatMap,

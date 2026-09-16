@@ -36,6 +36,20 @@ pub trait Frame: Debug {
     /// own. Required, not defaulted: a joint that forgot to say so would have
     /// its inertia replaced.
     fn is_joint(&self) -> bool;
+
+    /// What this frame's spring contributes to its own generalised force.
+    ///
+    /// A method rather than a term the solver writes out, because what a
+    /// spring is slack *toward* is the frame's own business: the default
+    /// answers about the coordinate, and `RotationalFrame` may answer about a
+    /// direction in the world. `pos_mat` is this frame's local-to-world
+    /// transform, out of the walk the solver already makes.
+    ///
+    /// Mirrors `Frame.springForce` in `physm-js`, which the differential
+    /// harness holds this to.
+    fn get_spring_force(&self, q: f64, _pos_mat: &Mat3) -> f64 {
+        -q * self.get_stiffness()
+    }
 }
 
 pub type FrameBox = Box<dyn Frame>;

@@ -51,6 +51,26 @@ where
     Ok(obj.get(key).map(func).transpose()?.unwrap_or_default())
 }
 
+/// An item that may be absent *or* explicitly null.
+///
+/// Which is how an optional number arrives from the JavaScript side:
+/// `toJsonObj` writes the key with a `null` rather than leaving it out, so a
+/// reader that only handled absence would reject every frame that has no
+/// world-referenced spring -- that is, almost all of them.
+pub fn map_obj_item_optional<F, T>(
+    obj: &Map<String, Value>,
+    key: &str,
+    func: F,
+) -> Result<Option<T>, Error>
+where
+    F: FnOnce(&Value) -> Result<T, Error>,
+{
+    match obj.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => Ok(Some(func(value)?)),
+    }
+}
+
 pub fn value_to_frame(value: &Value) -> Result<FrameBox, Error> {
     // TODO: do more of the common frame parsing here (weights, etc.) instead
     // of repeating it in each Frame implementation.

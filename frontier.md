@@ -65,8 +65,16 @@ sizes:
    external-force slice constant for a batch, so such an expression is
    evaluated per *batch*. That is the granularity the demo already ships, so it
    inherits rather than needing something new.
-5. **A spring whose rest direction is world-referenced**, which needs the
-   accumulated pose and is core work on both sides.
+5. ~~**A spring whose rest direction is world-referenced**~~ -- done, and it
+   turned out **not to be signals work at all**, which is a correction to what
+   this said. Page 2 is right that the rest orientation depends on the
+   accumulated pose; what does not follow is that an expression has to carry
+   it. The solver already walks state to pose every tick, so a frame can be
+   asked what its spring is doing and answer from its own pose -- and routing
+   that through a signal would be *worse* than not, because a value handed
+   across a `tick_mut` batch is a tick behind in exactly the case the spring
+   exists for. What still needs signals is a rest direction referencing
+   **another frame**, which is a different feature.
 
 **Not taken here:** what survives a rebuild when structure changes at run time.
 Page 2 reopens [0014](docs/issues/0014.md)'s reset-on-structural-edit rule for
@@ -133,11 +141,14 @@ the demo ever wants the mounted route.
 
 ## Next — 0016
 
-**Where it stands: three of seven steps are done, signals are two slices in
-with the third blocked on a decision, and the three steps after them are
-untouched.** With the editor's half waiting on
-[0028](docs/issues/0028.md), the next thing built is force channels -- keeping
-this list's order, and taking only the part page 11 does not record as open. The three that landed came first because each
+**Where it stands: three of seven steps are done, and signals are three slices
+in with the two remaining ones both waiting on a decision.** The editor's half
+waits on [0028](docs/issues/0028.md); force channels are not a standalone piece
+at all but an in-port on the declared port surface -- step 7 -- whose own TSX
+spelling is the open question this list already records, and whose sharpest
+case page 11 leaves unchosen. So the next thing built is most likely step 7's
+groundwork or [0027](docs/issues/0027.md), and the two questions above are what
+would change that. The three that landed came first because each
 grows more expensive with every site built before it. What remains of
 expressions themselves is the wish list rather than the feature -- `rotate`,
 comparison and selection, and the open questions above. Roughly one PR each,
@@ -174,8 +185,10 @@ after the node question settles _(Karl, 2026-09-16)_.
 
 **Running alongside, blocked by nothing:** springs -- additive to the document,
 though each is core work on both sides of the `physm-rs` boundary rather than a
-warm-up. The local joint spring is done; the ones referencing another frame's
-direction wait on signals.
+warm-up. The local joint spring and the world-referenced one are done. What is
+left is a rest direction referencing *another frame's*, which is the one that
+genuinely needs the signal machinery, and which wants the port surface first --
+naming another frame from a definition is what a declared port is for.
 
 **Standing fallback when the main line is blocked:** the expression graph viewer
 ([0018](docs/issues/0018.md)). It is a check on the representation as much as a
@@ -307,6 +320,12 @@ wrongly -- so it is worth early and is never urgent.
 
 ## Done
 
+- **A spring that holds a crane arm horizontal** -- a rotational frame's
+  `restAngle` names a direction in the *world* rather than in its own
+  coordinate, so the arm cancels whatever it hangs from instead of leaning with
+  it. The same spring as the local one with its rest given in the world, and
+  the difference is wrapped so it always takes the short way round. Both
+  solvers implement it and the cross-validation holds them to each other.
 - **A line between two points on different bodies** -- the wish list's own
   example, which no `<Line>` prop could express because its endpoints have no
   common frame. An expression is structural or signal; a signal reads where the

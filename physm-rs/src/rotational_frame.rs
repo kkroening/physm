@@ -1,4 +1,6 @@
 use crate::json;
+use crate::utils::orientation;
+use crate::utils::wrap_angle;
 use crate::Error;
 use crate::Frame;
 use crate::FrameBox;
@@ -13,6 +15,18 @@ pub struct RotationalFrame {
     pub id: FrameId,
     pub position: Position,
     pub resistance: f64,
+
+    /// The direction in the *world* this frame's spring is slack toward, or
+    /// `None` for a spring slack at its own zero.
+    ///
+    /// What "keep the crane arm horizontal" needs and a local spring cannot
+    /// say: horizontal is a world direction, so the rest orientation depends
+    /// on everything the arm hangs from. Compared against the frame's
+    /// accumulated pose each tick, which is why it is a constant rather than
+    /// anything evaluated -- a value handed across a solver batch would be a
+    /// tick behind in exactly the case it exists for.
+    pub rest_angle: Option<f64>,
+
     pub stiffness: f64,
     pub weights: Vec<Weight>,
 }
@@ -24,6 +38,7 @@ impl RotationalFrame {
             id: id,
             position: Position([0.0, 0.0]),
             resistance: 0.,
+            rest_angle: None,
             stiffness: 0.,
             weights: Vec::new(),
         }
@@ -44,6 +59,11 @@ impl RotationalFrame {
         self
     }
 
+    pub fn set_rest_angle(mut self, rest_angle: f64) -> Self {
+        self.rest_angle = Some(rest_angle);
+        self
+    }
+
     pub fn set_stiffness(mut self, stiffness: f64) -> Self {
         self.stiffness = stiffness;
         self
@@ -61,6 +81,7 @@ impl RotationalFrame {
             id: json::map_value_item(value, &"id", json::value_to_str)?.into(),
             position: json::map_obj_item_or_default(obj, "position", Position::from_json_value)?,
             resistance: json::map_obj_item_or_default(obj, "resistance", json::value_to_f64)?,
+            rest_angle: json::map_obj_item_optional(obj, "restAngle", json::value_to_f64)?,
             stiffness: json::map_obj_item_or_default(obj, "stiffness", json::value_to_f64)?,
             weights: json::map_obj_item_or_default(obj, "weights", json::value_to_weights)?,
         })
@@ -90,6 +111,20 @@ impl Frame for RotationalFrame {
 
     fn is_joint(&self) -> bool {
         true
+    }
+
+    /// `stiffness` times the turn from where this frame points to where it
+    /// should, or the base's local spring when there is no world rest.
+    ///
+    /// The difference is wrapped, so the spring always takes the short way
+    /// round: without that, a frame a hair past a half turn from its rest is
+    /// driven the long way, which looks like the rig snapping rather than
+    /// settling.
+    fn get_spring_force(&self, q: f64, pos_mat: &Mat3) -> f64 {
+        match self.rest_angle {
+            None => -q * self.stiffness,
+            Some(rest) => self.stiffness * wrap_angle(rest - orientation(pos_mat)),
+        }
     }
 
     fn get_local_pos_matrix(&self, q: f64) -> Mat3 {
@@ -136,11 +171,11 @@ mod tests {
         assert_eq!(frame.children.len(), 2);
         assert_eq!(
             format!("{:?}", frame.children[0]),
-            "RotationalFrame { children: [], id: \"b\", position: Position([1.5, 2.6]), resistance: 0.0, stiffness: 0.0, weights: [] }",
+            "RotationalFrame { children: [], id: \"b\", position: Position([1.5, 2.6]), resistance: 0.0, rest_angle: None, stiffness: 0.0, weights: [] }",
         );
         assert_eq!(
             format!("{:?}", frame.children[1]),
-            "RotationalFrame { children: [], id: \"c\", position: Position([5.0, 28.0]), resistance: 0.0, stiffness: 0.0, weights: [] }",
+            "RotationalFrame { children: [], id: \"c\", position: Position([5.0, 28.0]), resistance: 0.0, rest_angle: None, stiffness: 0.0, weights: [] }",
         );
         assert_eq!(
             format!("{:?}", frame.weights),
@@ -206,6 +241,67 @@ mod tests {
             vec![Weight::new(55.)
                 .set_drag(27.)
                 .set_position(Position([3., -4.]))]
+        );
+    }
+
+    #[test]
+    fn test_from_json_value_rest_angle() {
+        // The JavaScript side writes the key with a `null` rather than leaving
+        // it out, so both shapes have to mean "no world rest" -- and a
+        // document written before this existed has neither.
+        let parse = |json: &str| {
+            RotationalFrame::from_json_value(&serde_json::from_str(json).unwrap()).unwrap()
+        };
+        let base = r#"{"id": "a", "type": "RotationalFrame""#;
+
+        assert_eq!(parse(&format!("{}}}", base)).rest_angle, None);
+        assert_eq!(
+            parse(&format!("{}, \"restAngle\": null}}", base)).rest_angle,
+            None
+        );
+        assert_eq!(
+            parse(&format!("{}, \"restAngle\": 1.25}}", base)).rest_angle,
+            Some(1.25)
+        );
+    }
+
+    #[test]
+    fn test_get_spring_force() {
+        // Slack at its own zero without a rest angle: the pose is ignored, so
+        // a frame turned by its parent still reads its coordinate.
+        let local = RotationalFrame::new("a".into()).set_stiffness(4.);
+        let turned = Mat3::new(0., -1., 0., 1., 0., 0., 0., 0., 1.);
+        assert_abs_diff_eq!(local.get_spring_force(0.5, &Mat3::identity()), -2.);
+        assert_abs_diff_eq!(local.get_spring_force(0.5, &turned), -2.);
+
+        // With one, the coordinate stops mattering and the pose decides: the
+        // frame above is a quarter turn from horizontal whatever `q` says.
+        let world = local.set_rest_angle(0.);
+        assert_abs_diff_eq!(world.get_spring_force(0.5, &Mat3::identity()), 0.);
+        assert_abs_diff_eq!(
+            world.get_spring_force(0.5, &turned),
+            -4. * std::f64::consts::FRAC_PI_2
+        );
+    }
+
+    #[test]
+    fn test_get_spring_force_takes_the_short_way() {
+        // The rest and the frame on opposite sides of the half turn, which is
+        // the only place the wrap can show: `orientation` already answers in
+        // `(-pi, pi]`, so a rest of zero can never be more than a half turn
+        // away and a test written there passes whether the difference is
+        // wrapped or not.
+        let frame = RotationalFrame::new("a".into())
+            .set_stiffness(1.)
+            .set_rest_angle(3.);
+        let at = -3_f64;
+        let pose = Mat3::new(at.cos(), -at.sin(), 0., at.sin(), at.cos(), 0., 0., 0., 1.);
+
+        // `3 - (-3)` is 6, which is a fifth of a turn the other way.
+        assert_abs_diff_eq!(
+            frame.get_spring_force(0., &pose),
+            6. - 2. * std::f64::consts::PI,
+            epsilon = 1e-12
         );
     }
 

@@ -324,6 +324,43 @@ function getSpringScene() {
 describeCrossValidation('spring scene', getSpringScene);
 
 /**
+ * A spring slack toward a direction in the *world*, under a parent that turns.
+ *
+ * The one force term that reads the pose rather than only the coordinate, so
+ * it is the one where the two solvers could disagree about something other
+ * than arithmetic: each walks from state to pose its own way, and a spring
+ * that read the wrong matrix -- the parent's, the local one, or the right one
+ * a half turn out -- would still oscillate, just about the wrong place.
+ *
+ * The mast turns, so the arm's world orientation is not its coordinate, and
+ * the two are told apart by everything below.
+ */
+function getWorldSpringScene() {
+  return new Scene({
+    frames: [
+      new RotationalFrame({
+        id: 'mast',
+        initialState: [0.4, 0.3],
+        stiffness: 12,
+        weights: [new Weight(9, { position: [4, 0] })],
+        frames: [
+          new RotationalFrame({
+            id: 'arm',
+            position: [4, 0],
+            initialState: [-0.2, 0],
+            stiffness: 45,
+            restAngle: 0,
+            weights: [new Weight(5, { position: [6, 0] })],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+describeCrossValidation('world-referenced spring scene', getWorldSpringScene);
+
+/**
  * What the spring actually does, as distinct from the two solvers agreeing
  * about it. A sign error in both would be invisible to the cross-validation
  * above and is exactly what this catches: the wrong sign does not oscillate,
@@ -388,25 +425,64 @@ describe('a frame spring', () => {
    * The half is the sample that pins the *sign*: a spring that pushed would
    * have left rather than come back.
    */
-  function expectOscillation(solver: Solver, id: string): void {
-    expect(coordinateAfter(solver, id, Math.PI / 2)).toBeCloseTo(0, 10);
+  function expectOscillation(solver: Solver, id: string, centre = 0): void {
+    expect(coordinateAfter(solver, id, Math.PI / 2)).toBeCloseTo(centre, 10);
     expect(coordinateAfter(solver, id, Math.PI / 2)).toBeCloseTo(
-      -AMPLITUDE,
+      centre - AMPLITUDE,
       10,
     );
-    expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(AMPLITUDE, 10);
+    expect(coordinateAfter(solver, id, Math.PI)).toBeCloseTo(
+      centre + AMPLITUDE,
+      10,
+    );
   }
 
+  /**
+   * The same arm, slack toward a direction in the world, on a mast that leans.
+   *
+   * `restAngle: 0` is horizontal. The mast is fixed at `TILT`, so the arm's
+   * world orientation is `TILT + q` and the spring is slack where that is
+   * zero -- at `q = -TILT`, not at `q = 0`. Everything else is the rotational
+   * arm above, so it oscillates at the same frequency about a different place,
+   * which is exactly the claim: a world rest moves the centre and nothing
+   * else.
+   */
+  const TILT = 0.7;
+  const upright = new Scene({
+    gravity: 0,
+    frames: [
+      new FixedFrame({
+        id: 'mast',
+        angle: TILT,
+        frames: [
+          new RotationalFrame({
+            id: 'arm',
+            initialState: [-TILT + AMPLITUDE, 0],
+            stiffness: 18,
+            restAngle: 0,
+            weights: [new Weight(2, { position: [3, 0] })],
+          }),
+        ],
+      }),
+    ],
+  });
+
   const arms = [
-    { name: 'a rotational joint', scene: rotational, id: 'arm' },
-    { name: 'a track joint', scene: linear, id: 'slider' },
+    { name: 'a rotational joint', scene: rotational, id: 'arm', centre: 0 },
+    { name: 'a track joint', scene: linear, id: 'slider', centre: 0 },
+    {
+      name: 'a joint slack toward a world direction',
+      scene: upright,
+      id: 'arm',
+      centre: -TILT,
+    },
   ];
 
-  for (const { name, scene, id } of arms) {
+  for (const { name, scene, id, centre } of arms) {
     test(`${name} oscillates at the frequency its stiffness sets`, async () => {
       const solver = new JsSolver(scene, { rungeKutta: true });
 
-      expectOscillation(solver, id);
+      expectOscillation(solver, id, centre);
     });
 
     test(`${name} does the same in Rust`, async () => {
@@ -414,9 +490,89 @@ describe('a frame spring', () => {
         rungeKutta: true,
       });
 
-      expectOscillation(solver, id);
+      expectOscillation(solver, id, centre);
     });
   }
+
+  test('a world rest holds the arm horizontal whatever it hangs from', () => {
+    // The claim a local spring cannot make, and the test that fails if
+    // `restAngle` were quietly read as a coordinate rather than a direction:
+    // the mast's own tilt is what the arm has to cancel, so the answer depends
+    // on the pose and on nothing the arm itself holds.
+    const settled = (angle: number, rest: number | null): number => {
+      const scene = new Scene({
+        gravity: 0,
+        frames: [
+          new FixedFrame({
+            id: 'mast',
+            angle,
+            frames: [
+              new RotationalFrame({
+                id: 'arm',
+                initialState: [0.9, 0],
+                stiffness: 18,
+                // Critical damping, `c = 2*sqrt(k*I) = 36`, so twenty seconds
+                // leaves a residual around 1e-8 and the assertion below is
+                // about where the arm came to rest rather than about how long
+                // it was given to get there.
+                resistance: 36,
+                ...(rest === null ? {} : { restAngle: rest }),
+                weights: [new Weight(2, { position: [3, 0] })],
+              }),
+            ],
+          }),
+        ],
+      });
+      const solver = new JsSolver(scene, { rungeKutta: true });
+      solver.tick(0.002, 10000);
+
+      return solver.getStateMap().get('arm')![0];
+    };
+
+    // Horizontal in the world, from three different masts.
+    for (const tilt of [0, 0.6, -1.1]) {
+      expect(settled(tilt, 0)).toBeCloseTo(-tilt, 6);
+    }
+
+    // And a quarter turn up from horizontal is a quarter turn up, still
+    // measured in the world rather than from the mast.
+    expect(settled(0.6, Math.PI / 4)).toBeCloseTo(Math.PI / 4 - 0.6, 6);
+
+    // Without one, the same arm settles at its own zero and leans with the
+    // mast -- which is the thing a world-referenced spring exists not to do.
+    expect(settled(0.6, null)).toBeCloseTo(0, 6);
+  });
+
+  test('a spring takes the short way round to its rest', () => {
+    // The rest and the arm on opposite sides of the half turn, which is the
+    // only place the wrap can show: `orientation` already answers in
+    // `(-pi, pi]`, so a rest of zero can never be more than a half turn away
+    // and a test written there passes whether the difference is wrapped or
+    // not. Here it is `3 - (-3) = 6`, which is a fifth of a turn the *other*
+    // way -- and the two answers are most of a turn apart.
+    const REST = 3;
+    const scene = new Scene({
+      gravity: 0,
+      frames: [
+        new RotationalFrame({
+          id: 'arm',
+          initialState: [-3, 0],
+          stiffness: 18,
+          resistance: 36,
+          restAngle: REST,
+          weights: [new Weight(2, { position: [3, 0] })],
+        }),
+      ],
+    });
+    const solver = new JsSolver(scene, { rungeKutta: true });
+    solver.tick(0.002, 10000);
+
+    // Down to `3 - 2*pi`, the near side, rather than up to 3 the long way.
+    expect(solver.getStateMap().get('arm')![0]).toBeCloseTo(
+      REST - 2 * Math.PI,
+      6,
+    );
+  });
 });
 
 describe('stabilization', () => {

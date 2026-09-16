@@ -153,3 +153,47 @@ describe('Mat3', () => {
     expect(mat3.determinant(m)).toBeCloseTo(-3, 12);
   });
 });
+
+describe('orientation', () => {
+  test('is the rotation as trigonometry means it', () => {
+    for (const angle of [0, 0.3, -1.2, Math.PI / 2, 3, -3]) {
+      expect(mat3.orientation(mat3.rotation(angle))).toBeCloseTo(angle, 12);
+    }
+  });
+
+  test('is a half turn from `rotationAngle`, which is the point of having it', () => {
+    // `rotationAngle` is kept as it is because the drawing is calibrated
+    // against it. A spring pulling a frame toward a world direction has to
+    // agree with the geometry instead, and half a turn of disagreement points
+    // the crane arm at the ground.
+    const turned = mat3.rotation(0.3);
+
+    expect(mat3.rotationAngle(turned)).toBeCloseTo(0.3 - Math.PI, 12);
+    expect(mat3.orientation(turned)).toBeCloseTo(0.3, 12);
+  });
+
+  test('reads through a translation, which does not turn anything', () => {
+    const placed = mat3.multiply(mat3.translation(7, -2), mat3.rotation(0.8));
+
+    expect(mat3.orientation(placed)).toBeCloseTo(0.8, 12);
+  });
+});
+
+describe('wrapAngle', () => {
+  test('folds an angle into a half turn either way', () => {
+    expect(mat3.wrapAngle(0)).toBeCloseTo(0, 12);
+    expect(mat3.wrapAngle(1)).toBeCloseTo(1, 12);
+    expect(mat3.wrapAngle(-1)).toBeCloseTo(-1, 12);
+    expect(mat3.wrapAngle(3 * Math.PI)).toBeCloseTo(Math.PI, 12);
+    expect(mat3.wrapAngle(2 * Math.PI + 0.4)).toBeCloseTo(0.4, 12);
+    expect(mat3.wrapAngle(-2 * Math.PI - 0.4)).toBeCloseTo(-0.4, 12);
+  });
+
+  test('takes the short way round, which is what a spring needs', () => {
+    // Just past a half turn is a small turn the other way, not a large one
+    // this way. Unwrapped, a frame here would be driven the long way round,
+    // which looks like the rig snapping rather than settling.
+    expect(mat3.wrapAngle(Math.PI + 0.1)).toBeCloseTo(-Math.PI + 0.1, 12);
+    expect(mat3.wrapAngle(-Math.PI - 0.1)).toBeCloseTo(Math.PI - 0.1, 12);
+  });
+});

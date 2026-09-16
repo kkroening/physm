@@ -442,24 +442,31 @@ fn get_coefficient_matrix(
 fn get_force_vector_entry(
     row_index: FrameIndex,
     frames: &[&FrameBox],
+    pos_mats: &[Mat3],
     vel_mats: &[Mat3],
     composite_force_mats: &[Mat3],
     states: &[State],
     external_forces: &[f64],
 ) -> f64 {
     debug_assert!(row_index < frames.len());
+    debug_assert_eq!(pos_mats.len(), frames.len());
     debug_assert_eq!(vel_mats.len(), frames.len());
     debug_assert_eq!(composite_force_mats.len(), frames.len());
     debug_assert_eq!(states.len(), frames.len());
     debug_assert_eq!(external_forces.len(), frames.len());
     let weight_force = (vel_mats[row_index].transpose() * composite_force_mats[row_index]).trace();
     let resistance_force = -states[row_index].qd * frames[row_index].get_resistance();
-    let spring_force = -states[row_index].q * frames[row_index].get_stiffness();
+
+    // Asked of the frame rather than written out here, because what a spring
+    // is slack toward is the frame's own business.
+    let spring_force =
+        frames[row_index].get_spring_force(states[row_index].q, &pos_mats[row_index]);
     resistance_force + spring_force + weight_force + external_forces[row_index]
 }
 
 fn get_force_vector(
     frames: &[&FrameBox],
+    pos_mats: &[Mat3],
     vel_mats: &[Mat3],
     composite_force_mats: &[Mat3],
     states: &[State],
@@ -470,6 +477,7 @@ fn get_force_vector(
         get_force_vector_entry(
             row,
             frames,
+            pos_mats,
             vel_mats,
             composite_force_mats,
             states,
@@ -573,6 +581,7 @@ fn get_system_of_equations(
         get_coefficient_matrix(frames, index_path_map, &vel_mats, &composite_moment_mats);
     let unconstrained_forces = get_force_vector(
         frames,
+        &pos_mats,
         &vel_mats,
         &composite_force_mats,
         states,
@@ -1837,6 +1846,7 @@ mod tests {
             super::get_force_vector_entry(
                 row_index,
                 &frames,
+                &pos_mats,
                 &vel_mats,
                 &composite_force_mats,
                 &states,
@@ -1978,6 +1988,7 @@ mod tests {
                     );
                     let actual_forces = super::get_force_vector(
                         &frames,
+                        &pos_mats,
                         &vel_mats,
                         &composite_force_mats,
                         &states,

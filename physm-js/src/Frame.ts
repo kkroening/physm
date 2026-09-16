@@ -56,6 +56,9 @@ export default class Frame {
    * the world down -- `docs/issues/0016/09-elements.md` keeps the two apart on
    * purpose, because writing the second as though it were the first goes wrong
    * silently the moment anything above it rotates.
+   *
+   * `RotationalFrame` offers the world-referenced case through `springForce`
+   * below, which is what makes the two expressible without confusing them.
    */
   readonly stiffness: number;
 
@@ -111,6 +114,23 @@ export default class Frame {
    */
   isJoint(): boolean {
     return false;
+  }
+
+  /**
+   * What this frame's spring contributes to its own generalised force.
+   *
+   * A method rather than a term the solver writes out, because what a spring
+   * is slack *toward* is the frame's own business: the base answers with a
+   * coordinate of zero, and `RotationalFrame` can answer with a direction in
+   * the world. The solver hands over the coordinate and the pose and does not
+   * need to know which kind it got.
+   *
+   * `pose` is this frame's local-to-world transform, out of the walk the
+   * solver already makes -- so a world-referenced spring costs the read and
+   * nothing else. The base ignores it.
+   */
+  springForce(q: number, _pose: Mat3): number {
+    return -this.stiffness * q;
   }
 
   toJsonObj({ includeDecals = false }: FrameJsonOptions = {}): Record<

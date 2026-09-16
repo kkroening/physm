@@ -16,13 +16,21 @@ interface RotationalFrameValues {
   initialState?: number | readonly number[];
   resistance?: number;
   stiffness?: number;
+  restAngle?: number;
 }
 
 /** What an element may be given: any of them may be computed. */
 export type RotationalFrameProps = Computable<RotationalFrameValues>;
 
 function describeRotationalFrame(
-  { id, position, initialState, resistance, stiffness }: RotationalFrameValues,
+  {
+    id,
+    position,
+    initialState,
+    resistance,
+    stiffness,
+    restAngle,
+  }: RotationalFrameValues,
   { key }: SceneNodeContext,
 ): FrameNode {
   const frameId = id ?? key;
@@ -46,6 +54,7 @@ function describeRotationalFrame(
         ...(initialState === undefined ? {} : { initialState }),
         ...(resistance === undefined ? {} : { resistance }),
         ...(stiffness === undefined ? {} : { stiffness }),
+        ...(restAngle === undefined ? {} : { restAngle }),
       }),
   };
 }
@@ -91,5 +100,10 @@ RotationalFrame.meta = {
     },
     resistance: { kind: 'number', label: 'Resistance', default: 0 },
     stiffness: { kind: 'number', label: 'Stiffness', default: 0 },
+
+    // No default: a frame without one has a spring slack at its own zero, and
+    // no angle says that. Zero would mean "slack pointing along the world's x
+    // axis", which is a different rig.
+    restAngle: { kind: 'angle', label: 'Rest angle' },
   },
 } satisfies ComponentMeta<RotationalFrameValues>;

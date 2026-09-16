@@ -92,6 +92,10 @@ function normalized(scene: CoreScene): unknown {
  * All eleven building blocks with every prop set: none at its default when `k`
  * is 1, and every one different between `k` = 1 and 2.
  *
+ * `restAngle` is the exception that proves what "every prop" is for: it has no
+ * default, so the metadata suite's default comparison skips it, and this is
+ * the only place that would notice the binding dropping it on the floor.
+ *
  * The constraints join three pairs of weighted pivots set `gap` apart at
  * angle 0, posed so every stated position and length holds -- which the
  * constraints check -- and so no pair sits at a kinematic singularity, since
@@ -144,6 +148,8 @@ function fullRig(k: 1 | 2): ReactElement {
           position={[0, -k]}
           initialState={[0.6 * k, -0.2 * k]}
           resistance={1.25 * k}
+          stiffness={0.8 * k}
+          restAngle={0.15 * k}
         >
           <Circle
             position={[3 * k, 0]}
@@ -261,6 +267,8 @@ function handBuilt(k: 1 | 2): CoreScene {
             position: [0, -k],
             initialState: [0.6 * k, -0.2 * k],
             resistance: 1.25 * k,
+            stiffness: 0.8 * k,
+            restAngle: 0.15 * k,
             decals: [
               new CoreCircleDecal({
                 position: [3 * k, 0],
