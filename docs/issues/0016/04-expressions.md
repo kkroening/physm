@@ -71,6 +71,14 @@ checked, and both are checked *while editing* rather than at build:
 The kind propagates the obvious way: an expression is a signal if any of its
 inputs is.
 
+**That check is load-bearing rather than a nicety, and it became so when the two
+kinds started sharing one node set.** While structural expressions were host
+arithmetic, a signal could not be written into a structural prop — there was no
+syntax for naming a pose-derived value in an expression the host evaluates. Now
+`length={mul(bobVelocity, 2)}` is perfectly writeable, and kind propagation is
+the only thing between it and a scene that re-assembles every tick. So it lands
+*with* the node set, not after it.
+
 ## Editing it three ways
 
 The wish list wants the same expression editable as text, as a graph, and
@@ -88,56 +96,71 @@ what storing a graph buys:
 
 ## What the emitter writes
 
-**Host syntax, not a wrapper.** A prop holding *halfLength × 2* emits as
-`halfLength * 2` — never as `multiply(halfLength, 2)` or any other structure
-that needs physm's own machinery to mean anything. The emitted module is
-ordinary TSX: paste it into this repo and it compiles and runs like anything
-hand-written.
+**Constructor form, not host arithmetic.** A prop holding *halfLength × 2*
+emits as `mul(halfLength, 2)`, and a structural one emits the same way. The
+emitted module is still ordinary TSX — `mul` is a function the binding exports —
+but what it builds is an **expression node**, not a product.
 
 ```tsx
-function Pendulum({
-  halfLength,
-  children,
-}: {
-  halfLength: number;
-  children?: ReactNode;
-}): ReactElement {
+function Pendulum({ halfLength, children }: PendulumProps): ReactElement {
   return (
     <RotationalFrame initialState={[-0.6, 0]} resistance={0.4}>
-      <Line endPos={[0, -halfLength * 2]} lineWidth={0.15} />
-      <Weight mass={10} position={[0, -halfLength * 2]} />
-      <FixedFrame position={[0, -halfLength * 2]}>{children}</FixedFrame>
+      <Line endPos={vec(0, neg(mul(halfLength, 2)))} lineWidth={0.15} />
+      <Weight mass={10} position={vec(0, neg(mul(halfLength, 2)))} />
     </RotationalFrame>
   );
 }
 ```
 
-**Nothing of the graph survives compilation, and nothing needs to.** Once `tsc`
-has that source, `halfLength * 2` is arithmetic. The structure lives in the
-*syntax* — which is an AST, owned by the host language — so there is no goal of
-carrying expression identity into the built scene, and a built `Frame` stays as
-ignorant of where its numbers came from as it is today.
+**This reverses an earlier decision, and the reason is signals.** The first
+version of this page said an expression emits as `halfLength * 2`, on the
+grounds that the emitted module should read like source a person wrote. That
+holds for a *structural* expression, whose only job is to produce a number
+before the build consumes it. It cannot hold for a **signal**, which has no
+value at emit time and must survive as a graph — and JavaScript offers no way to
+write an edge with `*`.
 
-**The parsing is one-directional, and deliberately small.** The prop editor
-accepts `halfLength * 2`, parses a tiny subset of JavaScript into the document's
-representation, and resolves `halfLength` to a symbol it knows is a parameter.
-That is what lets it type the expression, refuse a reference to something out of
-scope, and later draw the graph. **That representation is authoritative**; the
-emitter prints it.
+So the choice was one syntax for structural and another for signals, or one
+syntax for both. One is better, and the cost is verbosity in the near term.
 
-**Recovering it from emitted source is the other problem.** `documentFrom` does
-not read source — it reads an element tree the runtime has already *evaluated*,
-by which point `halfLength * 2` is a number and the expression is gone. Parsing
-source to get it back is the bidirectional problem [page 1](01-overview.md)
-declines.
+**Why a constructor survives evaluation when arithmetic does not.** `mul(a, b)`
+does not multiply. It returns `{ kind: 'mul', a, b }` — an expression node, the
+way `createElement` returns an element rather than rendering one. So evaluating
+it is what *builds* the graph rather than what destroys it, which is why the
+same form works in a hand-written component, in the emitted module, and as the
+document's own storage.
 
-That costs less than it sounds, because the document was never recoverable from
-its output anyway — for reasons that predate expressions entirely, and that
-[page 1](01-overview.md) sets out. Anything with a scene *and* a component
-already needed a save format of its own ([0017](../0017.md)); expressions widen
-that gap rather than opening it.
+That also means `mul(x, y)`, `<Multiply a={x} b={y}/>` and the object literal are
+three spellings of one thing. **Calls are the right spelling for expressions** —
+JSX earns its shape on scene trees, where the nesting is structure you want to
+see, and loses badly on `sqrt(add(pow(x, 2), pow(y, 2)))`.
 
-_(Karl, 2026-09-14, specifying the emitted form.)_
+**Structural is the same graph, evaluated eagerly.** A structural expression is
+a signal graph whose inputs happen not to vary, so `buildScene` walks it and
+collapses it to a value. Overkill for `mul(halfLength, 2)`, and worth it for
+having one node set, one type system, one graph pane, and one thing for the prop
+editor to parse into.
+
+**Literals stay literals.** A leaf is already a valid node, so `position={[4, 0]}`
+emits unchanged rather than as `vec(lit(4), lit(0))`. Verbosity is proportional
+to how much computation a document contains, which today is none — the starter
+document emits byte-identically.
+
+**The surface syntax is unaffected.** Someone typing into a prop box still
+writes `halfLength * 2`, or `sqrt(x**2 + y**2)`. The editor parses it to the same
+graph either way; only the *printed* form is the constructor. A DSL that
+collapses the emitted form back to infix is pure sugar and can arrive whenever —
+and in JavaScript it will always need a parser, because there is no operator
+overloading and a Proxy cannot intercept arithmetic.
+
+**And computed props now round-trip**, which they could not before. A constructor
+call leaves its AST sitting in the prop, so `documentFrom` reads it back. That
+retires one of [0017](../0017.md)'s three reasons the document needs a save
+format; the other two — a single definition from `documentFrom`, and `refOf`
+never producing a `defined` ref — are untouched.
+
+_(Karl, 2026-09-16, reversing his 2026-09-14 call, by first-principles reasoning
+about what a signal forces.)_
 
 ## Cycles
 

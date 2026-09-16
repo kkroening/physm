@@ -8,15 +8,63 @@ Every expression in the document is one of two kinds, and the difference decides
 where it may appear, when it is evaluated, and whether a feature is tractable at
 all.
 
-- **Structural.** Evaluated once, at build time, from parameters and constants.
-  It decides the scene's *shape*: how many of something there are, where a frame
+- **Structural.** Evaluated **per build**, from parameters and constants. It
+  decides the scene's *shape*: how many of something there are, where a frame
   sits in its parent, how long a rod is, which variant of an enum is in force.
 - **Signal.** Evaluated per tick, against the current pose and state. It decides
   things that may change while the scene runs: a force, a world-space drawing, a
   key binding's contribution.
 
+**"Per build" is not "once", and the difference matters more than it looks.** An
+earlier draft of this page said structural values are evaluated *once*, which
+reads as *immutable* and is wrong. A build happens whenever the element tree is
+produced again — which the mounted route does on every React re-render. So a
+`pendulumCount` held in a component's state is still structural; it simply
+triggers a rebuild when it changes.
+
+That gives three regimes rather than two, and the third had no name here:
+
+| regime | when | example |
+|---|---|---|
+| build | the tree is produced | a rod's length from a parameter |
+| tick | every solver step | a force, a world-space line's endpoints |
+| **event** | something happens | a box breaks into fragments; a rope grows a segment |
+
+The event regime is *structural values changing between builds*, not a fourth
+kind of value — which is why it needs no new machinery in this RFC and does need
+[a policy for what survives a rebuild](#what-survives-a-rebuild).
+
 **A structural expression may not read state.** That is the whole rule, and three
 of the wish list's items fall out of it.
+
+## What survives a rebuild
+
+A structural change at run time means a new `Scene`: a new frame set, new
+matrices, and a state map keyed on frame ids that may no longer match. The
+editor's rule today is all-or-nothing — [0014 page 8](../0014/08-play.md#editing-while-it-runs)
+settled that a structural edit **resets** simulation state while a prop edit
+carries it over — and that is right for an editor, where you changed the rig and
+restarting is honest.
+
+It is wrong for a box breaking mid-swing. Nothing else in the scene should
+teleport back to its start because one body fragmented.
+
+The mechanism is close at hand and is not proposed here: the state map is keyed
+by frame id, so a rebuild can **merge** rather than reset — carry over the state
+of every id the new scene still has, and give the rest their initial state.
+Two things follow that are worth recording now.
+
+- It is an argument for generated ids being **derived from the instantiation
+  path** rather than freshly minted ([page 3](03-scope.md)). A count dropping
+  from five to four should leave four frames holding their state and one gone;
+  random ids would scramble the merge.
+- The merged state can violate the *new* scene's constraints — fragments that
+  were rigid a tick ago. `Scene.getStabilizedState` is the existing tool, and
+  this is a real caller for it.
+
+**Changing 0014's rule is Karl's call and is not part of this RFC.** It is
+recorded here because the gameplay case will need it, and discovering that
+during the work is worse than knowing it now.
 
 ## Why a repetition count must be structural
 
@@ -29,8 +77,10 @@ edit carries state over and a structural edit restarts it; a count that changed
 per tick would make every tick a structural edit).
 
 So the constraint is not a limitation to apologise for. It is what makes
-repetition implementable: **the count is a function of parameters, and parameters
-do not change while the scene runs.**
+repetition implementable: **the count is a function of parameters, and a
+parameter changes between builds rather than between ticks.** A count that
+changes on an event is fine, and is the rope-grows-a-segment case; a count that
+changes per tick would make every tick a structural edit.
 
 ## Why a line between two anchors needs a signal
 

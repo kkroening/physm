@@ -14,18 +14,29 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**Parameters, now that addressing is settled.**
+**The node question, with parameters alongside it.**
 
-The question that was holding the spine is answered: a slot lives on the child
-node rather than inside `NodePath`, so the migration the RFC called its most
-invasive change does not exist, and children bind to slots by Python's
-keyword-argument rule. See [Decisions](#decisions).
+Addressing is settled -- a slot lives on the child node, `NodePath` never
+changes, and children bind by Python's keyword-argument rule. See
+[Decisions](#decisions).
 
-Next is promote-to-prop -- a definition declaring typed parameters, an instance
-passing literals, and a child prop that may *be* a parameter reference and
-nothing more. It forces the scope, naming and declaration-block design without
-needing an expression language, and it is the first thing in this effort a
-person using the editor can see.
+What the same conversation turned up is larger, and goes to the tracker before
+anything is built on the answer: **does physm own its element type, or keep
+borrowing React's?** A JSX factory of our own would make `<Multiply a={x} b={y}/>`
+produce a physm node rather than a React element -- which is not a tidying-up, it
+is the common cause behind several open problems. `emitScene` cannot write
+element-valued props because it meets React's `$$typeof` symbol; a hand-written
+component cannot be called in a worker because structured clone refuses the
+function references in `type`; hooks are a dilemma only because components must
+survive being walked outside React; and [0005](docs/issues/0005.md) exists *only*
+because the mounted route orders siblings by registration. If the walk is the
+only route, 0005 does not get fixed -- it stops existing.
+
+Expressions must not be built on React elements and then rebuilt, so the RFC
+comes first. **Parameters proceed alongside it** -- promote-to-prop, which
+touches the document rather than the element type and is safe whichever way the
+node question goes. It is also the first thing in this effort a person using the
+editor can see.
 
 ## Next — 0016
 
@@ -54,15 +65,23 @@ the [staging page](docs/issues/0016/10-staging.md) argues the order.
    any of it has a TSX spelling at all is the one open question in the plan, and
    it is owed an answer before parameters fix the declaration block's shape.
 
-**Running alongside, blocked by nothing:** springs (additive to the document, and
-they exercise the force path the port surface will need -- though each
-spring is core work on both sides of the `physm-rs` boundary, not a warm-up; the
-local joint spring is done, and the ones that reference another frame's
-direction wait on signals) and
-**hand-written components** (the escape hatch, argued on
-[page 7](docs/issues/0016/07-handwritten.md) as worth starting earlier than it
-looks, because it turns every unbuilt step above from a blocker into an
-inconvenience).
+**Hand-written components are not an escape hatch any more.** As the syntax
+converges -- one node set, one constructor form, the same code either way --
+hand-writing becomes the way to bypass codegen and reach an exact effect
+directly, which makes the generated layer self-contained and take-it-or-leave-it
+rather than mandatory. Anything standing in the way of that is a bad-design
+enabler, so it is a first-class step rather than a relief valve, landing soon
+after the node question settles _(Karl, 2026-09-16)_.
+
+**Running alongside, blocked by nothing:** springs -- additive to the document,
+though each is core work on both sides of the `physm-rs` boundary rather than a
+warm-up. The local joint spring is done; the ones referencing another frame's
+direction wait on signals.
+
+**Standing fallback when the main line is blocked:** the expression graph viewer
+([0018](docs/issues/0018.md)). It is a check on the representation as much as a
+debugging tool -- a graph that cannot be drawn is one that has been stored
+wrongly -- so it is worth early and is never urgent.
 
 ## Further out
 
@@ -173,15 +192,19 @@ inconvenience).
 - **A structural edit resets simulation state; a prop edit carries it over.**
   Recorded in [0014 page 8](docs/issues/0014/08-play.md#editing-while-it-runs).
   _(Karl, 2026-09-11)_
-- **An expression emits as the host language's own syntax, and nothing of the
-  graph survives compilation.** `length={halfLength * 2}`, not
-  `multiply(halfLength, 2)`: the emitted module is real TSX, and the structure
-  lives in the syntax rather than in a wrapper. Parsing a small JS subset is an
-  *input*-side job for the prop editor, which resolves symbols and types the
-  expression; recovering one from source is the bidirectional problem, still out
-  of scope. Recorded in
+- ~~**An expression emits as the host language's own syntax.**~~ Reversed
+  2026-09-16, below.
+- **An expression emits in constructor form, structural and signal alike.**
+  `mul(halfLength, 2)`, not `halfLength * 2`. A signal has no value at emit time
+  and must survive as a graph, and JavaScript cannot write an edge with `*` --
+  so the choice was one syntax for structural and another for signals, or one
+  for both. `mul` constructs a node rather than multiplying, so evaluating it
+  builds the graph rather than destroying it, and the same form serves the
+  hand-written component, the emitted module and the document's own storage. The
+  prop editor still takes `halfLength * 2`; a DSL collapsing the emitted form
+  back to infix is pure sugar, deferred. Recorded in
   [0016 page 4](docs/issues/0016/04-expressions.md#what-the-emitter-writes).
-  _(Karl, 2026-09-14)_
+  _(Karl, 2026-09-16, reversing his own 2026-09-14 call.)_
 
 ## Done
 
