@@ -14,6 +14,7 @@ import starterDocument from './starterDocument';
 import { InvalidStateMapError } from './../Solver';
 import { documentFrom, nodesFrom } from './sceneDocument';
 import { literalOf, parameterOf } from './propValue';
+import { mul } from './../expression';
 import type { DocNode, SceneDocument } from './sceneDocument';
 import type { PropValue } from './propValue';
 import { vi } from 'vitest';
@@ -1045,6 +1046,66 @@ function twoPendulums(): SceneDocument {
     ],
   };
 }
+
+describe('Editor, a prop the document computes', () => {
+  /** A weight whose mass is computed, in a frame that can hold it. */
+  const computing = (): SceneDocument => {
+    const [frame] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Weight mass={1} position={[1, 0]} />
+      </RotationalFrame>,
+    );
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: [
+            {
+              ...frame!,
+              children: frame!.children.map((weight) => ({
+                ...weight,
+                props: { ...weight.props, mass: mul(2, 3) },
+              })),
+            },
+          ],
+        },
+      ],
+    };
+  };
+
+  test('a tree row shows the call that built it', () => {
+    render(<Editor initialDocument={computing()} />);
+
+    // Constructor form, which is what the emitted module writes -- so the same
+    // expression reads the same wherever a person meets it.
+    expect(
+      within(screen.getByRole('tree', { name: 'Scene' })).getByText(
+        'mass=mul(2, 3)',
+      ),
+    ).toBeVisible();
+  });
+
+  test('the properties pane shows it, and offers no editor for it', () => {
+    render(<Editor initialDocument={computing()} />);
+    const props = select('Weight');
+
+    expect(within(props).getByText('mul(2, 3)')).toBeVisible();
+    expect(within(props).queryByLabelText('Mass')).toBeNull();
+
+    // The props that are not computed are editable as ever.
+    expect(within(props).getByLabelText('Position x')).toHaveValue('1');
+  });
+
+  test('the scene is built from what it computes', () => {
+    render(<Editor initialDocument={computing()} />);
+
+    expect(code()).toContain('mass={mul(2, 3)}');
+    expect(code()).toMatch(/^import \{ RotationalFrame, Weight, mul \}/m);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
 
 /** The library pane. */
 function library(): HTMLElement {

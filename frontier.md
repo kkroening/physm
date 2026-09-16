@@ -14,18 +14,23 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**The expression graph viewer** ([0018](docs/issues/0018.md)), next and
-deliberately before the rest. The node set exists and a hand-written component
-can compute a prop; 0018 argues the viewer earns its place as a *design check*
--- "a graph you cannot draw is a graph you have stored wrongly" -- and that the
-check is cheapest while there are three node kinds rather than thirty. There
-are three now.
+**The document holds an expression.** A prop value gains the operation as a
+third variant, resolution goes *into* the graph so a reference inside one finds
+the instance's argument, and the emitter writes the call rather than the value
+it folds to.
 
-**Then the document holds one.** A prop value gains the operation as a third
-variant, the properties pane gets somewhere to type `halfLength * 2` and
-something to show when a prop holds one, and the emitter writes the call and
-binds a node used more than once. The pieces the emitter needs are in place:
-sharing is recorded, and a shared node is already written by name.
+*(Reordered: this was to follow the graph viewer, on 0018's argument that the
+viewer is a design check worth having while there are three node kinds. The
+node kinds exist, but the **document** still holds only two of them -- so a
+viewer over a document would draw literals and references and never an
+operation, which is the kind the check is for. The viewer goes next instead,
+over a document that can hold one.)*
+
+**Then the viewer** ([0018](docs/issues/0018.md)), then typing `halfLength * 2`
+into a prop box. The viewer earns its place as a check -- "a graph you cannot
+draw is a graph you have stored wrongly" -- and it is worth having before the
+prop box, because the prop box is the thing that will produce graphs nobody
+hand-wrote.
 
 **Still open, and owed an answer around here:**
 
@@ -66,9 +71,9 @@ risk rather than appetite; the
 
 1. ~~**A prop value becomes a tagged thing**~~ — done.
 2. ~~**Parameters, literal values only**~~ — done.
-3. **Structural expressions** -- the node set and evaluation have landed, so a
-   hand-written component can compute a prop. What is left is the document
-   holding one and the emitter writing it, which is in view above.
+3. ~~**Structural expressions**~~ -- the node set, evaluation, and a document
+   that holds one. What is left is the half a person touches: a viewer, and a
+   prop box that parses `halfLength * 2`. Both are in view above.
 4. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
    Rust path hands external forces across once per batch.
@@ -223,6 +228,13 @@ wrongly -- so it is worth early and is never urgent.
 
 ## Done
 
+- **A computed prop, in the document** — a prop value's third variant is an
+  expression, resolution goes into the graph so a reference inside one finds
+  the instance's argument, and the emitter writes `endPos={vec(mul(half, 2),
+  0)}` rather than the value it folds to, importing the operations beside the
+  components. A shared subexpression stays one node through resolution. Shown
+  in the tree and the properties pane as the call that built it, not yet
+  editable.
 - **Expression nodes** — a prop can be computed rather than stated:
   `position={vec(3, mul(halfLength, 2))}`. A constructor returns a node rather
   than a result, so one form serves a hand-written component, the module the

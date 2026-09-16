@@ -1,3 +1,5 @@
+import { isOperation } from './../expression';
+import type { ExpressionNode } from './../expression';
 /**
  * What a prop in a document holds: a value written into it, or the name of a
  * parameter the definition it sits in takes.
@@ -18,7 +20,7 @@
  * and the tree row's summary and find; what checks them is `Editor.test.tsx`,
  * which renders a node whose prop holds a reference and reads what each shows.
  */
-export type PropValue = LiteralValue | ParameterValue;
+export type PropValue = LiteralValue | ParameterValue | ExpressionNode;
 
 /**
  * A prop value the module can hold by name.
@@ -125,6 +127,51 @@ export function parameterOf(name: string): PropValue {
 }
 
 /**
+ * `prop` with every reference in it replaced by what `scope` holds.
+ *
+ * Into the graph, not just at the top: `mul(halfLength, 2)` holds the reference
+ * as an *operand*, and a resolution that stopped at the prop would hand the
+ * node itself to an operation expecting a number.
+ *
+ * `seen` keeps one resolved node per original, so a graph shared before
+ * resolution is shared after it -- which is what keeps evaluation over nodes
+ * rather than edges, and what a viewer of a resolved graph would need to draw.
+ */
+function resolved(
+  prop: unknown,
+  scope: Scope,
+  seen: Map<unknown, unknown>,
+): unknown {
+  if (isOperation(prop)) {
+    const already = seen.get(prop);
+    if (already !== undefined) {
+      return already;
+    }
+
+    const node: ExpressionNode = {
+      kind: 'operation',
+      op: prop.op,
+      operands: prop.operands.map((operand) => resolved(operand, scope, seen)),
+    };
+    seen.set(prop, node);
+
+    return node;
+  }
+
+  if (prop === null || typeof prop !== 'object') {
+    return prop;
+  }
+
+  const held = prop as PropValue;
+
+  return held.kind === 'parameter'
+    ? scope[held.name]
+    : held.kind === 'literal'
+      ? held.value
+      : prop;
+}
+
+/**
  * What a definition was given, keyed by parameter name -- the scope a
  * `parameter` prop resolves against.
  */
@@ -145,17 +192,57 @@ export type Scope = Readonly<Record<string, unknown>>;
  * an absent prop: a definition instantiated without one of its parameters
  * builds as though that prop had never been set, and the component's own
  * default applies.
+ *
+ * What comes out is a plain value or an *expression over plain values*: the
+ * references are gone, and the operations are left standing for whoever
+ * consumes them to fold. A building block's is folded where the build route
+ * hands props over, and a composite's by the composite being a function that
+ * receives what a person would have written -- which is why a parameter has to
+ * arrive as a value rather than a node.
  */
 export function resolvedProps(
   props: DocProps,
   scope: Scope,
 ): Record<string, unknown> {
+  const seen = new Map<unknown, unknown>();
+
   return Object.fromEntries(
     Object.entries(props).map(([name, prop]) => [
       name,
-      prop.kind === 'parameter' ? scope[prop.name] : prop.value,
+      resolved(prop, scope, seen),
     ]),
   );
+}
+
+/**
+ * How an expression reads as source: `mul(bob, 2)`.
+ *
+ * Constructor form, which is what the emitter writes and therefore what a
+ * person shown the same expression anywhere else should read. How a reference
+ * and a plain value are written is the caller's, because the emitter has to
+ * refuse a name the module does not bind and a value it cannot write, where a
+ * display has only to show something.
+ */
+export function expressionSource(
+  node: ExpressionNode,
+  write: {
+    reference: (name: string) => string;
+    value: (held: unknown) => string;
+  },
+): string {
+  const operand = (held: unknown): string => {
+    if (isOperation(held)) {
+      return expressionSource(held, write);
+    }
+
+    return held !== null &&
+      typeof held === 'object' &&
+      (held as PropValue).kind === 'parameter'
+      ? write.reference((held as { name: string }).name)
+      : write.value(held);
+  };
+
+  return `${node.op}(${node.operands.map(operand).join(', ')})`;
 }
 
 /**
@@ -183,6 +270,13 @@ export function literalIn(prop: PropValue | undefined): unknown {
 export function shownValueOf(prop: PropValue | undefined): string | null {
   if (!prop) {
     return null;
+  }
+
+  if (isOperation(prop)) {
+    return expressionSource(prop, {
+      reference: (name) => name,
+      value: (held) => JSON.stringify(held) ?? String(held),
+    });
   }
 
   return prop.kind === 'parameter'

@@ -1,4 +1,6 @@
 import { BUILT_INS, IDENTIFIER, RESERVED } from './identifiers';
+import { expressionSource } from './propValue';
+import { isOperation } from './../expression';
 import { definitionOf, placeholderPath } from './sceneDocument';
 import type { PropValue, SharedValue } from './propValue';
 import type {
@@ -548,8 +550,17 @@ function declarationOrder(doc: SceneDocument): Definition[] {
 function importsOf(doc: SceneDocument): string[] {
   const core = new Set<string>();
   const imported = new Map<string, unknown>();
+
+  /** Every operation an expression in these props uses, however deep. */
+  const operations = (held: unknown): void => {
+    if (isOperation(held)) {
+      core.add(held.op);
+      held.operands.forEach(operations);
+    }
+  };
   const collect = (nodes: readonly DocNode[]): void => {
     for (const node of nodes) {
+      Object.values(node.props).forEach(operations);
       if (node.type.kind === 'core') {
         core.add(tagOf(node.type));
       } else if (node.type.kind === 'imported') {
@@ -694,6 +705,25 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
         const refusal = attributeRefusal(name);
         if (refusal) {
           throw new Error(refusal);
+        }
+
+        // An expression is written as the call that builds it, not as the
+        // value it folds to: the module the editor writes says what a prop is
+        // computed from, the same way the document does.
+        if (isOperation(held)) {
+          return `${name}={${expressionSource(held, {
+            reference: (referred) => {
+              if (!declared.get(definition)?.has(referred)) {
+                throw new Error(
+                  `it refers to '${referred}', which ${definition} does not ` +
+                    'take.',
+                );
+              }
+
+              return referred;
+            },
+            value: (plain) => literal(plain),
+          })}}`;
         }
 
         // A value the module holds in more than one place is written by its

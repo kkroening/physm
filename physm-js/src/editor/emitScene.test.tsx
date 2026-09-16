@@ -10,12 +10,18 @@ import FixedFrame from './../react/FixedFrame';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
-import { literalOf, parameterOf } from './propValue';
+import { literalOf, parameterOf, resolvedProps } from './propValue';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
+import { mul, vec } from './../expression';
 import emitScene, { rangeKey } from './emitScene';
 import ts from 'typescript';
-import { documentFrom, elementOf, nodesFrom } from './sceneDocument';
+import {
+  definitionOf,
+  documentFrom,
+  elementOf,
+  nodesFrom,
+} from './sceneDocument';
 import type CoreScene from './../Scene';
 import type { DocNode, Parameter, SceneDocument } from './sceneDocument';
 import type { ReactElement } from 'react';
@@ -1184,5 +1190,121 @@ describe('emitScene, children', () => {
     const [start, end] = ranges.get(rangeKey('Pendulum', [0, 2]))!;
 
     expect(source.slice(start, end)).toBe('{children}');
+  });
+});
+
+describe('a prop the document computes', () => {
+  /** A `Pendulum` whose bob hangs at twice what the instance passes. */
+  const computing = (): SceneDocument => {
+    const [arm] = nodesFrom(
+      <RotationalFrame>
+        <Line endPos={[0, -1]} lineWidth={0.1} />
+        <Weight mass={3} position={[0, -1]} />
+      </RotationalFrame>,
+    );
+    const [rod, bob] = arm!.children;
+    const reach = mul(parameterOf('half'), 2);
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+            ...cart,
+            children: [
+              { ...instance('Pendulum'), props: { half: literalOf(2) } },
+              { ...instance('Pendulum'), props: { half: literalOf(5) } },
+            ],
+          })),
+        },
+        {
+          name: 'Pendulum',
+          parameters: [{ name: 'half', type: 'scalar' }],
+          body: [
+            {
+              ...arm!,
+              children: [
+                { ...rod!, props: { ...rod!.props, endPos: vec(reach, 0) } },
+                { ...bob!, props: { ...bob!.props, position: vec(reach, 0) } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+  };
+
+  test("a reference inside an expression finds the instance's argument", () => {
+    const scene = buildScene(elementOf(computing()));
+    const [first, second] = scene.frames[0]!.frames;
+
+    // Resolution goes into the graph: `mul(half, 2)` holds the reference as an
+    // operand, so stopping at the prop would hand the node to an operation.
+    expect(first!.weights[0]!.position[0]).toBeCloseTo(4, 9);
+    expect(second!.weights[0]!.position[0]).toBeCloseTo(10, 9);
+  });
+
+  test('the emitted module writes the call, not the value it folds to', () => {
+    const source = expectRoundTrip(computing());
+
+    // What a prop is computed *from* is what the module says, the same way the
+    // document does -- and the operations come from the binding beside the
+    // components that use them.
+    expect(source).toContain('endPos={vec(mul(half, 2), 0)}');
+    expect(source).toContain('position={vec(mul(half, 2), 0)}');
+    expect(source).toMatch(
+      /^import \{ Line, RotationalFrame, TrackFrame, Weight, mul, vec \} from '\.\/react';$/m,
+    );
+    expect(source).not.toContain('endPos={[4, 0]}');
+  });
+
+  test('it type-checks as the repo would', () => {
+    expect(typeCheck({ 'Scene.tsx': emitScene(computing()).source })).toEqual(
+      [],
+    );
+  });
+
+  test('a reference the definition does not take is refused inside one too', () => {
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        { name: 'Scene', body: [instance('Dial')] },
+        {
+          name: 'Dial',
+          body: nodesFrom(<RotationalFrame />).map((frame) => ({
+            ...frame,
+            props: { position: vec(mul(parameterOf('reach'), 2), 0) },
+          })),
+        },
+      ],
+    };
+
+    expect(() => emitScene(doc)).toThrow(
+      /refers to 'reach', which Dial does not take/,
+    );
+  });
+
+  test('a shared subexpression stays one node through resolution', () => {
+    // What the document says is that these two props hold *one* computation.
+    // Rebuilding the graph per prop would lose that, and with it the fold over
+    // nodes rather than edges.
+    const doc = computing();
+    const arm = definitionOf(doc, 'Pendulum').body[0]!;
+    const [rod, bob] = arm.children;
+
+    const operandsOf = (held: unknown): unknown[] =>
+      (held as { operands: unknown[] }).operands;
+
+    expect(operandsOf(rod!.props.endPos)[0]).toBe(
+      operandsOf(bob!.props.position)[0],
+    );
+
+    const resolved = resolvedProps(
+      { a: rod!.props.endPos!, b: bob!.props.position! },
+      { half: 2 },
+    );
+
+    expect(operandsOf(resolved.a)[0]).toBe(operandsOf(resolved.b)[0]);
   });
 });
