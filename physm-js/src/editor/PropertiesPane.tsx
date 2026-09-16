@@ -1,14 +1,53 @@
 import { Fragment, useId, useRef, useState } from 'react';
 import { literalOf, shownValueOf } from './propValue';
-import { nodeAt, nodeName, setProp } from './sceneDocument';
-import type { DocNode, NodePath, SceneDocument } from './sceneDocument';
+import {
+  nodeAt,
+  nodeName,
+  parameterAt,
+  parameterNameRefusal,
+  renameParameter,
+  retypeParameter,
+  setParameterDefault,
+  setProp,
+} from './sceneDocument';
+import type {
+  DocNode,
+  NodePath,
+  Parameter,
+  SceneDocument,
+} from './sceneDocument';
 import type { PropSpec } from './../react/componentMeta';
 import type { ReactElement } from 'react';
 
+/**
+ * What the editor has selected: a node in a definition's body, or one of the
+ * parameters the definition declares.
+ *
+ * A tag rather than an optional `path`, so that every site deciding what to do
+ * with a selection is named by the compiler -- most of them act on a node and
+ * have no answer for a parameter, and the right answer differs between them.
+ */
+export type Selection = NodeSelection | ParameterSelection;
+
 /** A node as the editor selects it: which definition, and where in its body. */
-export interface Selection {
+export interface NodeSelection {
+  readonly kind: 'node';
   readonly definition: string;
   readonly path: NodePath;
+}
+
+/**
+ * A parameter as the editor selects it: which definition, and where in its
+ * declaration block.
+ *
+ * By position, like a `NodePath` and for the same reason: a rename is an edit
+ * the person is in the middle of, and an address that moved under them while
+ * they typed would be worse than one a reorder invalidates.
+ */
+interface ParameterSelection {
+  readonly kind: 'parameter';
+  readonly definition: string;
+  readonly at: number;
 }
 
 /** Degrees per radian. An angle is held in radians and shown in degrees. */
@@ -351,7 +390,7 @@ function NodeProps({
   onOpen,
 }: {
   doc: SceneDocument;
-  selection: Selection;
+  selection: NodeSelection;
   node: DocNode;
 
   /** How many times the focus has come into the pane: see `PropertiesPane`. */
@@ -465,10 +504,151 @@ function NodeProps({
   );
 }
 
+/**
+ * What a parameter of each type is edited with.
+ *
+ * The editor's prop kinds are coarser than the parameter types -- `scalar` and
+ * `integer` are both a number field, because nothing here has an integer
+ * widget, and a `label` borrows the id field with no ids to complete against.
+ * Where the two sets diverge is where a widget is owed rather than where the
+ * types are wrong.
+ */
+const PARAMETER_KINDS: Record<Parameter['type'], PropSpec['kind']> = {
+  scalar: 'number',
+  integer: 'number',
+  angle: 'angle',
+  point: 'point',
+  label: 'name',
+};
+
+/** Each parameter type as a person picks it, in the order offered. */
+const PARAMETER_TYPES: readonly (readonly [Parameter['type'], string])[] = [
+  ['scalar', 'Scalar'],
+  ['integer', 'Integer'],
+  ['angle', 'Angle'],
+  ['point', 'Point'],
+  ['label', 'Label'],
+];
+
+/**
+ * A declared parameter: its name, its type, and what an instance that leaves
+ * it out gets.
+ *
+ * The name is the one field here that is not a value. Renaming rewrites every
+ * prop in the body that refers to it, so it is committed only once it is a
+ * name the definition can take, and the field says why when it is not -- the
+ * same posture as a prop field whose text does not parse yet.
+ */
+function ParameterProps({
+  doc,
+  selection,
+  visit,
+  onChange,
+}: {
+  doc: SceneDocument;
+  selection: ParameterSelection;
+  visit: { current: number };
+  onChange: (doc: SceneDocument, field: string | null) => void;
+}): ReactElement {
+  const { definition, at } = selection;
+  const parameter = parameterAt(doc, definition, at);
+  const nameId = useId();
+  const typeId = useId();
+
+  // The text while it is not yet a name: `null` whenever the field shows what
+  // the document holds, which is also what a fresh selection starts at.
+  const [typed, setTyped] = useState<string | null>(null);
+  const shown = typed ?? parameter.name;
+  const refusal =
+    typed === null ? null : parameterNameRefusal(doc, definition, at, typed);
+  const field = (what: string): string =>
+    `${definition}/parameter.${at}/${what}#${visit.current}`;
+
+  return (
+    <>
+      <h2 className="editor__selected">{parameter.name}</h2>
+      <p className="editor__hint">
+        A value an instance of {definition} passes.
+      </p>
+      <div className="editor__fields">
+        <div className="editor__field">
+          <label className="editor__label" htmlFor={nameId}>
+            Name
+          </label>
+          <div className="editor__inputs">
+            <input
+              id={nameId}
+              type="text"
+              value={shown}
+              aria-invalid={refusal ? true : undefined}
+              title={refusal ?? undefined}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (parameterNameRefusal(doc, definition, at, next)) {
+                  setTyped(next);
+                  return;
+                }
+
+                setTyped(null);
+                onChange(
+                  renameParameter(doc, definition, at, next),
+                  field('name'),
+                );
+              }}
+            />
+          </div>
+        </div>
+        <div className="editor__field">
+          <label className="editor__label" htmlFor={typeId}>
+            Type
+          </label>
+          <div className="editor__inputs">
+            <select
+              id={typeId}
+              value={parameter.type}
+              onChange={(event) =>
+                onChange(
+                  retypeParameter(
+                    doc,
+                    definition,
+                    at,
+                    event.target.value as Parameter['type'],
+                  ),
+                  null,
+                )
+              }
+            >
+              {PARAMETER_TYPES.map(([type, label]) => (
+                <option key={type} value={type}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <PropField
+          // Fresh fields per type, so a point's pair is not left showing what
+          // a scalar's one field had in it.
+          key={parameter.type}
+          spec={{ kind: PARAMETER_KINDS[parameter.type], label: 'Default' }}
+          value={parameter.default}
+          names={[]}
+          onChange={(value, discrete) =>
+            onChange(
+              setParameterDefault(doc, definition, at, value),
+              discrete ? null : field('default'),
+            )
+          }
+        />
+      </div>
+    </>
+  );
+}
+
 /** The selected node, or `null` once an edit has left the selection empty. */
 function selectedNode(
   doc: SceneDocument,
-  selection: Selection,
+  selection: NodeSelection,
 ): DocNode | null {
   try {
     return nodeAt(doc, selection.definition, selection.path);
@@ -492,7 +672,7 @@ function ExpandedProps({
   onProduce,
   onOpen,
 }: {
-  selection: Selection;
+  selection: NodeSelection;
   node: DocNode;
   producer: NodePath | null;
   onProduce: (path: NodePath) => void;
@@ -576,7 +756,7 @@ export default function PropertiesPane({
   /** Open a component this document defines, in its own tab. */
   onOpen: (name: string) => void;
 }): ReactElement {
-  const node = selection ? selectedNode(doc, selection) : null;
+  const node = selection?.kind === 'node' ? selectedNode(doc, selection) : null;
 
   // Counts every time the focus comes into the pane, which names each visit
   // to a field. Kept here rather than in a field, so it goes on counting when
@@ -592,7 +772,15 @@ export default function PropertiesPane({
       }}
     >
       <div className="editor__heading">Properties</div>
-      {selection && node && selection.definition !== focus ? (
+      {selection?.kind === 'parameter' ? (
+        <ParameterProps
+          key={`${selection.definition}/parameter.${selection.at}`}
+          doc={doc}
+          selection={selection}
+          visit={visit}
+          onChange={onChange}
+        />
+      ) : selection && node && selection.definition !== focus ? (
         <ExpandedProps
           key={`${selection.definition}/${selection.path.join('.')}`}
           selection={selection}

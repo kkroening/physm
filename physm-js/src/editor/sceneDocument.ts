@@ -1,7 +1,7 @@
 import coreComponents from './../react/coreComponents';
 import { Fragment, createElement, isValidElement } from 'react';
 import { canContain } from './../react/componentMeta';
-import { literalProps, resolvedProps } from './propValue';
+import { literalProps, parameterOf, resolvedProps } from './propValue';
 import type { ComponentMeta } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
 import type { DocProps, PropValue, Scope } from './propValue';
@@ -741,6 +741,282 @@ export function nameRefusal(doc: SceneDocument, name: string): string | null {
   return BUILT_INS.has(name)
     ? `${name} is a JavaScript built-in, which generated code may use.`
     : null;
+}
+
+/** What a parameter is bound as, wherever the module writes its name. */
+const PARAMETER_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Whether `value` is what a parameter of `type` may default to.
+ *
+ * The union `Parameter` is keeps the two together at compile time; this is the
+ * same rule where the type is chosen at runtime, by a person picking one.
+ */
+function fitsType(type: Parameter['type'], value: unknown): boolean {
+  if (type === 'label') {
+    return typeof value === 'string';
+  }
+
+  return type === 'point'
+    ? Array.isArray(value) &&
+        value.length === 2 &&
+        value.every((each) => typeof each === 'number')
+    : typeof value === 'number';
+}
+
+/**
+ * Why `definition` cannot declare a parameter called `name`, or `null`.
+ *
+ * The name is written into the emitted module as a binding, so it is checked
+ * the way a component name is: `emitScene` refuses one it cannot write, and
+ * this is the same rule where a person can still fix it. It does not cover
+ * everything the emitter does -- a name shadowing a tag the body writes is a
+ * whole-module question, and the code pane reports that one -- so the two are
+ * not the same check and neither replaces the other.
+ *
+ * `at` is the parameter being renamed, which is not a duplicate of itself.
+ */
+export function parameterNameRefusal(
+  doc: SceneDocument,
+  definition: string,
+  at: number | null,
+  name: string,
+): string | null {
+  const { parameters = [] } = definitionOf(doc, definition);
+
+  if (!PARAMETER_NAME.test(name)) {
+    return (
+      'A parameter name starts with a letter, _ or $, and has only letters, ' +
+      'digits, _ and $ after it.'
+    );
+  }
+
+  if (name === 'children') {
+    return 'children names what a component is given as its children.';
+  }
+
+  if (
+    parameters.some(
+      (parameter, index) => index !== at && parameter.name === name,
+    )
+  ) {
+    return `${definition} already takes ${name}.`;
+  }
+
+  return BUILT_INS.has(name)
+    ? `${name} is a JavaScript built-in, which generated code may use.`
+    : null;
+}
+
+/** Every prop in `definition`'s body that refers to the parameter `name`. */
+function referencesTo(
+  doc: SceneDocument,
+  definition: string,
+  name: string,
+): { node: DocNode; prop: string }[] {
+  return everyNode(definitionOf(doc, definition).body).flatMap((node) =>
+    Object.entries(node.props).flatMap(([prop, held]) =>
+      held.kind === 'parameter' && held.name === name ? [{ node, prop }] : [],
+    ),
+  );
+}
+
+/**
+ * Why `definition`'s parameter at `at` cannot be deleted, or `null`.
+ *
+ * A prop referring to it would be left naming nothing, which resolves to
+ * `undefined` and silently moves whatever it placed. Saying so is better than
+ * either rewriting those props to a value they never held or leaving them
+ * dangling.
+ */
+export function parameterRemovalRefusal(
+  doc: SceneDocument,
+  definition: string,
+  at: number,
+): string | null {
+  const { name } = parameterAt(doc, definition, at);
+  const [first] = referencesTo(doc, definition, name);
+
+  return first
+    ? `${nodeName(first.node.type)}'s ${first.prop} refers to ${name}: ` +
+        'give it a value first.'
+    : null;
+}
+
+/** The parameter `definition` declares at `at`, which has to be there. */
+export function parameterAt(
+  doc: SceneDocument,
+  definition: string,
+  at: number,
+): Parameter {
+  const parameter = definitionOf(doc, definition).parameters?.[at];
+  if (!parameter) {
+    throw new Error(`${definition} declares no parameter at ${at}.`);
+  }
+
+  return parameter;
+}
+
+/** A document with `definition`'s parameter list rewritten. */
+function withParameters(
+  doc: SceneDocument,
+  definition: string,
+  update: (parameters: readonly Parameter[]) => readonly Parameter[],
+): SceneDocument {
+  definitionOf(doc, definition);
+
+  return {
+    ...doc,
+    definitions: doc.definitions.map((entry) =>
+      entry.name === definition
+        ? { ...entry, parameters: update(entry.parameters ?? []) }
+        : entry,
+    ),
+  };
+}
+
+/**
+ * A scalar parameter added to `definition`, named so as not to clash.
+ *
+ * A new one takes no default: a parameter every instance may leave out is the
+ * weaker statement, and the person adding it is about to say what it is for.
+ */
+export function addParameter(
+  doc: SceneDocument,
+  definition: string,
+): SceneDocument {
+  const taken = new Set(
+    (definitionOf(doc, definition).parameters ?? []).map(({ name }) => name),
+  );
+  let name = 'value';
+  for (let n = 2; taken.has(name); n += 1) {
+    name = `value${n}`;
+  }
+
+  return withParameters(doc, definition, (parameters) => [
+    ...parameters,
+    { name, type: 'scalar' },
+  ]);
+}
+
+/** `definition` without the parameter at `at`, which nothing may refer to. */
+export function removeParameter(
+  doc: SceneDocument,
+  definition: string,
+  at: number,
+): SceneDocument {
+  const refusal = parameterRemovalRefusal(doc, definition, at);
+  if (refusal) {
+    throw new Error(refusal);
+  }
+
+  return withParameters(doc, definition, (parameters) =>
+    parameters.filter((_, index) => index !== at),
+  );
+}
+
+/**
+ * The parameter at `at` renamed, and every prop referring to it renamed with
+ * it.
+ *
+ * The references are the reason this is an edit rather than a field: a rename
+ * that left them behind would change the scene, which is the one thing a
+ * rename must not do.
+ */
+export function renameParameter(
+  doc: SceneDocument,
+  definition: string,
+  at: number,
+  name: string,
+): SceneDocument {
+  const refusal = parameterNameRefusal(doc, definition, at, name);
+  if (refusal) {
+    throw new Error(refusal);
+  }
+
+  const { name: was } = parameterAt(doc, definition, at);
+  const renamed = withParameters(doc, definition, (parameters) =>
+    parameters.map((parameter, index) =>
+      index === at ? { ...parameter, name } : parameter,
+    ),
+  );
+  const rewrite = (nodes: readonly DocNode[]): DocNode[] =>
+    nodes.map((node) => ({
+      ...node,
+      props: Object.fromEntries(
+        Object.entries(node.props).map(([prop, held]) => [
+          prop,
+          held.kind === 'parameter' && held.name === was
+            ? parameterOf(name)
+            : held,
+        ]),
+      ),
+      children: rewrite(node.children),
+    }));
+
+  return withBody(renamed, definition, rewrite);
+}
+
+/**
+ * The parameter at `at` retyped, keeping its default only where it still fits.
+ *
+ * A default the new type cannot hold is dropped rather than coerced: what
+ * `[0, 0]` meant as a point says nothing as a label, and a coercion would
+ * invent an answer where the person has one to give.
+ */
+export function retypeParameter(
+  doc: SceneDocument,
+  definition: string,
+  at: number,
+  type: Parameter['type'],
+): SceneDocument {
+  return withParameters(doc, definition, (parameters) =>
+    parameters.map((parameter, index) =>
+      index === at
+        ? ({
+            name: parameter.name,
+            type,
+            ...(parameter.default !== undefined &&
+            fitsType(type, parameter.default)
+              ? { default: parameter.default }
+              : {}),
+          } as Parameter)
+        : parameter,
+    ),
+  );
+}
+
+/**
+ * The parameter at `at` given a default, or `undefined` to take one away.
+ *
+ * A value the declared type cannot hold is refused rather than stored: the
+ * emitted signature writes the default at the declared type, so storing one
+ * that does not fit would emit a module that does not compile.
+ */
+export function setParameterDefault(
+  doc: SceneDocument,
+  definition: string,
+  at: number,
+  value: unknown,
+): SceneDocument {
+  const { type, name } = parameterAt(doc, definition, at);
+  if (value !== undefined && !fitsType(type, value)) {
+    throw new Error(
+      `${JSON.stringify(value)} is not a ${type}, which ${name} is.`,
+    );
+  }
+
+  return withParameters(doc, definition, (parameters) =>
+    parameters.map((parameter, index) =>
+      index === at
+        ? ({
+            name: parameter.name,
+            type: parameter.type,
+            ...(value === undefined ? {} : { default: value }),
+          } as Parameter)
+        : parameter,
+    ),
+  );
 }
 
 /**

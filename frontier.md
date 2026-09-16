@@ -14,21 +14,21 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**The editor surface for parameters.** A definition can now declare them, an
-instance can pass them, and a child prop can hold a reference -- but only a
-document built in code can say so. What is missing is the half a person touches:
-a declaration block in the tree view, and *promote to prop*, which turns a
-literal already on a node into a parameter plus a reference to it.
+***Promote to prop*, and the edit primitive under it.** A person can now declare
+a parameter, name it, type it, give it a default and delete it -- but the only
+way to *use* one is to build the document in code, because nothing turns a
+literal already on a node into a reference to a parameter. That one gesture is
+what makes the declaration block worth having.
 
-That is where [0016 page 3](docs/issues/0016/03-scope.md)'s declaration block
-gets built, and it is the first thing in this effort someone using the editor
-can see.
+Two other things want the same primitive, and are worth building with it rather
+than twice:
 
-Extraction is tied to the same step: it refuses a subtree that refers to a
-parameter rather than carrying the declaration across
-([0020](docs/issues/0020.md)), and threading a reference through a new
-definition's instance is promote-to-prop's edit pointed the other way. Worth
-building once, with it.
+- **Extraction** refuses a subtree whose prop refers to a parameter
+  ([0020](docs/issues/0020.md)). Carrying the declaration into the new
+  definition and threading the reference through the instance left behind is
+  promote-to-prop pointed the other way.
+- **Demote**, the inverse: a reference back to the literal it resolves to in
+  some instance, which is what makes promoting safe to try.
 
 **[0019](docs/issues/0019.md) is filed and waiting**, and nothing here depends
 on it. Its small half -- what *names* a component -- looks ready to decide; its
@@ -37,17 +37,15 @@ the demo ever wants the mounted route.
 
 ## Next — 0016
 
-**Where it stands: both prep steps have landed in the document, and what is
-left of the second is the editor surface.** Both came first because each grows
+**Where it stands: both prep steps have landed, and what is left of the second
+is the one gesture that makes them usable.** Both came first because each grows
 more expensive with every site built before it. Roughly one PR each, ordered by
 risk rather than appetite; the
 [staging page](docs/issues/0016/10-staging.md) argues the order.
 
 1. ~~**A prop value becomes a tagged thing**~~ — done.
-2. ~~**Parameters, literal values only**~~ — done in the document: a definition
-   declares typed parameters, an instance passes literals, a child prop may be
-   a parameter reference and nothing more. **Promote to prop** is what is left
-   of it, and is in view above.
+2. ~~**Parameters, literal values only**~~ — declared, passed, referred to, and
+   editable. **Promote to prop** is what is left of it, and is in view above.
 3. **Structural expressions**, stored as a DAG and emitted in constructor form
    -- `mul(halfLength, 2)`, never host arithmetic, so that signals and
    structural values share one node set. The emitter's constants heuristic is
@@ -207,6 +205,14 @@ wrongly -- so it is worth early and is never urgent.
 
 ## Done
 
+- **Parameters** — a definition declares typed parameters with optional
+  defaults, an instance passes literals, and a child prop may be a reference to
+  one, resolved against what that instance supplied. The emitted module writes
+  the signature and the reference rather than the argument, and every name it
+  binds is checked before it is written. A person adds, names, types, defaults
+  and deletes them in a declaration block at the top of the definition's tree,
+  with a rename carrying every prop that refers to it and a delete refused
+  while one does.
 - **De-ref the demo** — `<Anchor id>` names a point, a constraint end names it
   by that id, and `CartAndRope` calls no hooks. A test walks every composite in
   the rig outside a render.

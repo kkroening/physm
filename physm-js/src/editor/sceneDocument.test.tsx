@@ -23,6 +23,14 @@ import {
   placeholderPath,
   removeNode,
   setProp,
+  addParameter,
+  parameterAt,
+  parameterNameRefusal,
+  parameterRemovalRefusal,
+  removeParameter,
+  renameParameter,
+  retypeParameter,
+  setParameterDefault,
 } from './sceneDocument';
 import type CoreScene from './../Scene';
 import type { DocNode, ElementOrigin, SceneDocument } from './sceneDocument';
@@ -720,6 +728,140 @@ describe("a component's place for children", () => {
     );
     expect(() => extractComponent(doc, 'Scene', [0], 'Arm')).toThrow(
       /position refers to Scene's bob/,
+    );
+  });
+});
+
+describe("a definition's parameters", () => {
+  /** A `Scene` taking `bob`, with a weight whose position refers to it. */
+  const taking = (): SceneDocument => {
+    const [frame] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Weight mass={1} position={[1, 0]} />
+      </RotationalFrame>,
+    );
+
+    return {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          parameters: [{ name: 'bob', type: 'point', default: [2, 0] }],
+          body: [
+            {
+              ...frame!,
+              children: frame!.children.map((weight) => ({
+                ...weight,
+                props: { ...weight.props, position: parameterOf('bob') },
+              })),
+            },
+          ],
+        },
+      ],
+    };
+  };
+
+  test('a new one is named around the ones already declared', () => {
+    const once = addParameter(taking(), 'Scene');
+    const twice = addParameter(once, 'Scene');
+
+    expect(parameterAt(once, 'Scene', 1)).toEqual({
+      name: 'value',
+      type: 'scalar',
+    });
+    expect(parameterAt(twice, 'Scene', 2).name).toBe('value2');
+
+    // No default: a parameter every instance may leave out is the weaker
+    // statement, and nothing here knows what it is for yet.
+    expect(parameterAt(once, 'Scene', 1).default).toBeUndefined();
+  });
+
+  test('a name is checked the way a component name is', () => {
+    const doc = addParameter(taking(), 'Scene');
+
+    expect(parameterNameRefusal(doc, 'Scene', 1, 'half-length')).toMatch(
+      /starts with a letter/,
+    );
+    expect(parameterNameRefusal(doc, 'Scene', 1, 'children')).toMatch(
+      /names what a component is given/,
+    );
+    expect(parameterNameRefusal(doc, 'Scene', 1, 'bob')).toBe(
+      'Scene already takes bob.',
+    );
+    expect(parameterNameRefusal(doc, 'Scene', 1, 'Array')).toMatch(
+      /JavaScript built-in/,
+    );
+
+    // A parameter is not a duplicate of itself, or renaming it to what it is
+    // called would be refused.
+    expect(parameterNameRefusal(doc, 'Scene', 0, 'bob')).toBeNull();
+    expect(parameterNameRefusal(doc, 'Scene', 1, 'heft')).toBeNull();
+  });
+
+  test('a rename carries every prop that refers to it', () => {
+    const renamed = renameParameter(taking(), 'Scene', 0, 'hangsAt');
+    const weight = nodeAt(renamed, 'Scene', [0, 0]);
+
+    expect(parameterAt(renamed, 'Scene', 0).name).toBe('hangsAt');
+    expect(weight.props.position).toEqual(parameterOf('hangsAt'));
+
+    // Which is the point: the scene the document builds is unchanged.
+    expect(
+      buildScene(elementOf(renamed)).frames[0]!.weights[0]!.position[0],
+    ).toBeCloseTo(2, 9);
+    expect(() => renameParameter(taking(), 'Scene', 0, 'children')).toThrow(
+      /names what a component is given/,
+    );
+  });
+
+  test('a referenced parameter cannot be deleted, and an unused one can', () => {
+    const doc = addParameter(taking(), 'Scene');
+
+    expect(parameterRemovalRefusal(doc, 'Scene', 0)).toBe(
+      "Weight's position refers to bob: give it a value first.",
+    );
+    expect(() => removeParameter(doc, 'Scene', 0)).toThrow(/refers to bob/);
+    expect(parameterRemovalRefusal(doc, 'Scene', 1)).toBeNull();
+    expect(
+      removeParameter(doc, 'Scene', 1).definitions[0]!.parameters,
+    ).toHaveLength(1);
+  });
+
+  test('retyping keeps a default that still fits and drops one that does not', () => {
+    const doc = taking();
+
+    // A point's `[2, 0]` says nothing as a label, and coercing it would invent
+    // an answer the person has one for.
+    expect(
+      parameterAt(retypeParameter(doc, 'Scene', 0, 'label'), 'Scene', 0),
+    ).toEqual({ name: 'bob', type: 'label' });
+
+    const scalar = setParameterDefault(
+      retypeParameter(doc, 'Scene', 0, 'scalar'),
+      'Scene',
+      0,
+      3,
+    );
+
+    expect(
+      parameterAt(retypeParameter(scalar, 'Scene', 0, 'angle'), 'Scene', 0),
+    ).toEqual({ name: 'bob', type: 'angle', default: 3 });
+  });
+
+  test('a default the declared type cannot hold is refused, and none is allowed', () => {
+    const doc = taking();
+
+    expect(() => setParameterDefault(doc, 'Scene', 0, 'over there')).toThrow(
+      /is not a point, which bob is/,
+    );
+    expect(() => setParameterDefault(doc, 'Scene', 0, [1])).toThrow(
+      /is not a point/,
+    );
+    expect(
+      parameterAt(setParameterDefault(doc, 'Scene', 0, undefined), 'Scene', 0),
+    ).toEqual({ name: 'bob', type: 'point' });
+    expect(() => parameterAt(doc, 'Scene', 4)).toThrow(
+      /declares no parameter at 4/,
     );
   });
 });

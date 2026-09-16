@@ -27,6 +27,7 @@ import useElementSize from './../useElementSize';
 import useSimulation from './useSimulation';
 import {
   movedPath,
+  addParameter,
   definitionOf,
   deletionRefusal,
   elementOf,
@@ -36,7 +37,9 @@ import {
   moveNode,
   nameRefusal,
   nodeAt,
+  parameterRemovalRefusal,
   removeNode,
+  removeParameter,
   setProp,
 } from './sceneDocument';
 import { historyOf, recorded, redone, undone } from './history';
@@ -65,6 +68,7 @@ import type {
   DocNode,
   ElementOrigin,
   NodePath,
+  Parameter,
   SceneDocument,
 } from './sceneDocument';
 import type { History, Step } from './history';
@@ -72,7 +76,7 @@ import type { DropWhere, InsertionPoint } from './insertion';
 import type { Mat3 } from './../Mat3';
 import type { MouseEvent, ReactElement } from 'react';
 import type { ScreenPoint } from './placeGizmos';
-import type { Selection } from './PropertiesPane';
+import type { NodeSelection, Selection } from './PropertiesPane';
 import type { Trail } from './../react/buildScene';
 import type { Vec3 } from './../Vec3';
 import type { View } from './viewChange';
@@ -332,6 +336,111 @@ function rowKeys(nodes: readonly DocNode[], parent: NodePath = []): string[] {
   });
 }
 
+/**
+ * A parameter row's key in the tree, which a node path's cannot be: a path
+ * joins indices with dots, so every character of one is a digit or a dot.
+ */
+function parameterKey(at: number): string {
+  return `parameter.${at}`;
+}
+
+/** How a declared parameter reads in its row: its type, and its default. */
+function parameterSummary({ type, default: value }: Parameter): string {
+  return value === undefined ? type : `${type} = ${JSON.stringify(value)}`;
+}
+
+/**
+ * One parameter of the definition's declaration block.
+ *
+ * It sits in the same tree as the body, above it, because a definition is what
+ * it takes as well as what it renders -- `docs/issues/0016/03-scope.md`. It
+ * takes no children, joins no drag, and is not a drop target: what a parameter
+ * is *for* is stated in the properties pane, like a node's props.
+ */
+function ParameterRow({
+  parameter,
+  at,
+  selected,
+  tabbable,
+  onFocusRow,
+  onSelect,
+  onDeselect,
+  onDelete,
+}: {
+  parameter: Parameter;
+  at: number;
+  selected: string | null;
+  tabbable: string;
+  onFocusRow: (key: string) => void;
+  onSelect: (at: number) => void;
+  onDeselect: () => void;
+  onDelete: (at: number) => void;
+}): ReactElement {
+  const key = parameterKey(at);
+  const isSelected = selected === key;
+  const itemRef = useRef<HTMLLIElement>(null);
+
+  // Keyboard focus follows the selection while it is in the tree, as a node's
+  // row does and for the same reason.
+  useEffect(() => {
+    const item = itemRef.current;
+    if (
+      isSelected &&
+      item &&
+      item !== document.activeElement &&
+      item.closest('[role="tree"]')?.contains(document.activeElement)
+    ) {
+      item.focus();
+    }
+  }, [isSelected]);
+
+  return (
+    <li
+      ref={itemRef}
+      className="editor__parameter"
+      role="treeitem"
+      aria-selected={isSelected}
+      aria-label={`${parameter.name} ${parameterSummary(parameter)}`}
+      tabIndex={tabbable === key ? 0 : -1}
+      onFocus={(event) => {
+        if (event.target === event.currentTarget) {
+          onFocusRow(key);
+        }
+      }}
+      onKeyDown={(event) => {
+        // The keys a node's row answers to, less the ones that move a node:
+        // a parameter's place in the block is its declaration order, and
+        // reordering one is `docs/issues/0021.md`.
+        if (plainKey(event) && NAVIGATION.has(event.key)) {
+          event.preventDefault();
+          rowAfter(event.currentTarget, event.key)?.focus();
+        } else if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(at);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          onDeselect();
+        } else if (event.key === 'Delete' || event.key === 'Backspace') {
+          event.preventDefault();
+          onDelete(at);
+          // Off the row, as a node's is: it now shows the next parameter,
+          // which a second press would delete as well.
+          event.currentTarget.closest<HTMLElement>('[role="tree"]')?.focus();
+        }
+      }}
+    >
+      <div
+        className="editor__row editor__row--parameter"
+        onClick={() => onSelect(at)}
+      >
+        <span className="editor__disclosure" aria-hidden="true" />
+        <span className="editor__tag">{parameter.name}</span>
+        <span className="editor__summary">{parameterSummary(parameter)}</span>
+      </div>
+    </li>
+  );
+}
+
 /** One node of the tree, and everything under it. */
 function TreeRow({
   node,
@@ -589,19 +698,33 @@ function TreePane({
   doc,
   focus,
   selectedPath,
+  selectedParameter,
   onExtract,
+  onSelectParameter,
+  onAddParameter,
+  onDeleteParameter,
   ...actions
 }: TreeActions & {
   doc: SceneDocument;
   focus: string;
   selectedPath: NodePath | null;
+
+  /** Which of the focused definition's parameters is selected, if one is. */
+  selectedParameter: number | null;
   onExtract: (path: NodePath, name: string) => void;
+  onSelectParameter: (at: number) => void;
+  onAddParameter: () => void;
+  onDeleteParameter: (at: number) => void;
 }): ReactElement {
   // The path the name is being typed for: the form shows only while that is
   // still the selection, and a new selection clears it -- one made in the tree,
   // or by a click in the scene.
   const [naming, setNaming] = useState<string | null>(null);
-  const selectedKey = selectedPath ? selectedPath.join('.') : null;
+  const selectedKey = selectedPath
+    ? selectedPath.join('.')
+    : selectedParameter !== null
+      ? parameterKey(selectedParameter)
+      : null;
 
   // The rows scroll to the selection when it changes -- by a find, say, or a
   // click in the scene -- or it could be selected out of sight. The rows, not
@@ -622,9 +745,15 @@ function TreePane({
   const extractRefusal = selectedPath
     ? extractionRefusal(doc, focus, selectedPath)
     : null;
-  const deleteRefusal = selectedPath
-    ? deletionRefusal(doc, focus, selectedPath)
-    : null;
+  const deleteRefusal =
+    selectedParameter !== null
+      ? parameterRemovalRefusal(doc, focus, selectedParameter)
+      : selectedPath
+        ? deletionRefusal(doc, focus, selectedPath)
+        : null;
+  const deletable =
+    (selectedPath !== null || selectedParameter !== null) &&
+    deleteRefusal === null;
   const indentTitle = selectedPath
     ? indentRefusal(doc, focus, selectedPath)
     : null;
@@ -749,7 +878,11 @@ function TreePane({
         );
     rowStarting(rows, from, text)?.focus();
   };
-  const keys = rowKeys(body);
+  const { parameters = [] } = definitionOf(doc, focus);
+  const keys = [
+    ...parameters.map((_, at) => parameterKey(at)),
+    ...rowKeys(body),
+  ];
   const tabbable =
     (focused !== null && keys.includes(focused) ? focused : null) ??
     selectedKey ??
@@ -844,9 +977,23 @@ function TreePane({
           </button>
           <button
             type="button"
+            aria-label="Add a parameter"
+            title="Add a parameter"
+            onClick={onAddParameter}
+          >
+            + Param
+          </button>
+          <button
+            type="button"
             title={deleteRefusal ?? 'Delete (Del)'}
-            disabled={!selectedPath || deleteRefusal !== null}
-            onClick={onSelected(actions.onDelete)}
+            disabled={!deletable}
+            onClick={() => {
+              if (selectedParameter !== null) {
+                onDeleteParameter(selectedParameter);
+              } else if (selectedPath) {
+                actions.onDelete(selectedPath);
+              }
+            }}
           >
             Delete
           </button>
@@ -971,6 +1118,26 @@ function TreePane({
           }
         }}
       >
+        {parameters.map((parameter, at) => (
+          <ParameterRow
+            parameter={parameter}
+            at={at}
+            selected={selectedKey}
+            tabbable={tabbable}
+            onFocusRow={setFocused}
+            onSelect={(which) => {
+              setNaming(null);
+              onSelectParameter(which);
+            }}
+            onDeselect={rowActions.onDeselect}
+            onDelete={(which) => {
+              if (!parameterRemovalRefusal(doc, focus, which)) {
+                onDeleteParameter(which);
+              }
+            }}
+            key={parameterKey(at)}
+          />
+        ))}
         {body.map((node, at) => (
           <TreeRow
             drag={drag}
@@ -1033,7 +1200,9 @@ function expandedOf(
   trail: Trail,
   origins: WeakMap<object, ElementOrigin>,
 ): Selection | null {
-  return origins.get(trail[trail.length - 1] ?? {}) ?? null;
+  const origin = origins.get(trail[trail.length - 1] ?? {});
+
+  return origin ? nodeSelection(origin) : null;
 }
 
 /**
@@ -1046,9 +1215,7 @@ function ownPathOf(
   origins: WeakMap<object, ElementOrigin>,
   focus: string,
 ): NodePath | null {
-  const origin = expandedOf(trail, origins);
-
-  return origin?.definition === focus ? origin.path : null;
+  return pathIn(expandedOf(trail, origins), focus);
 }
 
 /**
@@ -1124,14 +1291,23 @@ interface Picked {
   readonly producer: NodePath | null;
 }
 
-/** The selection's path, if the body it names is the one being shown. */
+/** A node, addressed the way the editor selects one. */
+function nodeSelection({ definition, path }: ElementOrigin): NodeSelection {
+  return { kind: 'node', definition, path };
+}
+
+/** The selection's path, if it is a node's and in the body being shown. */
 function pathIn(selection: Selection | null, focus: string): NodePath | null {
-  return selection?.definition === focus ? selection.path : null;
+  return selection?.kind === 'node' && selection.definition === focus
+    ? selection.path
+    : null;
 }
 
 /** A selection as one string, to tell two of them apart. */
 function keyOf(selection: Selection): string {
-  return `${selection.definition}/${selection.path.join('.')}`;
+  return selection.kind === 'node'
+    ? `${selection.definition}/${selection.path.join('.')}`
+    : `${selection.definition}/parameter.${selection.at}`;
 }
 
 /** The nodes a click's hits lead to, each once, in the order hit. */
@@ -1858,10 +2034,10 @@ function ScenePane({
       if (!current.moved) {
         current.moved = true;
         onPick({
-          selection: { definition: current.definition, path: current.path },
+          selection: nodeSelection(current),
           producer: null,
         });
-        setDragging({ definition: current.definition, path: current.path });
+        setDragging(nodeSelection(current));
         setDragGrid(current.grid);
       }
 
@@ -1957,7 +2133,7 @@ function ScenePane({
         // click would, rather than doing less than not holding it.
         return produced
           ? {
-              selection: { definition: focus, path: produced },
+              selection: nodeSelection({ definition: focus, path: produced }),
               producer: null,
             }
           : null;
@@ -1988,7 +2164,8 @@ function ScenePane({
           xformMatrix,
         ).find(
           ({ frame }) =>
-            built.ownPathOf(frame)?.join('.') === dragging.path.join('.'),
+            built.ownPathOf(frame)?.join('.') ===
+            pathIn(dragging, dragging.definition)?.join('.'),
         )
       : undefined;
 
@@ -2109,9 +2286,13 @@ function CodePane({
       };
     }
   }, [doc]);
-  const selected = selection
-    ? rangeKey(selection.definition, selection.path)
-    : null;
+  // A parameter has no range of its own: it is written into the signature,
+  // which the emitter does not key. Nothing is marked, rather than the body's
+  // first node standing in for it.
+  const selected =
+    selection?.kind === 'node'
+      ? rangeKey(selection.definition, selection.path)
+      : null;
   const range = selected ? emitted.ranges.get(selected) : undefined;
   const paneRef = useRef<HTMLElement>(null);
   const markRef = useRef<HTMLElement>(null);
@@ -2310,7 +2491,7 @@ export default function Editor({
   const change = (next: SceneDocument, path: NodePath | null): void => {
     record(next, { structural: true, after: path });
     restructure();
-    select(path ? { definition: focus, path } : null);
+    select(path ? nodeSelection({ definition: focus, path }) : null);
   };
 
   /** Focus a component, opening a tab for it if it has none. */
@@ -2350,7 +2531,7 @@ export default function Editor({
       return kept.includes(to) ? kept : [...kept, to];
     });
     setFocus(to);
-    select(path ? { definition: to, path } : null);
+    select(path ? nodeSelection({ definition: to, path }) : null);
     if (edit.structural) {
       restructure();
     }
@@ -2408,7 +2589,7 @@ export default function Editor({
   }, []);
 
   const actions: TreeActions = {
-    onSelect: (path) => select({ definition: focus, path }),
+    onSelect: (path) => select(nodeSelection({ definition: focus, path })),
     onDeselect: () => select(null),
     onOpen: open,
     // Nothing is selected afterwards: the node is gone, and jumping to a
@@ -2514,6 +2695,29 @@ export default function Editor({
             doc={doc}
             focus={focus}
             selectedPath={selectedPath}
+            selectedParameter={
+              selection?.kind === 'parameter' && selection.definition === focus
+                ? selection.at
+                : null
+            }
+            onSelectParameter={(at) =>
+              select({ kind: 'parameter', definition: focus, at })
+            }
+            onAddParameter={() => {
+              const next = addParameter(doc, focus);
+              record(next, { structural: true });
+              restructure();
+              select({
+                kind: 'parameter',
+                definition: focus,
+                at: (definitionOf(next, focus).parameters ?? []).length - 1,
+              });
+            }}
+            onDeleteParameter={(at) => {
+              record(removeParameter(doc, focus, at), { structural: true });
+              restructure();
+              select(null);
+            }}
             onExtract={(path, name) => {
               record(extractComponent(doc, focus, path, name), {
                 structural: true,
@@ -2554,7 +2758,7 @@ export default function Editor({
         selection={selection}
         producer={producer}
         onChange={(next, field) => record(next, { structural: false, field })}
-        onProduce={(path) => select({ definition: focus, path })}
+        onProduce={(path) => select(nodeSelection({ definition: focus, path }))}
         onOpen={open}
       />
     </div>
