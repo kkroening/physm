@@ -14,21 +14,25 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-***Promote to prop*, and the edit primitive under it.** A person can now declare
-a parameter, name it, type it, give it a default and delete it -- but the only
-way to *use* one is to build the document in code, because nothing turns a
-literal already on a node into a reference to a parameter. That one gesture is
-what makes the declaration block worth having.
+**Structural expressions.** Parameters are done end to end -- declared, passed,
+referred to, promoted, demoted, carried through an extraction -- so the next
+thing a prop needs to hold is a *computation*: `mul(halfLength, 2)`, stored as
+a DAG and emitted in constructor form, so that signal and structural values
+share one node set.
 
-Two other things want the same primitive, and are worth building with it rather
-than twice:
+It is the invasive one. A prop value grows its third variant, the emitter's
+constants heuristic is deleted rather than tuned -- expression identity is what
+it was guessing at -- and the properties pane needs somewhere to type an
+expression and something to show when a prop holds one. The expression graph
+viewer ([0018](docs/issues/0018.md)) stops being fallback work around here and
+starts being how the representation is checked.
 
-- **Extraction** refuses a subtree whose prop refers to a parameter
-  ([0020](docs/issues/0020.md)). Carrying the declaration into the new
-  definition and threading the reference through the instance left behind is
-  promote-to-prop pointed the other way.
-- **Demote**, the inverse: a reference back to the literal it resolves to in
-  some instance, which is what makes promoting safe to try.
+**[0022](docs/issues/0022.md) wants deciding first, or with it.** Promoting a
+prop widens its contract -- a `length` becomes a `scalar` and stops being
+non-negative -- and an expression on a `length` prop asks the same question from
+the other side. Whether the parameter types grow toward the prop kinds, or
+promotion stays deliberately lossy and says so, is one answer for both, and
+answering it twice would leave two rules about what a prop's kind guarantees.
 
 **[0019](docs/issues/0019.md) is filed and waiting**, and nothing here depends
 on it. Its small half -- what *names* a component -- looks ready to decide; its
@@ -37,16 +41,15 @@ the demo ever wants the mounted route.
 
 ## Next — 0016
 
-**Where it stands: both prep steps have landed, and what is left of the second
-is the one gesture that makes them usable.** Both came first because each grows
+**Where it stands: both prep steps are done, and the next one is the invasive
+one they were for.** Both came first because each grows
 more expensive with every site built before it. Roughly one PR each, ordered by
 risk rather than appetite; the
 [staging page](docs/issues/0016/10-staging.md) argues the order.
 
 1. ~~**A prop value becomes a tagged thing**~~ — done.
-2. ~~**Parameters, literal values only**~~ — declared, passed, referred to, and
-   editable. **Promote to prop** is what is left of it, and is in view above.
-3. **Structural expressions**, stored as a DAG and emitted in constructor form
+2. ~~**Parameters, literal values only**~~ — done.
+3. **Structural expressions** (in view), stored as a DAG and emitted in constructor form
    -- `mul(halfLength, 2)`, never host arithmetic, so that signals and
    structural values share one node set. The emitter's constants heuristic is
    deleted rather than tuned, since expression identity is what it was guessing
@@ -211,8 +214,11 @@ wrongly -- so it is worth early and is never urgent.
   the signature and the reference rather than the argument, and every name it
   binds is checked before it is written. A person adds, names, types, defaults
   and deletes them in a declaration block at the top of the definition's tree,
-  with a rename carrying every prop that refers to it and a delete refused
-  while one does.
+  with a rename carrying every prop that names it and a delete refused while
+  one refers to it. A prop is carried into the block and back with one button
+  each; an instance's props are the parameters its component declares, edited
+  with the same fields; and an extracted subtree takes the declarations it
+  refers to with it. Resolves [0020](docs/issues/0020.md).
 - **De-ref the demo** — `<Anchor id>` names a point, a constraint end names it
   by that id, and `CartAndRope` calls no hooks. A test walks every composite in
   the rig outside a render.

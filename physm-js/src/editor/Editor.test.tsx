@@ -847,6 +847,205 @@ describe('Editor, the declaration block', () => {
   });
 });
 
+describe('Editor, carrying a prop to the declaration block', () => {
+  test('promoting moves the value into the block and leaves a reference', () => {
+    render(<Editor initialDocument={documentFrom(<Weight mass={3} />)} />);
+    const props = select('Weight');
+    fireEvent.click(
+      within(props).getByRole('button', { name: 'Promote Mass to a prop' }),
+    );
+
+    // Declared, defaulted to what the prop held, and referred to -- so the
+    // scene is unchanged and the value is now something an instance can say.
+    expect(treeRows('Scene')[0]).toHaveAccessibleName('mass scalar = 3');
+    expect(code()).toContain(
+      'function Scene({ mass = 3 }: { mass?: number }): ReactElement',
+    );
+    expect(code()).toContain('<Weight mass={mass} />');
+  });
+
+  test('a prop with no parameter type says why it cannot be carried', () => {
+    render(<Editor initialDocument={starterDocument()} />);
+    const carry = within(select('Box')).getByRole('button', {
+      name: 'Promote Solid to a prop',
+    });
+
+    expect(carry).toBeDisabled();
+    expect(carry).toHaveAttribute(
+      'title',
+      'Solid is not something a parameter can be.',
+    );
+  });
+
+  test('a point prop is carried too, which its own field has to offer', () => {
+    render(
+      <Editor
+        initialDocument={documentFrom(<Weight position={[2, 0]} mass={1} />)}
+      />,
+    );
+    fireEvent.click(
+      within(select('Weight')).getByRole('button', {
+        name: 'Promote Position to a prop',
+      }),
+    );
+
+    expect(treeRows('Scene')[0]).toHaveAccessibleName('position point = [2,0]');
+    expect(code()).toContain('position={position}');
+  });
+
+  test('an angle is declared as one, not as a plain scalar', () => {
+    // The emitted signature cannot tell the two apart -- both write `number`
+    // -- so the declaration row is where the difference is visible, and the
+    // pane edits one in degrees and the other raw.
+    render(<Editor initialDocument={referring()} />);
+    fireEvent.click(
+      within(select('TrackFrame')).getByRole('button', {
+        name: 'Promote Angle to a prop',
+      }),
+    );
+
+    expect(treeRows('Scene')[2]).toHaveAccessibleName('angle angle = 0');
+  });
+
+  test('an instance holding a reference shows it, and offers no editor', () => {
+    // Reachable only through this change: promote makes the reference, and
+    // extract threads it through the instance it leaves behind.
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame id="arm">
+            <Weight mass={3} />
+          </RotationalFrame>,
+        )}
+      />,
+    );
+    fireEvent.click(
+      within(select('Weight')).getByRole('button', {
+        name: 'Promote Mass to a prop',
+      }),
+    );
+    select('RotationalFrame');
+    extract('Arm');
+    fireEvent.click(screen.getByRole('tab', { name: 'Scene' }));
+    const props = select('Arm');
+
+    // A field here would say "this instance passes nothing", which is the
+    // opposite of what the document says -- and one keystroke would make it
+    // true.
+    expect(within(props).queryByRole('textbox')).toBeNull();
+    expect(props.querySelector('.editor__reference')).toHaveTextContent('mass');
+    expect(code()).toContain('<Arm mass={mass} />');
+
+    // The value is still the enclosing definition's to give, so demoting it
+    // here is offered -- and refused while nothing passes anything else.
+    expect(
+      within(props).getByRole('button', {
+        name: 'Replace mass with its value',
+      }),
+    ).toBeEnabled();
+  });
+
+  test('demoting puts the value back, and the declaration stays', () => {
+    render(<Editor initialDocument={documentFrom(<Weight mass={3} />)} />);
+    const props = select('Weight');
+    fireEvent.click(
+      within(props).getByRole('button', { name: 'Promote Mass to a prop' }),
+    );
+    fireEvent.click(
+      within(select('Weight')).getByRole('button', {
+        name: 'Replace Mass with its value',
+      }),
+    );
+
+    expect(code()).toContain('<Weight mass={3} />');
+    expect(treeRows('Scene')[0]).toHaveAccessibleName('mass scalar = 3');
+  });
+
+  test("an instance's props are the parameters its component declares", () => {
+    render(<Editor initialDocument={referring()} />);
+    const props = select('TrackFrame');
+    fireEvent.click(
+      within(props).getByRole('button', { name: 'Promote Angle to a prop' }),
+    );
+
+    // Which is the whole point of a declared surface: the instance edits it
+    // with the same field the building block's own prop uses.
+    expect(code()).toContain('angle = 0');
+  });
+
+  test('two instances of one component can be given different values', () => {
+    render(<Editor initialDocument={twoPendulums()} />);
+    const rows = within(
+      screen.getByRole('tree', { name: 'Scene' }),
+    ).getAllByText('Pendulum');
+    fireEvent.click(rows[1]!);
+    const props = screen.getByRole('region', { name: 'Properties' });
+
+    // The field is the parameter's own name, because that is what its author
+    // called it and what the emitted source writes -- and it knows the
+    // parameter's default, so emptying it says "reset" rather than "unset".
+    expect(within(props).getByLabelText('bob x')).toHaveValue('7');
+    expect(
+      within(props).getByRole('button', { name: 'Reset bob' }),
+    ).toHaveAttribute('title', 'Reset to default');
+
+    fireEvent.change(within(props).getByLabelText('bob x'), {
+      target: { value: '9' },
+    });
+
+    // One component, two rigs -- which is what a document of literals could
+    // not say at all.
+    expect(code()).toContain('<Pendulum bob={[4, 0]} />');
+    expect(code()).toContain('<Pendulum bob={[9, 0]} />');
+  });
+
+  test('a component that declares nothing still says it takes no props', () => {
+    render(<Editor />);
+
+    expect(select('Pendulum')).toHaveTextContent('It takes no props.');
+  });
+});
+
+/** A `Pendulum` taking a point, instantiated twice at different points. */
+function twoPendulums(): SceneDocument {
+  const [arm] = nodesFrom(
+    <RotationalFrame>
+      <Weight mass={1} position={[0, -1]} />
+    </RotationalFrame>,
+  );
+  const instance = (bob: readonly [number, number]): DocNode => ({
+    type: { kind: 'defined', name: 'Pendulum' },
+    props: { bob: literalOf(bob) },
+    children: [],
+  });
+
+  return {
+    root: 'Scene',
+    definitions: [
+      {
+        name: 'Scene',
+        body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+          ...cart,
+          children: [instance([4, 0]), instance([7, 0])],
+        })),
+      },
+      {
+        name: 'Pendulum',
+        parameters: [{ name: 'bob', type: 'point', default: [1, 0] }],
+        body: [
+          {
+            ...arm!,
+            children: arm!.children.map((weight) => ({
+              ...weight,
+              props: { ...weight.props, position: parameterOf('bob') },
+            })),
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** The library pane. */
 function library(): HTMLElement {
   return screen.getByRole('region', { name: 'Library' });
