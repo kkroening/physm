@@ -557,6 +557,19 @@ export function operationNamed(name: string): OperationInfo | null {
 }
 
 /**
+ * Every operation there is, by name.
+ *
+ * For a caller that has to *enumerate* them rather than ask about one. Today
+ * that is the check holding the binding's re-exports to this table: an emitted
+ * module imports operations by the names a document happens to use, and
+ * nothing else keeps those two lists from drifting apart
+ * (`docs/issues/0026.md`).
+ */
+export function operationNames(): readonly Operation[] {
+  return [...EVERY.keys()] as Operation[];
+}
+
+/**
  * An operation node built from a name checked at runtime.
  *
  * The constructors below are the spelling for code, where the name is known as

@@ -13,7 +13,7 @@ import TrackFrame from './../react/TrackFrame';
 import { literalOf, parameterOf } from './propValue';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
-import { mul, vec } from './../expression';
+import { mul, operationNames, vec } from './../expression';
 import emitScene, { rangeKey } from './emitScene';
 import ts from 'typescript';
 import {
@@ -24,6 +24,7 @@ import {
 } from './sceneDocument';
 import type CoreScene from './../Scene';
 import type { DocNode, Parameter, SceneDocument } from './sceneDocument';
+import type { Operation } from './../expression';
 import type { ReactElement } from 'react';
 
 /**
@@ -612,6 +613,68 @@ describe('a parameter the emitter cannot write', () => {
     expect(() => emitScene(doc)).toThrow(
       /refers to 'tag', which Dial does not take/,
     );
+  });
+});
+
+describe('what the emitted module can import', () => {
+  /**
+   * Every operation, written out -- and exhaustive by construction.
+   *
+   * `satisfies` fails to compile if one is missing or invented, so this cannot
+   * drift from the table; and being a literal it anchors the *runtime*
+   * enumeration to something, without which the loops below would pass against
+   * an `operationNames` that answered nothing at all.
+   */
+  const EVERY_OPERATION = {
+    add: true,
+    sub: true,
+    mul: true,
+    div: true,
+    neg: true,
+    sqrt: true,
+    vec: true,
+    scale: true,
+    dot: true,
+    xOf: true,
+    yOf: true,
+    worldPoint: true,
+  } satisfies Record<Operation, true>;
+
+  test('the table names every operation there is', () => {
+    expect([...operationNames()].sort()).toEqual(
+      Object.keys(EVERY_OPERATION).sort(),
+    );
+  });
+
+  test('the binding re-exports a constructor for every operation', () => {
+    // `importsOf` collects operation names from the *document* -- whatever the
+    // props happen to use -- and writes them as one named import from
+    // `./react`. Nothing else holds that list and the binding's hand-written
+    // re-exports together, so an operation the binding does not re-export is a
+    // module the emitter writes and nobody can compile.
+    //
+    // It agreed by coincidence for a long time: the re-export list happened to
+    // be exactly the operations there were. Adding a twelfth broke that for as
+    // long as it took someone to notice, which is `docs/issues/0026.md`.
+    const exported = new Set(Object.keys(binding));
+
+    for (const name of operationNames()) {
+      expect([name, exported.has(name)]).toEqual([name, true]);
+    }
+  });
+
+  test('and exports nothing calling itself an operation that is not one', () => {
+    // The other direction, which is cheaper to get wrong quietly: a name the
+    // binding re-exports as though it were an operation, that `evaluate` would
+    // refuse. Only the constructors are checked -- a binding export is a
+    // function either way, so what distinguishes them is the table.
+    const names = new Set<string>(operationNames());
+
+    for (const [name, value] of Object.entries(binding)) {
+      if (typeof value === 'function' && 'sceneNode' in value) {
+        expect([name, names.has(name)]).toEqual([name, false]);
+      }
+    }
   });
 });
 
