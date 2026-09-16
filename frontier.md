@@ -14,43 +14,40 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**The node question, with parameters alongside it.**
+**The editor surface for parameters.** A definition can now declare them, an
+instance can pass them, and a child prop can hold a reference -- but only a
+document built in code can say so. What is missing is the half a person touches:
+a declaration block in the tree view, and *promote to prop*, which turns a
+literal already on a node into a parameter plus a reference to it.
 
-Addressing is settled -- a slot lives on the child node, `NodePath` never
-changes, and children bind by Python's keyword-argument rule. See
-[Decisions](#decisions).
+That is where [0016 page 3](docs/issues/0016/03-scope.md)'s declaration block
+gets built, and it is the first thing in this effort someone using the editor
+can see.
 
-What the same conversation turned up is filed as [0019](docs/issues/0019.md),
-and a first review of it split the question in two. **What names a component**
-is small and looks ready: a node records a function reference, nothing records a
-module or a name that survives minification, and four separate things want that
-missing fact -- 0017's `imported` ref, the frontier item below, worker
-transport, and re-keying `origins` off element identity.
+Extraction is tied to the same step: it refuses a subtree that refers to a
+parameter rather than carrying the declaration across
+([0020](docs/issues/0020.md)), and threading a reference through a new
+definition's instance is promote-to-prop's edit pointed the other way. Worth
+building once, with it.
 
-**Whether physm owns its element type** is the larger half and is three
-decisions rather than one. Only the *representation* leg genuinely needs it;
-sibling ordering has 0005's own recorded answer (a custom reconciler, which
-keeps React's element), and hooks are reachable by physm setting its own
-dispatcher around the call site `buildScene` already owns. What would settle the
-rest is evidence rather than argument: whether anything besides the demo ever
-wants the mounted route.
-
-**Parameters proceed regardless** -- promote-to-prop, which touches the document
-rather than the element type and is safe whichever way 0019 goes. It is also the
-first thing in this effort a person using the editor can see.
+**[0019](docs/issues/0019.md) is filed and waiting**, and nothing here depends
+on it. Its small half -- what *names* a component -- looks ready to decide; its
+large half wants evidence rather than argument, namely whether anything besides
+the demo ever wants the mounted route.
 
 ## Next — 0016
 
-**Where it stands: the first prep step has landed, and the second is the
-invasive one.** Both come first because each grows more expensive with every
-site built before it. Roughly one PR each, ordered by risk rather than appetite;
-the [staging page](docs/issues/0016/10-staging.md) argues the order.
+**Where it stands: both prep steps have landed in the document, and what is
+left of the second is the editor surface.** Both came first because each grows
+more expensive with every site built before it. Roughly one PR each, ordered by
+risk rather than appetite; the
+[staging page](docs/issues/0016/10-staging.md) argues the order.
 
 1. ~~**A prop value becomes a tagged thing**~~ — done.
-2. **Parameters, literal values only.** A definition declares typed parameters, an
-   instance passes literals, a child prop may be a parameter reference and
-   nothing more. This is promote-to-prop, and it forces the scope and
-   declaration-block design without needing an expression language.
+2. ~~**Parameters, literal values only**~~ — done in the document: a definition
+   declares typed parameters, an instance passes literals, a child prop may be
+   a parameter reference and nothing more. **Promote to prop** is what is left
+   of it, and is in view above.
 3. **Structural expressions**, stored as a DAG and emitted in constructor form
    -- `mul(halfLength, 2)`, never host arithmetic, so that signals and
    structural values share one node set. The emitter's constants heuristic is
@@ -484,3 +481,18 @@ wrongly -- so it is worth early and is never urgent.
   any amplitude, and three samples a quarter period apart catch a sign flip, a
   `qd`-for-`q` slip and a dropped term *made in both solvers at once* -- each of
   which the cross-validation suite is blind to.
+- **Parameters, in the document** — a definition declares typed parameters with
+  optional defaults, an instance passes literals, and a child prop may *be* a
+  reference to one. `elementOf` threads a scope so each instance resolves its
+  own, and the emitter writes the signature and the reference rather than the
+  argument -- `<Pendulum bob={[4, 0]} />` calling
+  `function Pendulum({ bob }: { bob: readonly [number, number] })`, with
+  `endPos={bob}` inside. Two instances of one definition can now differ, which
+  a document of literals could not express at all.
+
+  The tagged prop value earned its keep here: adding the second variant
+  produced sixteen compile errors, one per site that could only handle a
+  literal, so every one was a decision rather than a discovery. And the seam
+  page 4 predicted would split did -- `plainProps` had no callers left and is
+  gone, replaced by `resolvedProps` for React and the emitter printing
+  references itself.

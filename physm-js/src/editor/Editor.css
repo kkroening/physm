@@ -497,6 +497,15 @@
   font-size: 0.75rem;
 }
 
+/* A prop holding a reference, which is shown rather than edited. Deliberately
+   not an input: the same padding and figures as one, with no box and no white
+   ground, so it reads as a name the definition supplies. */
+.editor__reference {
+  padding: 0.2rem 0.35rem;
+  color: #2f6f4f;
+  font-variant-numeric: tabular-nums;
+}
+
 .editor__inputs {
   display: flex;
   gap: 0.3rem;

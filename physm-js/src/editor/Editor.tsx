@@ -40,7 +40,7 @@ import {
   setProp,
 } from './sceneDocument';
 import { historyOf, recorded, redone, undone } from './history';
-import { literalOf } from './propValue';
+import { literalIn, literalOf, shownValueOf } from './propValue';
 import {
   dropPoint,
   dropRefusal,
@@ -104,10 +104,8 @@ function summaryOf(node: DocNode): string {
   }
 
   return Object.entries(node.type.component.meta.props)
-    .filter(
-      ([name, spec]) => spec.summary && node.props[name]?.value !== undefined,
-    )
-    .map(([name]) => `${name}=${JSON.stringify(node.props[name]!.value)}`)
+    .filter(([name, spec]) => spec.summary && shownValueOf(node.props[name]))
+    .map(([name]) => `${name}=${shownValueOf(node.props[name])!}`)
     .join(' ');
 }
 
@@ -265,9 +263,11 @@ function rowStarting(
 function findTextOf(node: DocNode): string {
   return [
     tagOf(node.type),
-    ...Object.entries(node.props)
-      .filter(([, prop]) => prop.value !== undefined)
-      .map(([name, prop]) => `${name}=${JSON.stringify(prop.value)}`),
+    ...Object.entries(node.props).flatMap(([name, prop]) => {
+      const shown = shownValueOf(prop);
+
+      return shown === null ? [] : [`${name}=${shown}`];
+    }),
   ]
     .join(' ')
     .toLowerCase();
@@ -1483,6 +1483,12 @@ function ScenePane({
         // A point read in an end's frame -- a constraint's -- is not read in the
         // one drawing it, which is the only frame this places against.
         .filter(([, spec]) => spec.kind === 'point' && !spec.relativeTo)
+        // A point that depends on what an instance passes has no fixed place
+        // to put a handle, and a drag would write a literal over the reference.
+        // Withholding the handle here is what makes that unreachable: a prop
+        // absent from `points` is absent from `handles`, from `nearestHandle`,
+        // and from the bodily drag, which reads `points` directly.
+        .filter(([prop]) => node.props[prop]?.kind !== 'parameter')
         // And one absent with no default says something no value can: an
         // anchor's point, a constraint's second end, are solved for. Writing a
         // value would freeze it, and the scene would stop building.
@@ -1494,7 +1500,7 @@ function ScenePane({
             frame,
             xformMatrix,
             vec3.coerce(
-              (node.props[prop]?.value ?? spec.default ?? [0, 0]) as
+              (literalIn(node.props[prop]) ?? spec.default ?? [0, 0]) as
                 number | readonly number[],
             ),
           ),
@@ -1763,9 +1769,13 @@ function ScenePane({
     event.preventDefault();
     blurAway();
     drags.current += 1;
+    // A referenced prop contributes no handle and no bodily drag target, so
+    // `literalIn` here is reading a prop that is a literal or absent -- the
+    // `[0, 0]` is the absent case, not a stand-in for a reference.
     const position = vec3.coerce(
-      (nodeAt(doc, focus, target.path).props[target.prop]?.value ?? [0, 0]) as
-        number | readonly number[],
+      (literalIn(nodeAt(doc, focus, target.path).props[target.prop]) ?? [
+        0, 0,
+      ]) as number | readonly number[],
     );
 
     // Only in the pose the code builds: a snap is a claim about where frames

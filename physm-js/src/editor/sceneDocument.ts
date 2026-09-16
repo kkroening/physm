@@ -1,10 +1,10 @@
 import coreComponents from './../react/coreComponents';
 import { Fragment, createElement, isValidElement } from 'react';
 import { canContain } from './../react/componentMeta';
-import { literalProps, plainProps } from './propValue';
+import { literalProps, resolvedProps } from './propValue';
 import type { ComponentMeta } from './../react/componentMeta';
 import type { FunctionComponent, ReactElement, ReactNode } from 'react';
-import type { DocProps, PropValue } from './propValue';
+import type { DocProps, PropValue, Scope } from './propValue';
 
 /** Any component, as the document holds it: a function of some props. */
 type AnyComponent = (props: never) => ReactNode;
@@ -54,9 +54,47 @@ export interface DocNode {
   readonly children: readonly DocNode[];
 }
 
-/** A component the document defines: a name, and the elements it renders. */
+/**
+ * What a definition takes: a name a child prop can refer to, and a type saying
+ * what may be passed.
+ *
+ * The types are [0016 page 3](../../../docs/issues/0016/03-scope.md)'s set,
+ * restricted to the ones a literal can express. `Direction` and `Frame` arrive
+ * with the features that need them.
+ *
+ * A union rather than a `type` tag beside an open `default`, so the two cannot
+ * disagree: an angle defaulted to a point is not a `Parameter`. That is the
+ * opposite call from `PropValue.value`, which is `unknown` because the shape it
+ * holds is the *component's* business and nothing there could know it -- here
+ * the declaration states the type one field away from the value.
+ */
+export type Parameter =
+  | {
+      readonly name: string;
+      readonly type: 'scalar' | 'integer' | 'angle';
+      readonly default?: number;
+    }
+  | {
+      readonly name: string;
+      readonly type: 'point';
+      readonly default?: readonly [number, number];
+    }
+  | {
+      readonly name: string;
+      readonly type: 'label';
+      readonly default?: string;
+    };
+
+/** A component the document defines: a name, what it takes, and what it renders. */
 export interface Definition {
   readonly name: string;
+
+  /**
+   * Absent and empty mean the same thing -- a definition that takes nothing --
+   * so a document written before parameters existed needs no migration.
+   */
+  readonly parameters?: readonly Parameter[];
+
   readonly body: readonly DocNode[];
 }
 
@@ -250,15 +288,34 @@ export function elementOf(
       return cached;
     }
 
-    const { body } = definitionOf(doc, definitionName);
-    const component: FunctionComponent<{ children?: ReactNode }> = ({
+    const { body, parameters } = definitionOf(doc, definitionName);
+    const defaults = Object.fromEntries(
+      (parameters ?? [])
+        .filter(({ default: value }) => value !== undefined)
+        .map(({ name, default: value }) => [name, value]),
+    );
+
+    // Whatever the instance passed, over the declared defaults: that is the
+    // scope every `parameter` prop in this body resolves against.
+    //
+    // What the instance *supplied*, though, not every key it carries: a spread
+    // copies an own property whose value is `undefined` and buries the default
+    // under it, where the emitted function's `{ bob = [9, 0] }` is triggered by
+    // exactly that `undefined`. Dropping them is what keeps the two agreeing.
+    const component: FunctionComponent<{ children?: ReactNode } & Scope> = ({
       children,
+      ...passed
     }) =>
       createElement(
         Fragment,
         null,
         ...body.map((node, index) =>
-          render(definitionName, node, [index], children),
+          render(definitionName, node, [index], children, {
+            ...defaults,
+            ...Object.fromEntries(
+              Object.entries(passed).filter(([, value]) => value !== undefined),
+            ),
+          }),
         ),
       );
 
@@ -286,6 +343,7 @@ export function elementOf(
     node: DocNode,
     path: NodePath,
     given: ReactNode,
+    scope: Scope,
   ): ReactElement => {
     if (node.type.kind === 'children') {
       return createElement(
@@ -295,12 +353,12 @@ export function elementOf(
       );
     }
 
-    const plain = plainProps(node.props);
+    const plain = resolvedProps(node.props, scope);
     const element = createElement(
       typeOf(node.type),
       node.key === undefined ? plain : { ...plain, key: node.key },
       ...node.children.map((child, index) =>
-        render(definition, child, [...path, index], given),
+        render(definition, child, [...path, index], given, scope),
       ),
     );
     origins?.set(element, { definition, path });
@@ -738,6 +796,23 @@ export function extractionRefusal(
       `This holds ${definition}'s place for its children, which has to stay ` +
       `in ${definition}.`
     );
+  }
+
+  // A reference names a parameter of the definition it sits in, and a new
+  // component declares none -- so moving one would resolve it against an empty
+  // scope and quietly fall back to the component's own default. That breaks
+  // the invariant this whole edit rests on: the scene it builds is unchanged.
+  // Carrying the declaration across instead is `docs/issues/0020.md`.
+  for (const { type, props } of everyNode([node])) {
+    for (const [prop, held] of Object.entries(props)) {
+      if (held.kind === 'parameter') {
+        return (
+          `${nodeName(type)}'s ${prop} refers to ${definition}'s ` +
+          `${held.name}, which a component of its own would not take: ` +
+          'extracting it would change the scene. Give it a value first.'
+        );
+      }
+    }
   }
 
   const { type } = node;

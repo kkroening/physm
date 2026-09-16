@@ -1,5 +1,5 @@
 import { Fragment, useId, useRef, useState } from 'react';
-import { literalOf } from './propValue';
+import { literalOf, shownValueOf } from './propValue';
 import { nodeAt, nodeName, setProp } from './sceneDocument';
 import type { DocNode, NodePath, SceneDocument } from './sceneDocument';
 import type { PropSpec } from './../react/componentMeta';
@@ -334,7 +334,9 @@ function PropField({
 /** Every id in these nodes and their children: what a constraint end can name. */
 function idsIn(nodes: readonly DocNode[]): string[] {
   return nodes.flatMap(({ props, children }) => [
-    ...(typeof props.id?.value === 'string' ? [props.id.value] : []),
+    ...(props.id?.kind === 'literal' && typeof props.id.value === 'string'
+      ? [props.id.value]
+      : []),
     ...idsIn(children),
   ]);
 }
@@ -403,7 +405,7 @@ function NodeProps({
           {Object.entries(node.props).map(([name, prop]) => (
             <Fragment key={name}>
               <dt>{name}</dt>
-              <dd>{JSON.stringify(prop.value)}</dd>
+              <dd>{shownValueOf(prop)}</dd>
             </Fragment>
           ))}
         </dl>
@@ -423,28 +425,41 @@ function NodeProps({
       <h2 className="editor__selected">{nodeName(node.type)}</h2>
       <p className="editor__hint">{meta.description}</p>
       <div className="editor__fields">
-        {Object.entries(meta.props).map(([name, spec]) => (
-          <PropField
-            key={name}
-            spec={spec}
-            value={node.props[name]?.value}
-            names={names}
-            onChange={(value, discrete) =>
-              onChange(
-                setProp(
-                  doc,
-                  selection.definition,
-                  selection.path,
-                  name,
-                  value === undefined ? undefined : literalOf(value),
-                ),
-                discrete
-                  ? null
-                  : `${selection.definition}/${selection.path.join('.')}/${name}#${visit.current}`,
-              )
-            }
-          />
-        ))}
+        {Object.entries(meta.props).map(([name, spec]) => {
+          const held = node.props[name];
+
+          // A prop holding a reference is not a literal to edit, and offering
+          // the literal editor would let a keystroke silently replace the
+          // reference with whatever was typed. Shown, not edited -- which is
+          // the same posture as an imported component's props above.
+          return held?.kind === 'parameter' ? (
+            <div className="editor__field" key={name}>
+              <span className="editor__label">{spec.label}</span>
+              <span className="editor__reference">{held.name}</span>
+            </div>
+          ) : (
+            <PropField
+              key={name}
+              spec={spec}
+              value={held?.value}
+              names={names}
+              onChange={(value, discrete) =>
+                onChange(
+                  setProp(
+                    doc,
+                    selection.definition,
+                    selection.path,
+                    name,
+                    value === undefined ? undefined : literalOf(value),
+                  ),
+                  discrete
+                    ? null
+                    : `${selection.definition}/${selection.path.join('.')}/${name}#${visit.current}`,
+                )
+              }
+            />
+          );
+        })}
       </div>
     </>
   );
@@ -496,7 +511,7 @@ function ExpandedProps({
         {Object.entries(node.props).map(([name, prop]) => (
           <Fragment key={name}>
             <dt>{name}</dt>
-            <dd>{JSON.stringify(prop.value)}</dd>
+            <dd>{shownValueOf(prop)}</dd>
           </Fragment>
         ))}
       </dl>

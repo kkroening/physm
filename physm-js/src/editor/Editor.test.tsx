@@ -13,7 +13,7 @@ import emitScene, { rangeKey } from './emitScene';
 import starterDocument from './starterDocument';
 import { InvalidStateMapError } from './../Solver';
 import { documentFrom, nodesFrom } from './sceneDocument';
-import { literalOf } from './propValue';
+import { literalOf, parameterOf } from './propValue';
 import type { DocNode, SceneDocument } from './sceneDocument';
 import type { PropValue } from './propValue';
 import { vi } from 'vitest';
@@ -85,6 +85,24 @@ describe('Editor', () => {
     expect(
       within(treeOf(stating(literalOf(undefined)))).queryByText(/id=/),
     ).toBeNull();
+
+    // A prop holding a *reference* answers the second question too, and shows
+    // the name it refers to rather than a value -- unquoted, because `id=label`
+    // and `id="label"` say different things: the first is the definition's
+    // parameter, the second a string that happens to look like one. The find
+    // field reads the same summary, so this pins both.
+    const referring: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          parameters: [{ name: 'label', type: 'label' }],
+          body: [{ ...frame!, props: { id: parameterOf('label') } }],
+        },
+      ],
+    };
+
+    expect(within(treeOf(referring)).getByText('id=label')).toBeInTheDocument();
   });
 
   test('a scene with no consistent start says why, and the editor stays up', () => {
@@ -589,6 +607,74 @@ describe('Editor, editing props', () => {
       within(props).getByRole('heading', { name: 'Pendulum' }),
     ).toBeVisible();
     expect(props).toHaveTextContent('It takes no props.');
+  });
+});
+
+/**
+ * A scene whose two props hold references: the cart's id, and the weight's
+ * position -- one shown by the properties pane, one placed by the scene pane.
+ */
+function referring(): SceneDocument {
+  const [cart] = nodesFrom(
+    <TrackFrame id="cart">
+      <Weight mass={1} position={[0, 0]} />
+    </TrackFrame>,
+  );
+  const [weight] = cart!.children;
+
+  return {
+    root: 'Scene',
+    definitions: [
+      {
+        name: 'Scene',
+        parameters: [
+          { name: 'label', type: 'label' },
+          { name: 'bob', type: 'point' },
+        ],
+        body: [
+          {
+            ...cart!,
+            props: { ...cart!.props, id: parameterOf('label') },
+            children: [
+              {
+                ...weight!,
+                props: { ...weight!.props, position: parameterOf('bob') },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe('Editor, a prop holding a reference', () => {
+  test('the properties pane shows the name, and offers no editor for it', () => {
+    render(<Editor initialDocument={referring()} />);
+    const props = select('TrackFrame');
+
+    // Shown, not edited: the literal editor would let a keystroke replace the
+    // reference with whatever was typed, which is a loss no undo announces.
+    expect(within(props).getByText('label')).toBeVisible();
+    expect(within(props).queryByLabelText('Id')).toBeNull();
+
+    // The props that are not references are editable as ever.
+    expect(within(props).getByLabelText('Angle')).toBeVisible();
+  });
+
+  test('a referenced point gets no handle, so a drag cannot overwrite it', () => {
+    const { container } = render(<Editor initialDocument={referring()} />);
+    select('Weight');
+
+    // Both sit at the pane's corner: the cart at its own origin, and the
+    // weight at the component default `bob` falls back to, having been given
+    // nothing. Eighteen pixels to the unit, as everywhere else here.
+    dragScene(container, [0, 0], [9, 0], [18, 0]);
+
+    // Whatever the drag caught, it was not the weight's position: that prop
+    // still refers to `bob`. A handle offered at the default and a drag that
+    // wrote a literal over the reference is what this rules out.
+    expect(code()).toContain('position={bob}');
   });
 });
 

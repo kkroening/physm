@@ -1,9 +1,10 @@
 import { definitionOf, placeholderPath } from './sceneDocument';
-import { plainProps } from './propValue';
+import type { PropValue } from './propValue';
 import type {
   ComponentRef,
   Definition,
   DocNode,
+  Parameter,
   SceneDocument,
 } from './sceneDocument';
 
@@ -168,6 +169,113 @@ function tagOf(type: Exclude<ComponentRef, { kind: 'children' }>): string {
   return name;
 }
 
+/** A JavaScript identifier, which is what a parameter is bound as. */
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Why a declared parameter cannot be written, or `null`.
+ *
+ * Every other name this module writes is checked before it is written -- a tag
+ * that is not a component name, a prop name JSX cannot spell, a definition name
+ * that shadows an import -- and for the same reason each time: evaluated anyway
+ * it builds a different scene, or no module at all. A parameter is a second
+ * class of binding, and it earns the same check.
+ *
+ * `children` is the sharpest of them, because without a place for children it
+ * *compiles*: the emitted function binds `children` from its props, while
+ * `elementOf` strips them out before building the scope, so a reference to it
+ * resolves to the argument in one half of the round trip and to nothing in the
+ * other.
+ */
+function parameterRefusal(
+  definition: Definition,
+  { name }: Parameter,
+  bound: ReadonlySet<string>,
+  seen: ReadonlySet<string>,
+): string | null {
+  const where = `, declared by ${definition.name}`;
+
+  if (!IDENTIFIER.test(name)) {
+    return (
+      `'${name}' cannot be a parameter name${where}: a parameter is bound as ` +
+      'an identifier, which starts with a letter, underscore or dollar and ' +
+      'holds only letters, digits, underscores and dollars.'
+    );
+  }
+
+  if (name === 'children') {
+    return (
+      `'children' cannot be a parameter name${where}: that is what a ` +
+      "component's children are bound as, and the two would not agree."
+    );
+  }
+
+  if (seen.has(name)) {
+    return `'${name}' is declared twice${where}.`;
+  }
+
+  return bound.has(name)
+    ? `'${name}' cannot be a parameter name${where}: the module already ` +
+        'binds it, and the parameter would shadow it wherever the body ' +
+        'names it.'
+    : null;
+}
+
+/** What a declared parameter's type is, written as TypeScript. */
+const PARAMETER_TYPES: Record<Parameter['type'], string> = {
+  scalar: 'number',
+  integer: 'number',
+  angle: 'number',
+  point: 'readonly [number, number]',
+  label: 'string',
+};
+
+/**
+ * A definition's parameter list, as a destructuring and a type.
+ *
+ * A parameter with a default is optional to a caller and defaulted in the
+ * destructuring, which is how the emitted function reproduces what `elementOf`
+ * does when an instance leaves one out.
+ */
+function signatureOf(
+  doc: SceneDocument,
+  definition: Definition,
+  moduleNames: ReadonlySet<string>,
+): string {
+  const parameters = definition.parameters ?? [];
+  const takesChildren = placeholderPath(doc, definition.name) !== null;
+
+  if (!parameters.length && !takesChildren) {
+    return '';
+  }
+
+  const seen = new Set<string>();
+  for (const parameter of parameters) {
+    const refusal = parameterRefusal(definition, parameter, moduleNames, seen);
+    if (refusal) {
+      throw new Error(refusal);
+    }
+
+    seen.add(parameter.name);
+  }
+
+  const bound = [
+    ...parameters.map(({ name, default: value }) =>
+      value === undefined ? name : `${name} = ${literal(value)}`,
+    ),
+    ...(takesChildren ? ['children'] : []),
+  ];
+  const typed = [
+    ...parameters.map(
+      ({ name, type, default: value }) =>
+        `${name}${value === undefined ? '' : '?'}: ${PARAMETER_TYPES[type]}`,
+    ),
+    ...(takesChildren ? ['children?: ReactNode'] : []),
+  ];
+
+  return `{ ${bound.join(', ')} }: { ${typed.join('; ')} }`;
+}
+
 /**
  * The props worth writing: everything but what a building block would have
  * anyway.
@@ -176,19 +284,26 @@ function tagOf(type: Exclude<ComponentRef, { kind: 'children' }>): string {
  * meant to read like source a person wrote, and a person does not write
  * `centered={true}` on every box.
  */
-function writtenProps(node: DocNode): [string, unknown][] {
+function writtenProps(node: DocNode): [string, PropValue][] {
   const specs = node.type.kind === 'core' ? node.type.component.meta.props : {};
 
   // `undefined` is absent to every component, and writing it would say
   // something different under `exactOptionalPropertyTypes`.
-  return Object.entries(plainProps(node.props)).filter(([name, value]) => {
+  return Object.entries(node.props).filter(([name, prop]) => {
+    // A reference is always written: what it resolves to depends on what the
+    // instance passes, so it cannot be compared against a default here -- and
+    // omitting it would replace a parameter with silence.
+    if (prop.kind !== 'literal') {
+      return true;
+    }
+
     const spec = (specs as Record<string, { default?: unknown } | undefined>)[
       name
     ];
 
     return (
-      value !== undefined &&
-      !(spec && 'default' in spec && sameValue(spec.default, value))
+      prop.value !== undefined &&
+      !(spec && 'default' in spec && sameValue(spec.default, prop.value))
     );
   });
 }
@@ -256,8 +371,9 @@ function constantsOf(
       // imported composite's types live in a module the document does not
       // hold, so a tuple or a literal union there would stop compiling.
       if (node.type.kind === 'core') {
-        for (const [prop, value] of writtenProps(node)) {
-          if (compound(value)) {
+        for (const [prop, held] of writtenProps(node)) {
+          if (held.kind === 'literal' && compound(held.value)) {
+            const value = held.value;
             try {
               const text = literal(value);
               uses.set(text, [...(uses.get(text) ?? []), prop]);
@@ -306,6 +422,22 @@ function constantsOf(
 
 /** No constants at all: what a node the emitter cannot type is written with. */
 const NO_CONSTANTS: ReadonlyMap<string, string> = new Map();
+
+/**
+ * Every name a definition's parameters bind.
+ *
+ * Kept apart from `boundNames`, which is the names the *module* binds: a
+ * hoisted constant must avoid both, since a parameter shadows it inside the one
+ * function that would name it -- but a parameter may only be refused for
+ * colliding with the module's own.
+ */
+function parameterNames(doc: SceneDocument): Set<string> {
+  return new Set(
+    doc.definitions.flatMap(({ parameters }) =>
+      (parameters ?? []).map(({ name }) => name),
+    ),
+  );
+}
 
 /** Every name the module binds, which a constant's may not be. */
 function boundNames(doc: SceneDocument): Set<string> {
@@ -483,7 +615,20 @@ function importsOf(doc: SceneDocument): string[] {
  * of Prettier's line-breaking living in here.
  */
 export default function emitScene(doc: SceneDocument): EmittedScene {
-  const constants = constantsOf(doc, boundNames(doc));
+  const bound = boundNames(doc);
+  const constants = constantsOf(
+    doc,
+    new Set([...bound, ...parameterNames(doc)]),
+  );
+
+  /** What each definition declares, for checking the references to it. */
+  const declared = new Map(
+    doc.definitions.map(({ name, parameters }) => [
+      name,
+      new Set((parameters ?? []).map((parameter) => parameter.name)),
+    ]),
+  );
+
   let source = '';
   const ranges = new Map<string, readonly [number, number]>();
   const write = (text: string): void => {
@@ -511,9 +656,26 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
     const tag = tagOf(node.type);
     // A value that cannot be written says which one, and where it is.
     const usable = node.type.kind === 'core' ? constants : NO_CONSTANTS;
-    const written = (name: string, value: unknown): string => {
+    const written = (
+      name: string,
+      held: PropValue | { value: unknown },
+    ): string => {
       try {
-        return attribute(name, value, usable);
+        // A reference is an identifier in the emitted source, naming the
+        // parameter of the enclosing function -- not a value to write out. One
+        // naming a parameter that function does not take would be written just
+        // the same, as an unbound identifier, so it is refused here instead.
+        if ('kind' in held && held.kind === 'parameter') {
+          if (!declared.get(definition)?.has(held.name)) {
+            throw new Error(
+              `it refers to '${held.name}', which ${definition} does not take.`,
+            );
+          }
+
+          return `${name}={${held.name}}`;
+        }
+
+        return attribute(name, held.value, usable);
       } catch (error) {
         throw new Error(
           `Cannot write '${name}' on <${tag}> at ${rangeKey(definition, path)}: ` +
@@ -522,8 +684,8 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
       }
     };
     const attributes = [
-      ...(node.key === undefined ? [] : [written('key', node.key)]),
-      ...writtenProps(node).map(([name, value]) => written(name, value)),
+      ...(node.key === undefined ? [] : [written('key', { value: node.key })]),
+      ...writtenProps(node).map(([name, held]) => written(name, held)),
     ];
     const opening = [tag, ...attributes].join(' ');
 
@@ -550,11 +712,8 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
       throw new Error(`'${definition.name}' cannot be a component name.`);
     }
 
-    const props = placeholderPath(doc, definition.name)
-      ? '{ children }: { children?: ReactNode }'
-      : '';
     write(
-      `${isRoot ? 'export default ' : ''}function ${definition.name}(${props}): ReactElement {\n`,
+      `${isRoot ? 'export default ' : ''}function ${definition.name}(${signatureOf(doc, definition, bound)}): ReactElement {\n`,
     );
 
     // A lone `{children}` goes in a fragment too: in parentheses by itself it

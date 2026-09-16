@@ -10,14 +10,14 @@ import FixedFrame from './../react/FixedFrame';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
-import { literalOf } from './propValue';
+import { literalOf, parameterOf } from './propValue';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
 import emitScene, { rangeKey } from './emitScene';
 import ts from 'typescript';
 import { documentFrom, elementOf, nodesFrom } from './sceneDocument';
 import type CoreScene from './../Scene';
-import type { DocNode, SceneDocument } from './sceneDocument';
+import type { DocNode, Parameter, SceneDocument } from './sceneDocument';
 import type { ReactElement } from 'react';
 
 /**
@@ -338,6 +338,261 @@ function withProp(prop: string, value: unknown): SceneDocument {
     ],
   };
 }
+
+/**
+ * A `Pendulum` whose bob hangs at a point the instance passes, instantiated
+ * twice at different points -- the case a document of literals cannot express
+ * at all. The rod's far end and the weight both refer to it, so one argument
+ * moves two props.
+ */
+function parameterised(withDefault: boolean): SceneDocument {
+  const [arm] = nodesFrom(
+    <RotationalFrame>
+      <Line endPos={[0, -1]} lineWidth={0.1} />
+      <Weight mass={3} position={[0, -1]} />
+    </RotationalFrame>,
+  );
+  const [rod, bob] = arm!.children;
+  const at = (node: DocNode, prop: string): DocNode => ({
+    ...node,
+    props: { ...node.props, [prop]: parameterOf('bob') },
+  });
+
+  return {
+    root: 'Scene',
+    definitions: [
+      {
+        name: 'Scene',
+        body: nodesFrom(<TrackFrame id="cart" />).map((cart) => ({
+          ...cart,
+          children: [
+            { ...instance('Pendulum'), props: { bob: literalOf([4, 0]) } },
+            withDefault
+              ? instance('Pendulum')
+              : { ...instance('Pendulum'), props: { bob: literalOf([7, 0]) } },
+          ],
+        })),
+      },
+      {
+        name: 'Pendulum',
+        parameters: [
+          {
+            name: 'bob',
+            type: 'point' as const,
+            ...(withDefault ? { default: [9, 0] } : {}),
+          },
+        ],
+        body: [
+          {
+            ...arm!,
+            children: [at(rod!, 'endPos'), at(bob!, 'position')],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe('a definition that takes parameters', () => {
+  test('two instances at different points build different scenes', () => {
+    const scene = buildScene(elementOf(parameterised(false)));
+    const [first, second] = scene.frames[0]!.frames;
+
+    // Each instance resolved `bob` against what it was passed, so the two
+    // pendulums differ -- which is the whole point of a parameter, and is
+    // unreachable by a document that can only hold literals.
+    expect(first!.weights[0]!.position[0]).toBeCloseTo(4, 9);
+    expect(second!.weights[0]!.position[0]).toBeCloseTo(7, 9);
+  });
+
+  test('an instance that passes nothing gets the declared default', () => {
+    const scene = buildScene(elementOf(parameterised(true)));
+    const [first, second] = scene.frames[0]!.frames;
+
+    expect(first!.weights[0]!.position[0]).toBeCloseTo(4, 9);
+    expect(second!.weights[0]!.position[0]).toBeCloseTo(9, 9);
+  });
+
+  test('the emitted module takes the parameter and passes it', () => {
+    const source = expectRoundTrip(parameterised(false));
+
+    // The signature binds and types it; the body refers to it by name rather
+    // than to the number it happened to resolve to; the caller passes one.
+    expect(source).toContain(
+      'function Pendulum({ bob }: { bob: readonly [number, number] }): ReactElement',
+    );
+    expect(source).toContain('endPos={bob}');
+    expect(source).toContain('<Pendulum bob={[4, 0]} />');
+    expect(source).toContain('<Pendulum bob={[7, 0]} />');
+
+    // And nowhere does the reference get flattened into its argument.
+    expect(source).not.toContain('endPos={[4, 0]}');
+  });
+
+  test('a default is optional to the caller and defaulted in the signature', () => {
+    const source = expectRoundTrip(parameterised(true));
+
+    expect(source).toContain(
+      'function Pendulum({ bob = [9, 0] }: { bob?: readonly [number, number] }): ReactElement',
+    );
+    expect(source).toContain('<Pendulum />');
+  });
+
+  test('an argument explicitly undefined falls to the declared default', () => {
+    // `<Pendulum bob={undefined} />` leaves the prop present and holding
+    // nothing, which is a state `literalProps` genuinely produces. A spread
+    // would copy that `undefined` over the default beneath it, where the
+    // emitted `{ bob = [9, 0] }` is triggered by exactly that `undefined` --
+    // so the round trip is what catches the two disagreeing.
+    const declared = parameterised(true);
+    const doc: SceneDocument = {
+      ...declared,
+      definitions: declared.definitions.map((definition) =>
+        definition.name === 'Scene'
+          ? {
+              ...definition,
+              body: definition.body.map((cart) => ({
+                ...cart,
+                children: cart.children.map((child, index) =>
+                  index === 1
+                    ? { ...child, props: { bob: literalOf(undefined) } }
+                    : child,
+                ),
+              })),
+            }
+          : definition,
+      ),
+    };
+    const scene = buildScene(elementOf(doc));
+
+    expect(scene.frames[0]!.frames[1]!.weights[0]!.position[0]).toBeCloseTo(
+      9,
+      9,
+    );
+    expectRoundTrip(doc);
+  });
+
+  test('every parameter type is written, and the module type-checks', () => {
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          body: [{ ...instance('Dial'), props: { turn: literalOf(0.5) } }],
+        },
+        {
+          name: 'Dial',
+          parameters: [
+            { name: 'turn', type: 'angle', default: 0 },
+            { name: 'span', type: 'scalar', default: 1 },
+            { name: 'steps', type: 'integer', default: 2 },
+            { name: 'at', type: 'point', default: [0, 0] },
+            { name: 'tag', type: 'label', default: 'dial' },
+          ],
+          body: nodesFrom(<RotationalFrame />).map((frame) => ({
+            ...frame,
+            props: { id: parameterOf('tag'), stiffness: parameterOf('span') },
+          })),
+        },
+      ],
+    };
+    const { source } = emitScene(doc);
+
+    expect(source).toContain(
+      'function Dial({ turn = 0, span = 1, steps = 2, at = [0, 0], tag = "dial" }: ' +
+        '{ turn?: number; span?: number; steps?: number; ' +
+        'at?: readonly [number, number]; tag?: string }): ReactElement',
+    );
+    expect(typeCheck({ 'Scene.tsx': source })).toEqual([]);
+  });
+});
+
+describe('a parameter the emitter cannot write', () => {
+  /** A `Dial` declaring `parameters`, instantiated once by the scene. */
+  const declaring = (parameters: readonly Parameter[]): SceneDocument => ({
+    root: 'Scene',
+    definitions: [
+      { name: 'Scene', body: [instance('Dial')] },
+      { name: 'Dial', parameters, body: nodesFrom(<RotationalFrame />) },
+    ],
+  });
+
+  test("'children' is refused, because a component's children are bound as it", () => {
+    expect(() =>
+      emitScene(declaring([{ name: 'children', type: 'label' }])),
+    ).toThrow(/'children' cannot be a parameter name/);
+  });
+
+  test('a name the module already binds is refused', () => {
+    // The body writes `<RotationalFrame />`, so a parameter of that name would
+    // resolve the tag to the parameter -- the same failure a definition name
+    // shadowing an import is refused for.
+    expect(() =>
+      emitScene(declaring([{ name: 'RotationalFrame', type: 'label' }])),
+    ).toThrow(/the module already binds it/);
+  });
+
+  test('a name that is not an identifier is refused, and so is a repeat', () => {
+    expect(() =>
+      emitScene(declaring([{ name: 'half-length', type: 'scalar' }])),
+    ).toThrow(/is not an identifier|bound as an identifier/);
+    expect(() =>
+      emitScene(
+        declaring([
+          { name: 'span', type: 'scalar' },
+          { name: 'span', type: 'label' },
+        ]),
+      ),
+    ).toThrow(/declared twice/);
+  });
+
+  test('a hoisted constant is named around the parameters, not over them', () => {
+    // A repeated value is lifted to the module and named after the prop that
+    // carries it -- and a parameter of that name would shadow the constant
+    // inside the one function that names it.
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        { name: 'Scene', body: [instance('Dial')] },
+        {
+          name: 'Dial',
+          parameters: [{ name: 'POSITION', type: 'scalar', default: 1 }],
+          body: nodesFrom(
+            <RotationalFrame>
+              <Weight mass={1} position={[4, 0]} />
+              <Weight mass={2} position={[4, 0]} />
+              <Weight mass={3} position={[4, 0]} />
+            </RotationalFrame>,
+          ),
+        },
+      ],
+    };
+    const { source } = emitScene(doc);
+
+    expect(source).toMatch(/^const POSITION_2 = \[4, 0\];$/m);
+    expect(source).not.toMatch(/^const POSITION = /m);
+  });
+
+  test('a reference to a parameter the definition does not take is refused', () => {
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        { name: 'Scene', body: [instance('Dial')] },
+        {
+          name: 'Dial',
+          body: nodesFrom(<RotationalFrame />).map((frame) => ({
+            ...frame,
+            props: { id: parameterOf('tag') },
+          })),
+        },
+      ],
+    };
+
+    expect(() => emitScene(doc)).toThrow(
+      /refers to 'tag', which Dial does not take/,
+    );
+  });
+});
 
 describe('emitScene', () => {
   test('writes a module that rebuilds the scene, every kind of value included', () => {
