@@ -24,6 +24,12 @@ That is where [0016 page 3](docs/issues/0016/03-scope.md)'s declaration block
 gets built, and it is the first thing in this effort someone using the editor
 can see.
 
+Extraction is tied to the same step: it refuses a subtree that refers to a
+parameter rather than carrying the declaration across
+([0020](docs/issues/0020.md)), and threading a reference through a new
+definition's instance is promote-to-prop's edit pointed the other way. Worth
+building once, with it.
+
 **[0019](docs/issues/0019.md) is filed and waiting**, and nothing here depends
 on it. Its small half -- what *names* a component -- looks ready to decide; its
 large half wants evidence rather than argument, namely whether anything besides
@@ -31,16 +37,17 @@ the demo ever wants the mounted route.
 
 ## Next — 0016
 
-**Where it stands: the first prep step has landed, and the second is the
-invasive one.** Both come first because each grows more expensive with every
-site built before it. Roughly one PR each, ordered by risk rather than appetite;
-the [staging page](docs/issues/0016/10-staging.md) argues the order.
+**Where it stands: both prep steps have landed in the document, and what is
+left of the second is the editor surface.** Both came first because each grows
+more expensive with every site built before it. Roughly one PR each, ordered by
+risk rather than appetite; the
+[staging page](docs/issues/0016/10-staging.md) argues the order.
 
 1. ~~**A prop value becomes a tagged thing**~~ — done.
-2. **Parameters, literal values only.** A definition declares typed parameters, an
-   instance passes literals, a child prop may be a parameter reference and
-   nothing more. This is promote-to-prop, and it forces the scope and
-   declaration-block design without needing an expression language.
+2. ~~**Parameters, literal values only**~~ — done in the document: a definition
+   declares typed parameters, an instance passes literals, a child prop may be
+   a parameter reference and nothing more. **Promote to prop** is what is left
+   of it, and is in view above.
 3. **Structural expressions**, stored as a DAG and emitted in constructor form
    -- `mul(halfLength, 2)`, never host arithmetic, so that signals and
    structural values share one node set. The emitter's constants heuristic is

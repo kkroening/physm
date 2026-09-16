@@ -1,22 +1,22 @@
 /**
- * What a prop in a document holds.
+ * What a prop in a document holds: a value written into it, or the name of a
+ * parameter the definition it sits in takes.
  *
- * One variant today, and the indirection is the whole point of the module.
- * [0016](../../../docs/issues/0016.md) has a prop hold an *expression* -- a
- * length computed from a parameter, an endpoint read from a pose -- and a
- * tagged value is what lets that arrive as a second member of this union
- * rather than as a change to every prop site in the editor.
- *
- * The tag is doing that work already, before the variant exists: a caller that
- * reaches for `.value` is a caller that can only handle a literal, so the day a
- * second member lands the compiler names it. Adding one as an experiment turns
- * up 34 such sites across the four files that consume a prop.
+ * The tag is the point of the module. A prop is read in a dozen places -- the
+ * scene pane's handles, the properties pane, the tree row, the emitter -- and
+ * most of them can only act on a value that is actually *there*, so what they
+ * need from the type is to be stopped at the ones that are not. Reaching for
+ * `.value` is how a caller says so, and the compiler names every such caller
+ * whenever the union grows. [0016](../../../docs/issues/0016.md) has a third
+ * member arriving: a prop holding an *expression*, a length computed from a
+ * parameter or an endpoint read from a pose.
  *
  * It names only those, though, which is worth knowing before relying on it. A
  * caller that never reaches for `.value` -- one that passes a whole prop to
  * `JSON.stringify`, or to a parameter typed `unknown` -- goes on compiling and
- * silently shows or writes the wrapper. Those sites are the readonly displays,
- * the tree row's summary and find, and they are covered by tests instead.
+ * silently shows or writes the wrapper. Those sites are the readonly displays
+ * and the tree row's summary and find; what checks them is `Editor.test.tsx`,
+ * which renders a node whose prop holds a reference and reads what each shows.
  */
 export type PropValue = LiteralValue | ParameterValue;
 
@@ -119,11 +119,13 @@ export function resolvedProps(
 /**
  * The value, when a caller can only act on a literal one.
  *
- * `undefined` for a reference, which is the same answer as for an absent prop
- * -- and the right one for every caller here. A gizmo handle places a point the
- * document states; a point that depends on what an instance was given has no
- * fixed place to put a handle, so offering none is correct rather than a
- * fallback.
+ * `undefined` for a reference, which is the same answer as for an absent prop.
+ * That is a narrowing rather than a policy, and the difference matters: what a
+ * reference *means* to a caller is the caller's to decide, and a `?? default`
+ * written over this would place a handle at a value the document never states.
+ * So the callers that must withhold something withhold it themselves -- the
+ * scene pane drops a referenced point before it reaches here -- and this is
+ * what lets them read a literal without a cast.
  */
 export function literalIn(prop: PropValue | undefined): unknown {
   return prop?.kind === 'literal' ? prop.value : undefined;

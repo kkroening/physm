@@ -7,7 +7,7 @@ import TrackFrame from './../react/TrackFrame';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
 import starterDocument from './starterDocument';
-import { literalOf } from './propValue';
+import { literalOf, parameterOf } from './propValue';
 import {
   definitionOf,
   deletionRefusal,
@@ -683,5 +683,43 @@ describe("a component's place for children", () => {
     );
     expect(nameRefusal(doc, 'Children')).not.toBeNull();
     expect(nameRefusal(doc, 'ReactNode')).not.toBeNull();
+  });
+
+  test('a subtree that refers to a parameter cannot be extracted', () => {
+    // The new component would declare nothing, so the reference would resolve
+    // against an empty scope and the weight would quietly move to the
+    // component's own default -- an extraction that changes the scene, which
+    // is the one thing this edit promises not to do. The compiler does not
+    // raise it: the prop crosses whole rather than through `.value`.
+    const [frame] = nodesFrom(
+      <RotationalFrame id="arm">
+        <Weight mass={1} position={[1, 0]} />
+      </RotationalFrame>,
+    );
+    const doc: SceneDocument = {
+      root: 'Scene',
+      definitions: [
+        {
+          name: 'Scene',
+          parameters: [{ name: 'bob', type: 'point' }],
+          body: [
+            {
+              ...frame!,
+              children: frame!.children.map((weight) => ({
+                ...weight,
+                props: { ...weight.props, position: parameterOf('bob') },
+              })),
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractionRefusal(doc, 'Scene', [0])).toMatch(
+      /position refers to Scene's bob/,
+    );
+    expect(() => extractComponent(doc, 'Scene', [0], 'Arm')).toThrow(
+      /position refers to Scene's bob/,
+    );
   });
 });

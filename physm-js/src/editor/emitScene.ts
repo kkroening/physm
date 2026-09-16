@@ -169,6 +169,58 @@ function tagOf(type: Exclude<ComponentRef, { kind: 'children' }>): string {
   return name;
 }
 
+/** A JavaScript identifier, which is what a parameter is bound as. */
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Why a declared parameter cannot be written, or `null`.
+ *
+ * Every other name this module writes is checked before it is written -- a tag
+ * that is not a component name, a prop name JSX cannot spell, a definition name
+ * that shadows an import -- and for the same reason each time: evaluated anyway
+ * it builds a different scene, or no module at all. A parameter is a second
+ * class of binding, and it earns the same check.
+ *
+ * `children` is the sharpest of them, because without a place for children it
+ * *compiles*: the emitted function binds `children` from its props, while
+ * `elementOf` strips them out before building the scope, so a reference to it
+ * resolves to the argument in one half of the round trip and to nothing in the
+ * other.
+ */
+function parameterRefusal(
+  definition: Definition,
+  { name }: Parameter,
+  bound: ReadonlySet<string>,
+  seen: ReadonlySet<string>,
+): string | null {
+  const where = `, declared by ${definition.name}`;
+
+  if (!IDENTIFIER.test(name)) {
+    return (
+      `'${name}' cannot be a parameter name${where}: a parameter is bound as ` +
+      'an identifier, which starts with a letter, underscore or dollar and ' +
+      'holds only letters, digits, underscores and dollars.'
+    );
+  }
+
+  if (name === 'children') {
+    return (
+      `'children' cannot be a parameter name${where}: that is what a ` +
+      "component's children are bound as, and the two would not agree."
+    );
+  }
+
+  if (seen.has(name)) {
+    return `'${name}' is declared twice${where}.`;
+  }
+
+  return bound.has(name)
+    ? `'${name}' cannot be a parameter name${where}: the module already ` +
+        'binds it, and the parameter would shadow it wherever the body ' +
+        'names it.'
+    : null;
+}
+
 /** What a declared parameter's type is, written as TypeScript. */
 const PARAMETER_TYPES: Record<Parameter['type'], string> = {
   scalar: 'number',
@@ -185,12 +237,26 @@ const PARAMETER_TYPES: Record<Parameter['type'], string> = {
  * destructuring, which is how the emitted function reproduces what `elementOf`
  * does when an instance leaves one out.
  */
-function signatureOf(doc: SceneDocument, definition: Definition): string {
+function signatureOf(
+  doc: SceneDocument,
+  definition: Definition,
+  moduleNames: ReadonlySet<string>,
+): string {
   const parameters = definition.parameters ?? [];
   const takesChildren = placeholderPath(doc, definition.name) !== null;
 
   if (!parameters.length && !takesChildren) {
     return '';
+  }
+
+  const seen = new Set<string>();
+  for (const parameter of parameters) {
+    const refusal = parameterRefusal(definition, parameter, moduleNames, seen);
+    if (refusal) {
+      throw new Error(refusal);
+    }
+
+    seen.add(parameter.name);
   }
 
   const bound = [
@@ -356,6 +422,22 @@ function constantsOf(
 
 /** No constants at all: what a node the emitter cannot type is written with. */
 const NO_CONSTANTS: ReadonlyMap<string, string> = new Map();
+
+/**
+ * Every name a definition's parameters bind.
+ *
+ * Kept apart from `boundNames`, which is the names the *module* binds: a
+ * hoisted constant must avoid both, since a parameter shadows it inside the one
+ * function that would name it -- but a parameter may only be refused for
+ * colliding with the module's own.
+ */
+function parameterNames(doc: SceneDocument): Set<string> {
+  return new Set(
+    doc.definitions.flatMap(({ parameters }) =>
+      (parameters ?? []).map(({ name }) => name),
+    ),
+  );
+}
 
 /** Every name the module binds, which a constant's may not be. */
 function boundNames(doc: SceneDocument): Set<string> {
@@ -533,7 +615,20 @@ function importsOf(doc: SceneDocument): string[] {
  * of Prettier's line-breaking living in here.
  */
 export default function emitScene(doc: SceneDocument): EmittedScene {
-  const constants = constantsOf(doc, boundNames(doc));
+  const bound = boundNames(doc);
+  const constants = constantsOf(
+    doc,
+    new Set([...bound, ...parameterNames(doc)]),
+  );
+
+  /** What each definition declares, for checking the references to it. */
+  const declared = new Map(
+    doc.definitions.map(({ name, parameters }) => [
+      name,
+      new Set((parameters ?? []).map((parameter) => parameter.name)),
+    ]),
+  );
+
   let source = '';
   const ranges = new Map<string, readonly [number, number]>();
   const write = (text: string): void => {
@@ -567,8 +662,16 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
     ): string => {
       try {
         // A reference is an identifier in the emitted source, naming the
-        // parameter of the enclosing function -- not a value to write out.
+        // parameter of the enclosing function -- not a value to write out. One
+        // naming a parameter that function does not take would be written just
+        // the same, as an unbound identifier, so it is refused here instead.
         if ('kind' in held && held.kind === 'parameter') {
+          if (!declared.get(definition)?.has(held.name)) {
+            throw new Error(
+              `it refers to '${held.name}', which ${definition} does not take.`,
+            );
+          }
+
           return `${name}={${held.name}}`;
         }
 
@@ -610,7 +713,7 @@ export default function emitScene(doc: SceneDocument): EmittedScene {
     }
 
     write(
-      `${isRoot ? 'export default ' : ''}function ${definition.name}(${signatureOf(doc, definition)}): ReactElement {\n`,
+      `${isRoot ? 'export default ' : ''}function ${definition.name}(${signatureOf(doc, definition, bound)}): ReactElement {\n`,
     );
 
     // A lone `{children}` goes in a fragment too: in parentheses by itself it
