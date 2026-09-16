@@ -1,4 +1,5 @@
 import Scene from './Scene';
+import { computed } from './../expression';
 import assembleScene from './assembleScene';
 import { addAnchor } from './resolveAnchor';
 import { refuseChildren } from './sceneNodes';
@@ -211,7 +212,15 @@ function walkNode(node: ReactNode, index: number, walk: Walk): void {
     }
 
     refuseMissingProps(type, props);
-    const node = sceneNode(props, { key: `@${path}`, frameId: walk.frameId });
+
+    // A prop may be computed rather than stated, and what a building block is
+    // built from is the value. Folded here, where the walk hands props over,
+    // so the same node set works in a hand-written component and in a module
+    // the editor wrote.
+    const node = sceneNode(computed(props), {
+      key: `@${path}`,
+      frameId: walk.frameId,
+    });
     if (node.slot !== 'frame') {
       refuseChildren(
         (type as { meta?: { name: string } }).meta?.name ?? 'building block',

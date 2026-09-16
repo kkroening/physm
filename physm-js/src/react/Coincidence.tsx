@@ -1,25 +1,30 @@
 import resolveAnchor from './resolveAnchor';
 import { CoincidenceConstraint } from './../Constraint';
+import { computed } from './../expression';
 import { useId } from 'react';
 import { refuseChildren, useSceneNode } from './sceneNodes';
+import type { Computable } from './../expression';
 import type { ComponentMeta } from './componentMeta';
 import type { ConstraintEnd } from './resolveAnchor';
 import type { ConstraintNode } from './sceneNodes';
 import type { PositionLike } from './../Scene';
 
-export interface CoincidenceProps {
+interface CoincidenceValues {
   frame1: ConstraintEnd;
   frame2: ConstraintEnd;
   position1?: PositionLike;
   position2?: PositionLike | null;
 }
 
+/** What an element may be given: any of them may be computed. */
+export type CoincidenceProps = Computable<CoincidenceValues>;
+
 function describeCoincidence({
   frame1,
   frame2,
   position1,
   position2,
-}: CoincidenceProps): ConstraintNode {
+}: CoincidenceValues): ConstraintNode {
   return {
     slot: 'constraint',
     describe: () =>
@@ -61,7 +66,11 @@ function describeCoincidence({
  */
 export default function Coincidence(props: CoincidenceProps): null {
   refuseChildren('Coincidence', (props as { children?: unknown }).children);
-  useSceneNode(useId(), describeCoincidence(props), props);
+  useSceneNode(
+    useId(),
+    describeCoincidence(computed<CoincidenceValues>(props)),
+    props,
+  );
 
   return null;
 }
@@ -96,4 +105,4 @@ Coincidence.meta = {
     // No default: an omitted second point is solved for, from the pose.
     position2: { kind: 'point', relativeTo: 'frame2', label: 'Second point' },
   },
-} satisfies ComponentMeta<CoincidenceProps>;
+} satisfies ComponentMeta<CoincidenceValues>;

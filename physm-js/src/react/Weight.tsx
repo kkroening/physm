@@ -1,22 +1,27 @@
 import CoreWeight from './../Weight';
+import { computed } from './../expression';
 import { useId } from 'react';
 import { refuseChildren, useSceneNode } from './sceneNodes';
+import type { Computable } from './../expression';
 import type { ComponentMeta } from './componentMeta';
 import type { SceneNode } from './sceneNodes';
 import type { WeightOptions } from './../Weight';
 
-export interface WeightProps extends WeightOptions {
+interface WeightValues extends WeightOptions {
   mass: number;
 }
 
-function describeWeight({ mass, ...options }: WeightProps): SceneNode {
+/** What an element may be given: any of them may be computed. */
+export type WeightProps = Computable<WeightValues>;
+
+function describeWeight({ mass, ...options }: WeightValues): SceneNode {
   return { slot: 'weight', build: () => new CoreWeight(mass, options) };
 }
 
 /** A point mass in the enclosing frame's coordinates. */
 export default function Weight(props: WeightProps): null {
   refuseChildren('Weight', (props as { children?: unknown }).children);
-  useSceneNode(useId(), describeWeight(props), props);
+  useSceneNode(useId(), describeWeight(computed<WeightValues>(props)), props);
 
   return null;
 }
@@ -39,4 +44,4 @@ Weight.meta = {
     position: { kind: 'point', label: 'Position', default: [0, 0] },
     drag: { kind: 'number', label: 'Drag', default: 0 },
   },
-} satisfies ComponentMeta<WeightProps>;
+} satisfies ComponentMeta<WeightValues>;

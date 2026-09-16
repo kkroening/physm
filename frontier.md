@@ -14,30 +14,32 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**Structural expressions.** A prop needs to hold a *computation*:
-`mul(halfLength, 2)`, stored as a DAG and emitted in constructor form, so that
-signal and structural values share one node set.
+**The expression graph viewer** ([0018](docs/issues/0018.md)), next and
+deliberately before the rest. The node set exists and a hand-written component
+can compute a prop; 0018 argues the viewer earns its place as a *design check*
+-- "a graph you cannot draw is a graph you have stored wrongly" -- and that the
+check is cheapest while there are three node kinds rather than thirty. There
+are three now.
 
-The prerequisite has landed -- the document now records that two props hold one
-value, where the emitter used to guess it back from equality -- so what is left
-is the node set itself: interior nodes and their constructors, evaluation
-against a scope, the emitter writing calls and binding a node used more than
-once, and a cycle refused rather than recursed into. The properties pane
-follows: somewhere to type `halfLength * 2`, and something to show when a prop
-holds one.
+**Then the document holds one.** A prop value gains the operation as a third
+variant, the properties pane gets somewhere to type `halfLength * 2` and
+something to show when a prop holds one, and the emitter writes the call and
+binds a node used more than once. The pieces the emitter needs are in place:
+sharing is recorded, and a shared node is already written by name.
 
-The expression graph viewer ([0018](docs/issues/0018.md)) stops being fallback
-work around here and starts being how the representation is checked.
+**Still open, and owed an answer around here:**
 
-**And the node set needs an owner, which decides where sharing lives.** Today
-the table that records it follows one *read* -- which is the right scope for
-what a read can state, and narrower than what the emitter can already write:
-`constantsOf` hoists across every definition, and `extractComponent` produces a
-node shared between two of them, where no reader can take that back because
-`documentFrom` yields one definition. A node set that outlives a single read
-has to be keyed to the document instead, which is a different object with a
-different lifetime rather than a widened parameter. Settle it with the node
-set, not after.
+- [0022](docs/issues/0022.md) -- promoting a prop widens its contract, and an
+  expression on a `length` prop asks the same question from the other side.
+  One answer serves both.
+- **Where a node set lives, once a reader can produce a multi-definition
+  document.** Sharing is recorded per *read* today, which is narrower than what
+  the emitter can already write -- `constantsOf` hoists across definitions, and
+  `extractComponent` makes a node shared between two of them, which no reader
+  can take back because `documentFrom` yields one definition. What forces the
+  wider scope is a reader that does not: a save format
+  ([0017](docs/issues/0017.md)), rather than the node set, which needs nothing
+  the read scope does not already give it.
 
 **[0022](docs/issues/0022.md) wants deciding first, or with it.** Promoting a
 prop widens its contract -- a `length` becomes a `scalar` and stops being
@@ -61,10 +63,9 @@ risk rather than appetite; the
 
 1. ~~**A prop value becomes a tagged thing**~~ — done.
 2. ~~**Parameters, literal values only**~~ — done.
-3. **Structural expressions** (in view), stored as a DAG and emitted in constructor form
-   -- `mul(halfLength, 2)`, never host arithmetic, so that signals and
-   structural values share one node set. The emitter's constants heuristic is
-   already gone: what it guessed at, the document now records.
+3. **Structural expressions** -- the node set and evaluation have landed, so a
+   hand-written component can compute a prop. What is left is the document
+   holding one and the emitter writing it, which is in view above.
 4. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
    Rust path hands external forces across once per batch.
@@ -219,6 +220,14 @@ wrongly -- so it is worth early and is never urgent.
 
 ## Done
 
+- **Expression nodes** — a prop can be computed rather than stated:
+  `position={vec(3, mul(halfLength, 2))}`. A constructor returns a node rather
+  than a result, so one form serves a hand-written component, the module the
+  editor writes, and the document's own storage; an operand is whatever object
+  was handed over, so binding a subexpression once and using it twice stores
+  one node with two edges. Both build routes fold a computed prop where props
+  are handed over, and a graph that reaches itself is named rather than
+  recursed into.
 - **Sharing, recorded rather than guessed** — a value object held by two props
   is one node in the document, so the emitter names it because the document
   says the two are one value rather than because they happen to agree. Two

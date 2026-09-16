@@ -1,13 +1,15 @@
+import { computed } from './../expression';
 import CoreTrackFrame from './../TrackFrame';
 import FrameIdContext from './FrameIdContext';
 import { ParentKeyContext, useSceneNode } from './sceneNodes';
 import { useContext, useId } from 'react';
+import type { Computable } from './../expression';
 import type { ComponentMeta } from './componentMeta';
 import type { FrameId } from './../Frame';
 import type { FrameNode, SceneNodeContext } from './sceneNodes';
 import type { ReactElement, ReactNode } from 'react';
 
-export interface TrackFrameProps {
+interface TrackFrameValues {
   children?: ReactNode;
   id?: FrameId;
   position?: number | readonly number[];
@@ -17,8 +19,18 @@ export interface TrackFrameProps {
   stiffness?: number;
 }
 
+/** What an element may be given: any of them may be computed. */
+export type TrackFrameProps = Computable<TrackFrameValues>;
+
 function describeTrackFrame(
-  { id, position, angle, initialState, resistance, stiffness }: TrackFrameProps,
+  {
+    id,
+    position,
+    angle,
+    initialState,
+    resistance,
+    stiffness,
+  }: TrackFrameValues,
   { key }: SceneNodeContext,
 ): FrameNode {
   const frameId = id ?? key;
@@ -52,7 +64,10 @@ export default function TrackFrame(props: TrackFrameProps): ReactElement {
   const { children } = props;
   const key = useId();
   const frameId = useContext(FrameIdContext);
-  const node = describeTrackFrame(props, { key, frameId });
+  const node = describeTrackFrame(computed<TrackFrameValues>(props), {
+    key,
+    frameId,
+  });
 
   useSceneNode(key, node, { ...props, frameId });
 
@@ -85,4 +100,4 @@ TrackFrame.meta = {
     resistance: { kind: 'number', label: 'Resistance', default: 0 },
     stiffness: { kind: 'number', label: 'Stiffness', default: 0 },
   },
-} satisfies ComponentMeta<TrackFrameProps>;
+} satisfies ComponentMeta<TrackFrameValues>;
