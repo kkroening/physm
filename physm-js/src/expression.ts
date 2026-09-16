@@ -26,6 +26,23 @@
  * and its whole rule is that "a structural expression may not read state".
  * Here that is one `Tick` parameter: an evaluation given one may use either
  * kind, and an evaluation given none refuses a signal by name.
+ *
+ * **The kind is a property of a value at run time, and deliberately not of its
+ * type.** A brand on what `worldPoint` returns would be the tighter guarantee
+ * where it held, and it would not hold: every operation takes `unknown`
+ * operands and refuses at run time naming what it got, because a document can
+ * hold a node nobody's constructor made. So a brand would propagate through
+ * hand-written TSX and lapse silently for the same scene read back out of a
+ * document -- and the two routes building the same scene is the property this
+ * binding exists to have.
+ *
+ * The run-time gate also has to exist either way: a `SceneDocument` holds prop
+ * values as `unknown`, and nothing on that path has a type to check. A
+ * type-level kind would therefore be a second and *partial* statement of a
+ * rule this one states totally, which is two rules to keep in step rather than
+ * one. `DecalView`'s union is the contrast rather than the parallel: there the
+ * run time has no way to notice a missing branch, so the type system is the
+ * only place that rule can live.
  */
 
 import * as mat3 from './Mat3';
@@ -91,6 +108,12 @@ const SIGNALS = {
    * number as an offset along the frame's own axis, and admitting that here
    * would make this the one place in the language where a scalar and a point
    * are the same thing.
+   *
+   * **`Scene.getWorldPosition` is this arithmetic plus a check that the scene
+   * contains the frame**, and the two should be one. They are not yet because
+   * collapsing them means `Tick` carrying the scene rather than its poses,
+   * which is a decision the consumer makes -- and which page 2's force
+   * channels, evaluated inside a Rust batch, may want to make differently.
    */
   worldPoint: (tick: Tick, frame: unknown, local: unknown) => {
     const id = label(frame);
@@ -509,7 +532,13 @@ export interface OperationInfo {
  * would still be handing over what `scalar` refuses.
  */
 export function operationNamed(name: string): OperationInfo | null {
-  return EVERY.get(name) ?? null;
+  const found = EVERY.get(name);
+
+  // Projected rather than handed back, because the table's own entry carries
+  // `apply` -- which runs the operation while skipping the arity check and the
+  // result check that every call inside the fold is wrapped in. A return type
+  // hides that field from a caller; it does not keep one from reaching it.
+  return found ? { signal: found.signal, arity: found.arity } : null;
 }
 
 /**

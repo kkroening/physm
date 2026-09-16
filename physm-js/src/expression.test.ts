@@ -1,7 +1,6 @@
 import * as mat3 from './Mat3';
 import {
   add,
-  operationNamed,
   computed,
   div,
   dot,
@@ -9,6 +8,7 @@ import {
   isOperation,
   mul,
   neg,
+  operationNamed,
   scale,
   sqrt,
   sub,
@@ -295,11 +295,8 @@ describe('a signal', () => {
     // The implementation declares three parameters and an author writes two.
     // A parser reading `operationNamed` and the fold checking the count have to
     // agree about which, or one hands `evaluate` a node the other will refuse.
-    expect(operationNamed('worldPoint')).toMatchObject({
-      arity: 2,
-      signal: true,
-    });
-    expect(operationNamed('mul')).toMatchObject({ arity: 2, signal: false });
+    expect(operationNamed('worldPoint')).toEqual({ arity: 2, signal: true });
+    expect(operationNamed('mul')).toEqual({ arity: 2, signal: false });
     expect(operationNamed('lerp')).toBe(null);
     expect(() =>
       evaluate(

@@ -45,6 +45,14 @@ sizes:
    a component's props *before* handing them over, and a prop that cannot be
    folded until the scene is posed has to be folded by whoever knows that --
    which is the component, not the boundary.
+
+   It also settles what a tick *is*. It carries a pose map today, which leaves
+   `worldPoint` duplicating `Scene.getWorldPosition` -- the same arithmetic,
+   minus that method's check that the scene contains the frame -- and leaves
+   nothing pairing a pose map with the scene it was made from. Carrying the
+   scene collapses both, and the reason not to do it sight unseen is that page
+   2's force channels are evaluated inside a Rust batch, where there may be no
+   `Scene` to carry.
 3. **Force channels**, which meet the Rust boundary: `tick_mut` holds its
    external-force slice constant for a batch, so such an expression is
    evaluated per *batch*. That is the granularity the demo already ships, so it
@@ -65,6 +73,11 @@ the gameplay case and says plainly that changing it is Karl's call.
   [0025](docs/issues/0025.md) (is there exponentiation). An answer to any
   constrains the others -- a `Length` type wants to know whether `x**2` yields
   one, and an `Angle` carrying a unit wants to know what a power of it means.
+
+  **Half of 0025 is answered**: `**` was an example rather than a requirement,
+  and the spelling is the implementer's call _(Karl, 2026-09-16)_. What is left
+  of it is whether the operation should exist at all. Worth writing into the
+  issue itself, which has not happened yet.
 - [0023](docs/issues/0023.md) -- whether to run a real mutation tester. Seven
   review rounds have found something the hand enumeration missed in five
   distinct ways, and a tool has no frame to miss things from.

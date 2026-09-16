@@ -1,5 +1,5 @@
 import Anchor from './Anchor';
-import { div, mul, sqrt, vec, xOf } from './../expression';
+import { div, mul, sqrt, vec, worldPoint, xOf } from './../expression';
 import Box from './Box';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './Circle';
@@ -724,6 +724,23 @@ describe('a prop that is computed rather than stated', () => {
         </RotationalFrame>,
       ),
     ).toThrow(/Expected a point, and found 3/);
+  });
+
+  test('a signal refuses at the boundary, in both routes', () => {
+    // The gate is that a value which cannot be known until the scene is posed
+    // never reaches a built scene, and *this* is where that has to hold: both
+    // routes fold a component's props as they hand them over. Asserted here
+    // rather than only on `computed`, so that a component folding for itself
+    // is a failing test rather than a hole nobody notices.
+    const rig = (
+      <RotationalFrame id="arm">
+        <Weight mass={worldPoint('arm', [0, 0])} />
+      </RotationalFrame>
+    );
+    const refusal = /mass: worldPoint is a signal/;
+
+    expect(() => buildScene(rig)).toThrow(refusal);
+    expect(() => assemble(rig)).toThrow(refusal);
   });
 
   test('a prop no operation can produce a value for is not widened', () => {

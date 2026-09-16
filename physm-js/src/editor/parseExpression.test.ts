@@ -92,8 +92,9 @@ describe('what a person types into a prop box', () => {
     ['lerp(1, 2)', 'There is no operation called lerp.'],
     [
       'worldPoint(a, b)',
-      'worldPoint reads where the scene has got to, and a property is ' +
-        'worked out when the scene is built rather than while it runs.',
+      'worldPoint cannot go in a property: it reads where the scene has got ' +
+        'to, and a property is worked out when the scene is built rather ' +
+        'than while it runs.',
     ],
     ['sqrt(1, 2)', 'sqrt takes 1 operand, and was given 2.'],
     ['vec(1)', 'vec takes 2 operands, and was given 1.'],

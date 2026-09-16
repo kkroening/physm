@@ -257,8 +257,9 @@ export default function parseExpression(text: string): Parsed {
     if (operation.signal) {
       return {
         refusal:
-          `${token.text} reads where the scene has got to, and a property is ` +
-          'worked out when the scene is built rather than while it runs.',
+          `${token.text} cannot go in a property: it reads where the scene ` +
+          'has got to, and a property is worked out when the scene is built ' +
+          'rather than while it runs.',
       };
     }
 
