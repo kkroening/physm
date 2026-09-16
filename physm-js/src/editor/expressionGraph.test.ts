@@ -1,6 +1,7 @@
 import { add, div, mul, sub, vec } from './../expression';
 import { expressionGraph } from './expressionGraph';
 import { literalOf, parameterOf } from './propValue';
+import type { PropValue } from './propValue';
 
 describe('a prop drawn as a graph', () => {
   test('a prop holding no expression has no graph', () => {
@@ -18,8 +19,8 @@ describe('a prop drawn as a graph', () => {
       { id: 2, label: '2', kind: 'literal', column: 0, row: 1 },
     ]);
     expect(edges).toEqual([
-      { from: 1, to: 0 },
-      { from: 2, to: 0 },
+      { from: 1, to: 0, slot: 0 },
+      { from: 2, to: 0, slot: 1 },
     ]);
   });
 
@@ -81,5 +82,42 @@ describe('a prop drawn as a graph', () => {
 
     expect(nodes.filter(({ label }) => label === '2')).toHaveLength(2);
     expect(nodes.filter(({ kind }) => kind === 'literal')).toHaveLength(2);
+  });
+});
+
+describe('an edge that has to be told from another', () => {
+  test('two edges between the same pair carry different slots', () => {
+    // Four of the operations are order-sensitive, and a shared node feeding
+    // one twice is the case where the pair alone says nothing.
+    const half = div(8, 2);
+    const { edges } = expressionGraph(vec(half, half))!;
+    const into = edges.filter(({ to }) => to === 0);
+
+    expect(into.map(({ slot }) => slot)).toEqual([0, 1]);
+    expect(into[0]!.from).toBe(into[1]!.from);
+  });
+
+  test('a graph that reaches itself is named rather than drawn', () => {
+    // The pane draws from the *stored* document, so this walk meets a graph
+    // ahead of the guards in resolution and evaluation.
+    const loop = { kind: 'operation', op: 'neg', operands: [] } as {
+      kind: 'operation';
+      op: 'neg';
+      operands: unknown[];
+    };
+    loop.operands.push(loop);
+
+    expect(() => expressionGraph(loop as unknown as PropValue)).toThrow(
+      /An expression reaches itself: neg -> neg/,
+    );
+  });
+
+  test('a label the box cannot hold is still the value it holds', () => {
+    // `JSON.stringify` renders these as `null`, which is a value nobody wrote.
+    const { nodes } = expressionGraph(
+      vec(Number.NaN, Number.POSITIVE_INFINITY),
+    )!;
+
+    expect(nodes.map(({ label }) => label)).toEqual(['vec', 'NaN', 'Infinity']);
   });
 });

@@ -1,4 +1,4 @@
-import { isOperation } from './../expression';
+import { describe, isOperation } from './../expression';
 import type { ExpressionNode } from './../expression';
 
 /**
@@ -161,7 +161,7 @@ export function parameterOf(name: string): PropValue {
 }
 
 /** Whether `held` is a reference to a parameter rather than a value. */
-function isReference(
+export function isReference(
   held: unknown,
 ): held is { kind: 'parameter'; name: string } {
   return (
@@ -387,7 +387,7 @@ export function shownValueOf(prop: PropValue | undefined): string | null {
   if (isOperation(prop)) {
     return expressionSource(prop, {
       reference: (name) => name,
-      value: (held) => JSON.stringify(held) ?? String(held),
+      value: (held) => describe(held),
     });
   }
 

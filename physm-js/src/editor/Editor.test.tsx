@@ -3,6 +3,7 @@ import Box from './../react/Box';
 import Circle from './../react/Circle';
 import Coincidence from './../react/Coincidence';
 import Editor from './Editor';
+import ExpressionView from './ExpressionView';
 import JsSolver from './../JsSolver';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
@@ -1073,7 +1074,9 @@ describe('Editor, a prop the document computes', () => {
     render(<Editor initialDocument={computing()} />);
     const props = select('Weight');
 
-    expect(within(props).getByText('mul(2, 3)')).toBeVisible();
+    expect(props.querySelector('.editor__reference')).toHaveTextContent(
+      'mul(2, 3)',
+    );
     expect(within(props).queryByLabelText('Mass')).toBeNull();
 
     // The props that are not computed are editable as ever.
@@ -1148,13 +1151,146 @@ describe('Editor, a prop the document computes', () => {
   });
 
   test('a prop that is not computed is drawn as nothing', () => {
-    render(<Editor initialDocument={computing()} />);
+    // Through the view itself, so what the assertion turns on is
+    // `expressionGraph` answering `null` -- rendering it from the pane would
+    // turn on the `isOperation` at the call site instead.
+    const { container } = render(
+      <ExpressionView prop={literalOf([1, 0])} label="Position" />,
+    );
 
-    expect(
-      within(select('Weight')).queryByRole('img', {
-        name: 'Position as a graph',
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  test('an edge spanning columns goes round the boxes, not through them', () => {
+    // `3` is a leaf and `mul(...)` is not, so the edge from `3` to the `vec`
+    // crosses the column the `mul` sits in -- drawn straight, it would run
+    // through that box at the height the box's own edges attach, and one
+    // stored edge would read as two the graph does not hold.
+    const { container } = render(
+      <ExpressionView
+        prop={vec(3, mul(parameterOf('halfLength'), 2))}
+        label="Position"
+      />,
+    );
+    const boxes = [...container.querySelectorAll('g')].map((group) => {
+      const [x, y] = /translate\((\S+), (\S+)\)/
+        .exec(group.getAttribute('transform')!)!
+        .slice(1)
+        .map(Number);
+
+      return { x: x!, y: y!, label: group.querySelector('text')!.textContent };
+    });
+    const mulBox = boxes.find(({ label }) => label === 'mul')!;
+
+    // Every segment of every edge, straight or routed.
+    const segments = [
+      ...[...container.querySelectorAll('line')].map((line) =>
+        ['x1', 'y1', 'x2', 'y2'].map((name) => Number(line.getAttribute(name))),
+      ),
+      ...[...container.querySelectorAll('polyline')].flatMap((poly) => {
+        const points = poly
+          .getAttribute('points')!
+          .split(' ')
+          .map((point) => point.split(',').map(Number));
+
+        return points
+          .slice(1)
+          .map((to, at) => [...points[at]!, ...to] as number[]);
       }),
-    ).toBeNull();
+    ];
+
+    for (const [x1, y1, x2, y2] of segments) {
+      const crosses =
+        Math.min(x1!, x2!) < mulBox.x + 60 &&
+        Math.max(x1!, x2!) > mulBox.x &&
+        Math.min(y1!, y2!) < mulBox.y + 18 &&
+        Math.max(y1!, y2!) > mulBox.y;
+
+      // A segment may end *at* the box, and must not pass over it.
+      expect(crosses && x1 !== x2).toBe(false);
+    }
+  });
+
+  test('an edge meets its nodes, and the drawing holds all of them', () => {
+    const { container } = render(
+      <ExpressionView
+        prop={vec(3, mul(parameterOf('halfLength'), 2))}
+        label="Position"
+      />,
+    );
+    const svg = container.querySelector('svg')!;
+    const boxes = [...container.querySelectorAll('g')].map((group) => {
+      const [x, y] = /translate\((\S+), (\S+)\)/
+        .exec(group.getAttribute('transform')!)!
+        .slice(1)
+        .map(Number);
+
+      return { x: x!, y: y! };
+    });
+
+    // Every edge leaves and arrives *on* a box's edge, at a height inside it.
+    for (const line of container.querySelectorAll('line')) {
+      const y1 = Number(line.getAttribute('y1'));
+      const y2 = Number(line.getAttribute('y2'));
+
+      for (const y of [y1, y2]) {
+        expect(boxes.some((box) => y > box.y && y < box.y + 18)).toBe(true);
+      }
+    }
+
+    // And every box is inside the drawing, rather than cut off its edge.
+    const [minX, minY, width, height] = svg
+      .getAttribute('viewBox')!
+      .split(' ')
+      .map(Number);
+
+    for (const box of boxes) {
+      expect(box.x + 60).toBeLessThanOrEqual(minX! + width!);
+      expect(box.y + 18).toBeLessThanOrEqual(minY! + height!);
+    }
+  });
+
+  test('a label too long for its box is cut, and kept in full on hover', () => {
+    // A parameter's name is whatever its author typed, and the box holds about
+    // eleven characters. Clipping at the drawing's edge would take both ends
+    // at once, so it would not even degrade usefully.
+    const { container } = render(
+      <ExpressionView
+        prop={mul(parameterOf('pendulumHalfLength'), 2)}
+        label="Position"
+      />,
+    );
+    const shown = [...container.querySelectorAll('text')].map(
+      (node) => node.textContent,
+    );
+
+    expect(shown).toContain('pendulumHa…');
+    expect(container.querySelector('title')).toHaveTextContent(
+      'pendulumHalfLength',
+    );
+  });
+
+  test('every stored edge is one visible segment of its own', () => {
+    // A shared node feeding one operation twice is the case that produced two
+    // identical lines: same `from`, same `to`, same pixels. Counting elements
+    // could not tell them apart, which is how it got through.
+    const half = div(8, 2);
+    const { container } = render(
+      <ExpressionView prop={vec(half, half)} label="Position" />,
+    );
+    const lines = [...container.querySelectorAll('line')].map((line) =>
+      ['x1', 'y1', 'x2', 'y2'].map((name) => line.getAttribute(name)).join(','),
+    );
+
+    expect(lines).toHaveLength(4);
+    expect(new Set(lines).size).toBe(4);
+
+    // And no two boxes in one place.
+    const places = [...container.querySelectorAll('g')].map((group) =>
+      group.getAttribute('transform'),
+    );
+
+    expect(new Set(places).size).toBe(places.length);
   });
 
   test("an instance's computed argument is shown, and offers no editor", () => {
@@ -1184,7 +1320,9 @@ describe('Editor, a prop the document computes', () => {
     render(<Editor initialDocument={doc} />);
     const props = select('Pendulum');
 
-    expect(within(props).getByText('mul(2, 3)')).toBeVisible();
+    expect(props.querySelector('.editor__reference')).toHaveTextContent(
+      'mul(2, 3)',
+    );
     expect(within(props).queryByLabelText('half')).toBeNull();
   });
 });

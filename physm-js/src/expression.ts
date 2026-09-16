@@ -100,7 +100,7 @@ export function isOperation(value: unknown): value is ExpressionNode {
  * `undefined`, which is what an absent operand looks like; and it throws
  * outright on a `bigint`, so the refusal dies inside its own message.
  */
-function describe(value: unknown): string {
+export function describe(value: unknown): string {
   if (typeof value === 'number') {
     return String(value);
   }

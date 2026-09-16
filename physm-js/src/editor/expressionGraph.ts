@@ -1,4 +1,5 @@
-import { isOperation } from './../expression';
+import { describe, isOperation } from './../expression';
+import { isReference } from './propValue';
 import type { PropValue } from './propValue';
 
 /**
@@ -49,16 +50,24 @@ export interface GraphNode {
 export interface GraphEdge {
   readonly from: number;
   readonly to: number;
+
+  /**
+   * Which of the operation's operands this is.
+   *
+   * Carried because four of the operations are order-sensitive -- `sub`,
+   * `div`, `vec` and `scale` -- so a picture that could not tell
+   * `div(3, mul(1, 2))` from `div(mul(1, 2), 3)` would not be carrying what
+   * the graph holds. It is also what keeps two edges between the same pair of
+   * nodes distinguishable, which is how a shared node's edges stop being one
+   * line drawn twice.
+   */
+  readonly slot: number;
 }
 
 /** What a leaf reads as. */
 function labelOf(held: unknown): { label: string; kind: GraphNode['kind'] } {
-  if (
-    held !== null &&
-    typeof held === 'object' &&
-    (held as { kind?: unknown }).kind === 'parameter'
-  ) {
-    return { label: (held as { name: string }).name, kind: 'reference' };
+  if (isReference(held)) {
+    return { label: held.name, kind: 'reference' };
   }
 
   const value =
@@ -68,7 +77,11 @@ function labelOf(held: unknown): { label: string; kind: GraphNode['kind'] } {
       ? (held as { value: unknown }).value
       : held;
 
-  return { label: JSON.stringify(value) ?? String(value), kind: 'literal' };
+  // `describe` rather than `JSON.stringify`, which renders `NaN` and
+  // `Infinity` as `null` and throws on a `bigint`. A leaf's label is the one
+  // place the picture states a *value*, so getting it wrong is the drawing
+  // inventing one.
+  return { label: describe(value), kind: 'literal' };
 }
 
 /** The graph `prop` holds, or `null` when it holds no expression at all. */
@@ -86,8 +99,28 @@ export function expressionGraph(
   const labels: { label: string; kind: GraphNode['kind'] }[] = [];
   const edges: GraphEdge[] = [];
 
-  const visit = (held: unknown): number => {
+  const visit = (held: unknown, path: readonly unknown[]): number => {
     const shared = typeof held === 'object' && held !== null ? held : null;
+
+    // Before the memo, not after it. The memo is filled ahead of the recursion
+    // so a shared node gets one id, which means a node reached from beneath
+    // itself is *also* in it -- and answering from the memo would terminate
+    // and hand back a node whose operands were still being filled, surfacing
+    // as an edge running backwards rather than as a sentence. Being on the
+    // path is what separates the two: in the memo and not on the path is
+    // sharing, which is the case this whole module exists for.
+    //
+    // The third walk over this structure, and the same guard the other two
+    // carry. This one draws from the *stored* document, so it meets a graph
+    // ahead of both of them.
+    if (isOperation(held) && path.includes(held)) {
+      const cycle = [...path, held]
+        .map((each) => (each as { op: string }).op)
+        .join(' -> ');
+
+      throw new Error(`An expression reaches itself: ${cycle}.`);
+    }
+
     const already = shared === null ? undefined : ids.get(shared);
     if (already !== undefined) {
       return already;
@@ -103,17 +136,18 @@ export function expressionGraph(
     }
 
     if (isOperation(held)) {
-      for (const operand of held.operands) {
-        const from = visit(operand);
-        edges.push({ from, to: id });
+      const within = [...path, held];
+      held.operands.forEach((operand, slot) => {
+        const from = visit(operand, within);
+        edges.push({ from, to: id, slot });
         heights[id] = Math.max(heights[id]!, heights[from]! + 1);
-      }
+      });
     }
 
     return id;
   };
 
-  visit(prop);
+  visit(prop, []);
 
   const rows = new Map<number, number>();
 

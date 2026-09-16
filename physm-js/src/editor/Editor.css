@@ -599,11 +599,17 @@
 
 /* A prop's expression, drawn as the nodes and edges it is stored as: leaves at
    the left, the whole expression at the right, every edge running one way. */
+/* Sized from its own content rather than from the pane, so one user unit is
+   one pixel and the font is the size it says. Scaling it to the pane made the
+   labels a function of how big the graph was: 11px for a small one, 6px for a
+   wide one, from the same `font-size`. */
 .editor__graph {
-  width: 100%;
-  max-height: 12rem;
+  display: block;
+  max-width: 100%;
+  max-height: 14rem;
   margin-top: 0.3rem;
-  font-size: 0.65rem;
+  overflow: auto;
+  font-size: 10px;
 }
 
 .editor__graph line {
