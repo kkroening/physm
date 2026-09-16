@@ -18,7 +18,19 @@
  * constructor, so binding a subexpression once and using it three times stores
  * one node with three edges to it. That is what lets a viewer draw the sharing,
  * and what lets the emitter write the binding rather than three copies.
+ *
+ * **Two kinds, and one of them needs a moment.** Most operations are functions
+ * of their operands and nothing else, so a build can answer them. A few read
+ * where the scene has *got to*, which nothing knows until it is posed --
+ * [0016 page 2](../../docs/issues/0016/02-values.md) calls those **signals**,
+ * and its whole rule is that "a structural expression may not read state".
+ * Here that is one `Tick` parameter: an evaluation given one may use either
+ * kind, and an evaluation given none refuses a signal by name.
  */
+
+import * as mat3 from './Mat3';
+import * as vec3 from './Vec3';
+import type { PoseMap } from './Scene';
 
 /**
  * Every operation, with how many operands it takes and what it does.
@@ -46,8 +58,112 @@ const OPERATIONS = {
   yOf: (v: unknown) => point(v)[1]!,
 } satisfies Record<string, (...operands: never[]) => unknown>;
 
+/** What a signal reads: where the scene has got to, as the pose walk left it. */
+export interface Tick {
+  readonly poses: PoseMap;
+}
+
+/**
+ * Every operation that reads the tick rather than only its operands.
+ *
+ * A second table rather than a flag on the first, so `OPERATIONS` stays a set
+ * of pure functions of their operands: a caller holding only that table cannot
+ * reach a signal by accident, and the two cannot be told apart by reading an
+ * implementation.
+ *
+ * **The tick is a parameter and not an operand.** It is the fold that supplies
+ * it, so what an author writes is one shorter than what is declared here --
+ * which is the `- 1` in the arity below, and the only place the two shapes
+ * differ.
+ */
+const SIGNALS = {
+  /**
+   * Where a point on a frame has got to, in world coordinates.
+   *
+   * The two halves of "a point on a body": which frame, and where on it.
+   * Both are structural -- an author writes the id, and the local point does
+   * not move -- and it is the pose between them that makes the answer a
+   * signal. This is the leaf every drawing signal is built from, and it is one
+   * more consumer of the map `getPosMatrixMap` already makes rather than a
+   * second walk of its own.
+   *
+   * The local point is a point and not a `PositionLike`: a prop takes a bare
+   * number as an offset along the frame's own axis, and admitting that here
+   * would make this the one place in the language where a scalar and a point
+   * are the same thing.
+   */
+  worldPoint: (tick: Tick, frame: unknown, local: unknown) => {
+    const id = label(frame);
+    const pose = tick.poses.get(id);
+    if (!pose) {
+      throw new Error(
+        `worldPoint names the frame '${id}', which this scene has none of.`,
+      );
+    }
+
+    return vec3.toPlanar(mat3.apply(pose, vec3.coerce(point(local))));
+  },
+} satisfies Record<string, (tick: Tick, ...operands: never[]) => unknown>;
+
 /** What an operation is called, which is also what the emitter writes. */
-export type Operation = keyof typeof OPERATIONS;
+export type Operation = keyof typeof OPERATIONS | keyof typeof SIGNALS;
+
+/** One operation, in the single shape the fold applies. */
+interface Applied {
+  /** Whether it reads the tick, and so may not stand in a structural position. */
+  readonly signal: boolean;
+
+  /** How many operands it takes, which for a signal does not count the tick. */
+  readonly arity: number;
+
+  readonly apply: (tick: Tick | null, operands: readonly unknown[]) => unknown;
+}
+
+/**
+ * Both tables as one, which is what every lookup below reads.
+ *
+ * A `Map` rather than either object, so a name is looked up among the ones
+ * *declared*: `op: 'constructor'` finds nothing here, where the same lookup on
+ * an object literal reached `Object.prototype`, found a function, and computed
+ * with it.
+ */
+const EVERY: ReadonlyMap<string, Applied> = (() => {
+  const table = new Map<string, Applied>();
+
+  for (const [op, run] of Object.entries(OPERATIONS)) {
+    const call = run as (...operands: unknown[]) => unknown;
+
+    table.set(op, {
+      signal: false,
+      arity: call.length,
+      apply: (_tick, operands) => call(...operands),
+    });
+  }
+
+  for (const [op, run] of Object.entries(SIGNALS)) {
+    const call = run as (tick: Tick, ...operands: unknown[]) => unknown;
+
+    table.set(op, {
+      signal: true,
+      arity: call.length - 1,
+      apply: (tick, operands) => {
+        // The refusal lives with the thing that needs the tick, so there is
+        // one place that decides what a missing one means. A caller one level
+        // up -- `computed` -- is what names the prop it happened in.
+        if (!tick) {
+          throw new Error(
+            `${op} is a signal: it reads where the scene has got to, which ` +
+              'is not known where this is worked out.',
+          );
+        }
+
+        return call(tick, ...operands);
+      },
+    });
+  }
+
+  return table;
+})();
 
 /** A value an operation computes from its operands. */
 export interface ExpressionNode {
@@ -118,6 +234,15 @@ export function describe(value: unknown): string {
     : JSON.stringify(value);
 }
 
+/** A frame's id an operation was given, or a throw naming what it got instead. */
+function label(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new Error(`Expected a frame's id, and found ${describe(value)}.`);
+  }
+
+  return value;
+}
+
 /** A number an operation was given, or a throw naming what it got instead. */
 function scalar(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -158,14 +283,6 @@ function pointwise(
 }
 
 /**
- * The value `node` computes, or itself when it is not an operation.
- *
- * `visiting` is the operations above this one, so a graph that reaches itself
- * is named rather than recursed into. The editor cannot build one -- every edit
- * writes a fresh node over an existing graph -- but a hand-written component
- * can, and the failure without this is a stack overflow naming nothing.
- */
-/**
  * A result an operation produced, or a throw naming the operation that did.
  *
  * Operands are checked and results have to be too, or `div(1, 0)` puts
@@ -192,6 +309,16 @@ function produced(op: Operation, result: unknown): unknown {
 
 /** How far a fold has got: the path it is on, and what it has already worked out. */
 interface Fold {
+  /**
+   * Where the scene has got to, or `null` where nothing has posed it yet.
+   *
+   * One value for the whole fold rather than a parameter threaded through it,
+   * because it is the *occasion* that has a tick or has not -- a build, or a
+   * frame being drawn -- and no operand of an operation can change which
+   * occasion it is being evaluated on.
+   */
+  readonly tick: Tick | null;
+
   /** The operations above this one, so a graph reaching itself is named. */
   readonly path: readonly ExpressionNode[];
 
@@ -206,10 +333,28 @@ interface Fold {
   readonly done: Map<unknown, unknown>;
 }
 
-export function evaluate(
-  node: unknown,
-  fold: Fold = { path: [], done: new Map() },
-): unknown {
+/**
+ * The value `node` computes, or itself when it is not an operation.
+ *
+ * `tick` is what makes a signal answerable. Passing none is the *structural*
+ * evaluation -- a build -- and is why `computed` can gate a prop by simply
+ * not having one: a signal reaching a position that is worked out before the
+ * scene is posed refuses there, naming the operation and the prop, rather than
+ * silently yielding a number from a pose that is not the one it meant.
+ */
+export function evaluate(node: unknown, tick: Tick | null = null): unknown {
+  return folded(node, { path: [], done: new Map(), tick });
+}
+
+/**
+ * One step of the fold, carrying how far it has got.
+ *
+ * Separate from `evaluate` so that the path and the memo are the recursion's
+ * own business: a caller states the occasion -- a tick, or none -- and cannot
+ * hand in a half-finished fold, which would let a node be answered from a
+ * memo made under a different pose.
+ */
+function folded(node: unknown, fold: Fold): unknown {
   if (isTagged(node) && !isOperation(node)) {
     throw new Error(
       `An operation needs a name and its operands, and found ${describe(node)}.`,
@@ -233,12 +378,7 @@ export function evaluate(
     return fold.done.get(node);
   }
 
-  // Own properties only. A bracket lookup on an object literal reaches
-  // `Object.prototype`, so `op: 'constructor'` would find a function, pass the
-  // refusal below, and hand back a boxed operand as a prop value.
-  const operation = (
-    Object.hasOwn(OPERATIONS, node.op) ? OPERATIONS[node.op] : undefined
-  ) as ((...operands: unknown[]) => unknown) | undefined;
+  const operation = EVERY.get(node.op);
   if (!operation) {
     throw new Error(`'${node.op}' is not an operation.`);
   }
@@ -246,17 +386,20 @@ export function evaluate(
   // Checked here as well as by the constructors, because a document can hold a
   // node nobody's constructor made -- and JavaScript would otherwise drop an
   // extra operand or compute with `undefined` for a missing one.
-  if (node.operands.length !== operation.length) {
+  if (node.operands.length !== operation.arity) {
     throw new Error(
-      `${node.op} takes ${operation.length} operands, and was given ` +
+      `${node.op} takes ${operation.arity} operands, and was given ` +
         `${node.operands.length}.`,
     );
   }
 
-  const within = { path: [...fold.path, node], done: fold.done };
+  const within = { ...fold, path: [...fold.path, node] };
   const result = produced(
     node.op,
-    operation(...node.operands.map((operand) => evaluate(operand, within))),
+    operation.apply(
+      fold.tick,
+      node.operands.map((operand) => folded(operand, within)),
+    ),
   );
   fold.done.set(node, result);
 
@@ -292,12 +435,22 @@ export type Computable<T> = {
       : T[K] | ExpressionNode;
 };
 
-/** Every prop value in `props`, with any expression among them computed. */
-export function computed<T extends object>(props: Computable<T>): T {
+/**
+ * Every prop value in `props`, with any expression among them computed.
+ *
+ * With no `tick` this is the structural fold, and a signal among the props
+ * refuses rather than producing a number: the prop is named, the operation is
+ * named, and it happens where the value was handed over rather than wherever
+ * it would have been drawn.
+ */
+export function computed<T extends object>(
+  props: Computable<T>,
+  tick: Tick | null = null,
+): T {
   return Object.fromEntries(
     Object.entries(props).map(([name, value]) => {
       try {
-        return [name, evaluate(value)];
+        return [name, evaluate(value, tick)];
       } catch (error) {
         // Every refusal in this module reaches a person through a prop, and
         // none of them can name one from inside the graph. This is the only
@@ -316,22 +469,47 @@ export function computed<T extends object>(props: Computable<T>): T {
  * The count comes from the implementation's own parameters, so a constructor
  * cannot drift from what it builds a node for.
  */
-type Operands<K extends Operation> = Parameters<(typeof OPERATIONS)[K]>;
+type Operands<K extends Operation> = K extends keyof typeof OPERATIONS
+  ? Parameters<(typeof OPERATIONS)[K]>
+  : K extends keyof typeof SIGNALS
+    ? WithoutTick<Parameters<(typeof SIGNALS)[K]>>
+    : never;
 
 /**
- * How many operands the operation `name` takes, or `null` for no such name.
+ * A signal's parameters as the operands an author writes.
  *
- * For a caller building a node from text rather than from a constructor: the
- * arity is the implementation's own parameter count, so a parser checking
- * against it cannot drift from what `evaluate` will refuse *about the count*.
- * It says nothing about the operands themselves -- a parser that accepted a
- * non-finite number would still be handing over what `scalar` refuses.
+ * The tick is the fold's to supply, so it is dropped here -- and dropped by
+ * matching its type rather than by counting, so a signal declared without one
+ * fails to have a constructor instead of quietly losing its first operand.
  */
-export function arityOf(name: string): number | null {
-  return Object.hasOwn(OPERATIONS, name)
-    ? (OPERATIONS[name as Operation] as (...operands: never[]) => unknown)
-        .length
-    : null;
+type WithoutTick<P extends readonly unknown[]> = P extends readonly [
+  Tick,
+  ...infer Rest,
+]
+  ? Rest
+  : never;
+
+/** What a caller holding an operation's *name* can ask about it. */
+export interface OperationInfo {
+  /** Whether it reads the tick, and so may only stand where a signal may. */
+  readonly signal: boolean;
+
+  /** How many operands it takes, which for a signal does not count the tick. */
+  readonly arity: number;
+}
+
+/**
+ * What `name` names among the operations, or `null` for no such name.
+ *
+ * For a caller building a node from text rather than from a constructor -- a
+ * parser, or a document being read back. Both answers come from the
+ * implementations themselves, so a caller checking against them cannot drift
+ * from what `evaluate` will refuse *about the name and the count*. Neither
+ * says anything about the operands: a parser that accepted a non-finite number
+ * would still be handing over what `scalar` refuses.
+ */
+export function operationNamed(name: string): OperationInfo | null {
+  return EVERY.get(name) ?? null;
 }
 
 /**
@@ -366,3 +544,4 @@ export const scale = constructorFor('scale');
 export const dot = constructorFor('dot');
 export const xOf = constructorFor('xOf');
 export const yOf = constructorFor('yOf');
+export const worldPoint = constructorFor('worldPoint');

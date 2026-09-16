@@ -1,4 +1,4 @@
-import { arityOf, operationOf } from './../expression';
+import { operationNamed, operationOf } from './../expression';
 import { literalOf, parameterOf } from './propValue';
 import type { Operation } from './../expression';
 import type { PropValue } from './propValue';
@@ -245,9 +245,21 @@ export default function parseExpression(text: string): Parsed {
       return { operand: parameterOf(token.text) };
     }
 
-    const arity = arityOf(token.text);
-    if (arity === null) {
+    const operation = operationNamed(token.text);
+    if (!operation) {
       return { refusal: `There is no operation called ${token.text}.` };
+    }
+
+    // No property admits a signal yet, so the refusal is unconditional. Once a
+    // `PropSpec` says which kind it takes, this narrows to the ones that say
+    // structural -- and it stays *here*, at the point of typing, rather than
+    // becoming a scene that fails to build.
+    if (operation.signal) {
+      return {
+        refusal:
+          `${token.text} reads where the scene has got to, and a property is ` +
+          'worked out when the scene is built rather than while it runs.',
+      };
     }
 
     take();
@@ -274,12 +286,12 @@ export default function parseExpression(text: string): Parsed {
 
     take();
 
-    return operands.length === arity
+    return operands.length === operation.arity
       ? { operand: operationOf(token.text as Operation, operands) }
       : {
           refusal:
-            `${token.text} takes ${arity} ` +
-            `${arity === 1 ? 'operand' : 'operands'}, and was given ` +
+            `${token.text} takes ${operation.arity} ` +
+            `${operation.arity === 1 ? 'operand' : 'operands'}, and was given ` +
             `${operands.length}.`,
         };
   };

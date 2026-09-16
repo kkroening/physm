@@ -15,15 +15,46 @@ file is what actually decides what happens next, and is expected to diverge.
 ## In view
 
 **Signals** -- 0016's step 4, and the first thing since parameters that the
-solver has to know about. A value that varies per tick, hanging off the pose
-map, with decals drawn in world space; and with them, the kind propagation the
-expressions design says must land *with* the node set and has been waiting for
-a producer. It also has to say which solver a per-tick value is specified
-against, since the Rust path hands external forces across once per batch.
+core has to know about. Expressions are done end to end otherwise: stored,
+resolved, emitted, drawn, and typed.
 
-Expressions are done end to end: stored, resolved, emitted, drawn, and typed.
-What is left of them is the wish list rather than the feature -- `rotate`,
-comparison and selection, and the two open questions below.
+Staged by what each slice touches, because the ends of it are very different
+sizes:
+
+1. ~~**The kind**~~ -- done. An evaluation either has somewhere the scene has
+   got to or it has not, and a build has not: `worldPoint` reads a point on a
+   frame through the pose map, and anything built on it refuses in a position a
+   build has to answer, naming the operation and the prop. That is one of the
+   two decisions this slice was owed -- **a signal evaluated with no pose
+   refuses**, rather than yielding a number from a pose it did not mean.
+2. **The consumer that never enters the tick loop** --
+   [page 9](docs/issues/0016/09-elements.md)'s world-space decal, a line
+   between two anchors in different frames, which is the wish list's own
+   example and has no frame in which its endpoints are fixed. Page 2 is
+   explicit that these are evaluated at render time, after the batch, so the
+   fast path is untouched.
+
+   A `PropSpec` saying which kind a prop admits lands here rather than with the
+   kind itself, because until a prop admits a signal the spec has nothing to
+   say: the prop box refuses every signal today, unconditionally, at the point
+   of typing. This is also where **paint order** gets decided -- a decal
+   produced after the walk rather than during assembly, which page 9 calls "a
+   decision to make rather than a thing to inherit".
+
+   What it needs first is a smaller thing than it looks: both build routes fold
+   a component's props *before* handing them over, and a prop that cannot be
+   folded until the scene is posed has to be folded by whoever knows that --
+   which is the component, not the boundary.
+3. **Force channels**, which meet the Rust boundary: `tick_mut` holds its
+   external-force slice constant for a batch, so such an expression is
+   evaluated per *batch*. That is the granularity the demo already ships, so it
+   inherits rather than needing something new.
+4. **A spring whose rest direction is world-referenced**, which needs the
+   accumulated pose and is core work on both sides.
+
+**Not taken here:** what survives a rebuild when structure changes at run time.
+Page 2 reopens [0014](docs/issues/0014.md)'s reset-on-structural-edit rule for
+the gameplay case and says plainly that changing it is Karl's call.
 
 **Still open, and owed an answer around here:**
 
@@ -76,10 +107,12 @@ the demo ever wants the mounted route.
 
 ## Next — 0016
 
-**Where it stands: the three steps the rest was waiting on are done, and what
-is left of expressions is the half a person touches.** Both came first because each grows
-more expensive with every site built before it. Roughly one PR each, ordered by
-risk rather than appetite; the
+**Where it stands: three of seven steps are done, signals are started, and the
+three after them are untouched.** The three that landed came first because each
+grows more expensive with every site built before it. What remains of
+expressions themselves is the wish list rather than the feature -- `rotate`,
+comparison and selection, and the open questions above. Roughly one PR each,
+ordered by risk rather than appetite; the
 [staging page](docs/issues/0016/10-staging.md) argues the order.
 
 1. ~~**A prop value becomes a tagged thing**~~ — done.
@@ -91,7 +124,8 @@ risk rather than appetite; the
    the binding of a shared subexpression, below.
 4. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
-   Rust path hands external forces across once per batch.
+   Rust path hands external forces across once per batch. *Started: the kind
+   and its leaf are in, and the slices left are in view above.*
 5. **Named slots** -- where the `slot` field lands, and new work in both the
    emitter and the reader, neither of which handles an element-valued prop.
 6. **Repetition**, with the emitted form decided first.
