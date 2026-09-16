@@ -5,7 +5,7 @@ import type { Mat3 } from './Mat3';
 
 export interface FixedFrameOptions extends Omit<
   FrameOptions,
-  'initialState' | 'resistance' | 'stiffness'
+  'initialState' | 'resistance' | 'springs'
 > {
   angle?: number;
 }

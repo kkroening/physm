@@ -210,7 +210,6 @@ describe('Scene class', () => {
     const scene = new Scene();
     expect(scene.decals).toEqual([]);
     expect(scene.frames).toEqual([]);
-    expect(scene.springs).toEqual([]);
     expect(scene.constraints).toEqual([]);
     expect(scene.gravity).toEqual(DEFAULT_GRAVITY);
     expect(scene.sortedFrames).toEqual([]);
@@ -235,7 +234,6 @@ describe('Scene class', () => {
     })();
     expect(scene.decals).toEqual([]);
     expect(scene.frames).toEqual([frame0]);
-    expect(scene.springs).toEqual([]);
     expect(scene.constraints).toEqual([]);
     expect(scene.gravity).toEqual(DEFAULT_GRAVITY);
     expect(scene.sortedFrames).toEqual([frame0, frame1, frame2, frame3]);

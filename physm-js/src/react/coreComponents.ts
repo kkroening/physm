@@ -6,8 +6,8 @@ import Distance from './Distance';
 import FixedFrame from './FixedFrame';
 import Line from './Line';
 import RotationalFrame from './RotationalFrame';
-import TrackFrame from './TrackFrame';
 import Spring from './Spring';
+import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import WorldLine from './WorldLine';
 

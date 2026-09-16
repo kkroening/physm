@@ -133,7 +133,14 @@ export interface ComponentMeta<P> {
  * Whether a node of one slot may sit directly inside another, or at the root.
  *
  * Asked *before* an insertion, rather than learned from a failed build. The
- * builders refuse the same things: a weight or an anchor at the root -- a scene
+ * builders refuse the same things, **with one exception a slot cannot see**:
+ * a `<Spring>` inside a `<FixedFrame>`, whose coordinate moves nothing. All
+ * three frame components carry `slot: 'frame'`, so no rule expressed in slots
+ * can tell them apart, and that one is learned from the build. It is the
+ * first such refusal; a second would be worth a way for a component to speak
+ * for itself about what it holds.
+ *
+ * The rest: a weight or an anchor at the root -- a scene
  * carries no mass of its own, and an anchor marks a point on a frame -- and
  * children under anything but a frame, which both refuse through
  * `refuseChildren`. Hand-written JSX meets that last rule in the props types
@@ -147,7 +154,7 @@ export function canContain(parent: Slot | 'root', child: Slot): boolean {
       // endpoints move with a body, which is the thing it exists not to do.
       return child !== 'worldDecal';
     case 'root':
-      return child !== 'weight' && child !== 'anchor';
+      return child !== 'weight' && child !== 'anchor' && child !== 'spring';
     default:
       return false;
   }

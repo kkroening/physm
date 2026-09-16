@@ -97,17 +97,21 @@ export default function Scene({
     // Collected before the guard below, and counted by it: `buildChildren`
     // puts nothing in `root` for one, so a tree whose whole content is world
     // decals would otherwise read as no tree at all -- and `buildScene`, which
-    // has no such guard, would build the scene this route declined to. The
-    // first category that can be a scene's entire content while registering
-    // nowhere the guard looks.
+    // has no such guard, would build the scene this route declined to.
     const worldDecals = live.flatMap(({ node }) =>
       node.slot === 'worldDecal' ? [node.build] : [],
     );
 
+    // Every kind of content, enumerated -- which has now gone stale twice, for
+    // world decals and then for springs, each time letting this route answer
+    // "no scene" where `buildScene` answered something. Asking instead whether
+    // anything registered at all would not go stale, and would change what a
+    // tree of only constraints or only anchors does; `docs/issues/0029.md`.
     if (
       !root.frames.length &&
       !root.decals.length &&
       !root.weights.length &&
+      !root.springs.length &&
       !worldDecals.length
     ) {
       // Cleared on this path too. The warnings below read these refs, so an

@@ -81,7 +81,6 @@ export interface SceneOptions {
   decals?: Decal[];
   worldDecals?: WorldDecal[];
   frames?: Frame[];
-  springs?: unknown[];
   constraints?: Constraint[];
   gravity?: number;
 }
@@ -181,7 +180,6 @@ export default class Scene {
    */
   readonly worldDecals: WorldDecal[];
   readonly frames: Frame[];
-  readonly springs: unknown[];
   readonly constraints: Constraint[];
   readonly gravity: number;
   readonly sortedFrames: Frame[];
@@ -193,14 +191,12 @@ export default class Scene {
     decals = [],
     worldDecals = [],
     frames = [],
-    springs = [],
     constraints = [],
     gravity = DEFAULT_GRAVITY,
   }: SceneOptions = {}) {
     this.decals = decals;
     this.worldDecals = worldDecals;
     this.frames = frames;
-    this.springs = springs;
     // Constraints are added below rather than assigned: `addConstraint` is
     // where a constraint is checked against the frame set and solved against
     // the pose, and a second door into this list would be one nobody has to
