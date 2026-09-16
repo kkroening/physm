@@ -1,6 +1,15 @@
 import Anchor from './Anchor';
 import * as vec3 from './../Vec3';
-import { div, mul, sqrt, tickOf, vec, worldPoint, xOf } from './../expression';
+import {
+  computed,
+  div,
+  mul,
+  sqrt,
+  tickOf,
+  vec,
+  worldPoint,
+  xOf,
+} from './../expression';
 import Box from './Box';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './Circle';
@@ -21,6 +30,8 @@ import Scene from './Scene';
 import TrackFrame from './TrackFrame';
 import Weight from './Weight';
 import WorldLine from './WorldLine';
+import type { LineDecalOptions } from './../LineDecal';
+import type { WorldDecal } from './../Decal';
 import buildScene from './buildScene';
 import coreComponents from './coreComponents';
 import { canContain } from './componentMeta';
@@ -78,7 +89,7 @@ function normalized(scene: CoreScene): unknown {
 }
 
 /**
- * All ten building blocks with every prop set: none at its default when `k`
+ * All eleven building blocks with every prop set: none at its default when `k`
  * is 1, and every one different between `k` = 1 and 2.
  *
  * The constraints join three pairs of weighted pivots set `gap` apart at
@@ -167,8 +178,30 @@ function fullRig(k: 1 | 2): ReactElement {
         position2={[0, -1]}
         length={gap}
       />
+      <WorldLine
+        startPos={worldPoint('cart', [0, 0])}
+        endPos={worldPoint('hung', [k, 0])}
+        lineWidth={0.3 * k}
+        color={k === 1 ? 'orchid' : 'olive'}
+      />
     </>
   );
+}
+
+/** `fullRig`'s world-space line, as the oracle builds it. */
+function handBuiltWorldLine(k: 1 | 2): WorldDecal {
+  return (tick) =>
+    new CoreLineDecal(
+      computed<LineDecalOptions>(
+        {
+          startPos: worldPoint('cart', [0, 0]),
+          endPos: worldPoint('hung', [k, 0]),
+          lineWidth: 0.3 * k,
+          color: k === 1 ? 'orchid' : 'olive',
+        },
+        tick,
+      ),
+    );
 }
 
 /**
@@ -191,6 +224,7 @@ function handBuilt(k: 1 | 2): CoreScene {
     });
 
   const scene = new CoreScene({
+    worldDecals: [handBuiltWorldLine(k)],
     decals: [
       new CoreLineDecal({
         startPos: [-k, -4],
@@ -298,6 +332,10 @@ function picture(scene: CoreScene): unknown {
     json: scene.toJsonObj(),
     decals: scene.decals,
     frameDecals: scene.sortedFrames.map((frame) => [frame.id, frame.decals]),
+    // Made from the scene's own pose, since a world-space decal is not a shape
+    // until something says where the scene has got to -- and `toJsonObj` has
+    // no term for one, so without this it would compare equal to anything.
+    worldDecals: scene.worldDecals.map((make) => make(tickOf(scene))),
   };
 }
 
@@ -783,6 +821,18 @@ describe('a prop that is computed rather than stated', () => {
     expect(
       buildScene(rig).sortedFrames.flatMap(({ decals }) => decals),
     ).toEqual([]);
+  });
+
+  test('a scene whose whole content is a world-space line is still a scene', () => {
+    // The mounted route decides whether there is anything to assemble from
+    // what landed in the frame tree, and a world decal lands nowhere in it --
+    // so this tree, which the walk builds happily, is the one that route can
+    // mistake for an empty one. It is not contrived: a fixed line in world
+    // space is what the editor inserts.
+    const rig = <WorldLine startPos={[0, 0]} endPos={[1, 0]} />;
+
+    expect(buildScene(rig).worldDecals).toHaveLength(1);
+    expect(assemble(rig).worldDecals).toHaveLength(1);
   });
 
   test('a world-space line inside a frame is refused, in both routes', () => {

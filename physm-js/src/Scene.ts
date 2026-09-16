@@ -168,6 +168,16 @@ export default class Scene {
    * Held as makers rather than as shapes because there is no pose at assembly
    * to make them from -- see `WorldDecal`. Nothing in the solver reads them,
    * as nothing in it reads a decal.
+   *
+   * **`toJsonObj` has no term for one**, so a scene serializes less of itself
+   * than it holds. That is a widening of an existing gap rather than a new one
+   * -- decals are opt-in there, and `Decal.toJsonObj` is unimplemented -- but
+   * it is the first part of a scene that is a function rather than data, and
+   * the two ways out differ: a maker could carry the expression it was built
+   * from and serialize as that, or this could stay honestly partial and say
+   * so. Which is right is a question for the save format
+   * (`docs/issues/0017.md`), since neither means anything until something
+   * reads a scene back.
    */
   readonly worldDecals: WorldDecal[];
   readonly frames: Frame[];

@@ -38,7 +38,14 @@ sizes:
 3. **Which kind each property admits** -- the editor's half, and the last of
    the kind work. [0027](docs/issues/0027.md) belongs with it: a world-space
    decal cannot be clicked in the drawing, because the thing a person would
-   click does not exist when the trace that maps shapes back to nodes is made. A `PropSpec` says structural or signal, and the prop box
+   click does not exist when the trace that maps shapes back to nodes is made.
+
+   A question to *ask* there rather than answer: a `Scene` now holds a closure,
+   and `toJsonObj` has no term for one. The editor's round trip is document ->
+   elements -> `Scene` and never `Scene` -> JSON, so nothing needs it yet --
+   but a save format ([0017](docs/issues/0017.md)) does, and it is the one that
+   decides whether a world decal serializes as the expression it was built
+   from or whether scene serialization stays honestly partial. A `PropSpec` says structural or signal, and the prop box
    narrows its refusal to read it: today it refuses *every* signal, at the
    point of typing, which is right for every property that exists but wrong for
    a `<WorldLine>`'s endpoints as soon as a person wants to type one. Small,

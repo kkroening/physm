@@ -138,6 +138,13 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
   }
 }
 
+/** A building block's own description of itself, where it carries one. */
+function metaOf(
+  type: unknown,
+): ComponentMeta<Record<string, unknown>> | undefined {
+  return (type as { meta?: ComponentMeta<Record<string, unknown>> }).meta;
+}
+
 /**
  * Refuse a building block missing a prop it cannot be built without.
  *
@@ -146,13 +153,6 @@ function place(node: SceneNode, children: ReactNode, walk: Walk): void {
  * yet. Named by the label a person sees, rather than left to whatever the
  * build trips over first.
  */
-/** A building block's own description of itself, where it carries one. */
-function metaOf(
-  type: unknown,
-): ComponentMeta<Record<string, unknown>> | undefined {
-  return (type as { meta?: ComponentMeta<Record<string, unknown>> }).meta;
-}
-
 function refuseMissingProps(type: unknown, props: object): void {
   const meta = metaOf(type);
   const missing = Object.entries(meta?.props ?? {})

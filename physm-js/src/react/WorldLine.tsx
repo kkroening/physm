@@ -74,9 +74,16 @@ function describeWorldLine(
  */
 export default function WorldLine(props: WorldLineProps): null {
   refuseChildren('WorldLine', (props as { children?: unknown }).children);
+  const key = useId();
   const frameId = useContext(FrameIdContext);
 
-  useSceneNode(useId(), describeWorldLine(props, { key: '', frameId }), props);
+  // `frameId` joins the signature because the describer reads it: a signature
+  // that has fallen behind its describer leaves the memo serving a scene built
+  // from the old node.
+  useSceneNode(key, describeWorldLine(props, { key, frameId }), {
+    ...props,
+    frameId,
+  });
 
   return null;
 }

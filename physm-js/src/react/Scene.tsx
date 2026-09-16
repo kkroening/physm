@@ -88,8 +88,28 @@ export default function Scene({
 
   const scene = useMemo(() => {
     const root = buildChildren(registry.entries, null);
+    const live = [...registry.entries.values()].filter((entry) => entry.live);
 
-    if (!root.frames.length && !root.decals.length && !root.weights.length) {
+    // Part of the scene rather than of a frame, like a constraint and for a
+    // kindred reason: a world-space decal's endpoints may sit on two
+    // different bodies, so there is no frame whose coordinates they share.
+    //
+    // Collected before the guard below, and counted by it: `buildChildren`
+    // puts nothing in `root` for one, so a tree whose whole content is world
+    // decals would otherwise read as no tree at all -- and `buildScene`, which
+    // has no such guard, would build the scene this route declined to. The
+    // first category that can be a scene's entire content while registering
+    // nowhere the guard looks.
+    const worldDecals = live.flatMap(({ node }) =>
+      node.slot === 'worldDecal' ? [node.build] : [],
+    );
+
+    if (
+      !root.frames.length &&
+      !root.decals.length &&
+      !root.weights.length &&
+      !worldDecals.length
+    ) {
       // Cleared on this path too. The warnings below read these refs, so an
       // early return that left them alone would re-report the *previous*
       // assembly's failures against a scene that no longer has any.
@@ -101,16 +121,8 @@ export default function Scene({
 
     const unresolved: Constraint[] = [];
     const unresolvedAnchors: string[] = [];
-    const live = [...registry.entries.values()].filter((entry) => entry.live);
     const constraints = live.flatMap(({ node }) =>
       node.slot === 'constraint' ? [node] : [],
-    );
-
-    // Part of the scene rather than of a frame, like a constraint and for a
-    // kindred reason: a world-space decal's endpoints may sit on two
-    // different bodies, so there is no frame whose coordinates they share.
-    const worldDecals = live.flatMap(({ node }) =>
-      node.slot === 'worldDecal' ? [node.build] : [],
     );
     const built = assembleScene(
       root,

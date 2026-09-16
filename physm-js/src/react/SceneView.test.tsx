@@ -207,12 +207,9 @@ describe('a decal drawn in world space', () => {
     expect(painted).toEqual(['circle', 'g', 'g', 'line']);
   });
 
-  test('one that cannot be made costs itself, not the picture', () => {
-    // It is remade on every animation frame, so a throw would take down the
-    // editor a person would use to fix it -- and would do so sixty times a
-    // second. The frames still draw, and the complaint is said once.
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const scene = new Scene({
+  /** A scene whose one world decal names a frame it does not have. */
+  function broken(): Scene {
+    return new Scene({
       frames: [new TrackFrame({ id: 'left', initialState: [1, 0] })],
       worldDecals: [
         (tick: Tick) =>
@@ -224,6 +221,14 @@ describe('a decal drawn in world space', () => {
           ),
       ],
     });
+  }
+
+  test('one that cannot be made costs itself, not the picture', () => {
+    // It is remade on every animation frame, so a throw would take down the
+    // editor a person would use to fix it -- and would do so sixty times a
+    // second. The frames still draw, and the complaint is said once.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const scene = broken();
     const view = (stateMap: StateMap): ReactElement => (
       <svg>
         <SceneView scene={scene} stateMap={stateMap} />
@@ -234,8 +239,10 @@ describe('a decal drawn in world space', () => {
     expect(container.querySelector('line')).toBeNull();
     expect(container.querySelector('g.frame')).not.toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
+    // Which one, not just that one: a count gives an author nothing to search
+    // for in the rig this exists for, where several of them are the point.
     expect(warn.mock.calls[0]![0]).toMatch(
-      /world-space decal was not drawn.*No such frame in scene: elbow/,
+      /world-space decal 1 was not drawn.*No such frame in scene: elbow/,
     );
 
     // Drawn again, and again it cannot be made. Said once: this runs on every
@@ -244,6 +251,34 @@ describe('a decal drawn in world space', () => {
     rerender(view(new Map([['left', [3, 0]]]) as StateMap));
 
     expect(warn).toHaveBeenCalledTimes(1);
+
+    warn.mockRestore();
+  });
+
+  test("a complaint is one view's, and lasts as long as the scene", () => {
+    // Two halves of one decision, and each fails a different wrong answer: a
+    // set kept per module would let the second view inherit the first's
+    // silence, and a set kept for the life of the mount would stay silent
+    // when a person breaks the same thing again -- which in the editor is
+    // every edit, since an edit is a new `Scene`.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { rerender } = render(
+      <svg>
+        <SceneView scene={broken()} stateMap={new Map()} />
+        <SceneView scene={broken()} stateMap={new Map()} />
+      </svg>,
+    );
+
+    expect(warn).toHaveBeenCalledTimes(2);
+
+    rerender(
+      <svg>
+        <SceneView scene={broken()} stateMap={new Map()} />
+        <SceneView scene={broken()} stateMap={new Map()} />
+      </svg>,
+    );
+
+    expect(warn).toHaveBeenCalledTimes(4);
 
     warn.mockRestore();
   });
