@@ -14,22 +14,18 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**Nothing, and the next step is Karl's to unblock.**
+**Parameters, now that addressing is settled.**
 
-The spine's next move turns on a question that is *open* rather than unbuilt.
-[#76](https://github.com/kkroening/physm/pull/76) argues the slot belongs on the
-child node rather than in the path, which would retire step 2 entirely and make
-step 3 next; building either answer would settle it by fait accompli, which is
-the wrong way round for a change the RFC calls its most invasive.
+The question that was holding the spine is answered: a slot lives on the child
+node rather than inside `NodePath`, so the migration the RFC called its most
+invasive change does not exist, and children bind to slots by Python's
+keyword-argument rule. See [Decisions](#decisions).
 
-**Hand-written components** are the other independent track and are genuinely
-unblocked by that -- but they carry an open question at the centre rather than
-at the edges. A component cannot be *called* in a worker: its return value is an
-element tree of function references, and structured clone refuses those. So the
-`while (true)` the worker was meant to contain runs on the main thread after
-all, and the three ways out
-([page 11](docs/issues/0016/11-risks.md)) are each larger than the bullet they
-replace. That wants proposing before building, on the same reasoning as #76.
+Next is promote-to-prop -- a definition declaring typed parameters, an instance
+passing literals, and a child prop that may *be* a parameter reference and
+nothing more. It forces the scope, naming and declaration-block design without
+needing an expression language, and it is the first thing in this effort a
+person using the editor can see.
 
 ## Next — 0016
 
@@ -39,32 +35,27 @@ site built before it. Roughly one PR each, ordered by risk rather than appetite;
 the [staging page](docs/issues/0016/10-staging.md) argues the order.
 
 1. ~~**A prop value becomes a tagged thing**~~ — done.
-2. **Addressing carries slots** — **in question**, see
-   [#76](https://github.com/kkroening/physm/pull/76). If the slot goes on the
-   child rather than in the path there is no migration here and this step goes
-   away; the *instantiation trail* carrying an iteration index was never a path
-   change either way, and lands with step 7.
-3. **Parameters, literal values only.** A definition declares typed parameters, an
+2. **Parameters, literal values only.** A definition declares typed parameters, an
    instance passes literals, a child prop may be a parameter reference and
    nothing more. This is promote-to-prop, and it forces the scope and
    declaration-block design without needing an expression language.
-4. **Structural expressions**, stored as a DAG and emitted as the host
+3. **Structural expressions**, stored as a DAG and emitted as the host
    language's own syntax -- `length={halfLength * 2}`, never a wrapper. The
    emitter's constants heuristic is deleted rather than tuned, since expression
    identity is what it was guessing at.
-5. **Signals**, hanging off the pose map, and with them decals drawn in world
+4. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
    Rust path hands external forces across once per batch.
-6. **Named slots**, cheaper once step 2 has landed -- and new work in both the
+5. **Named slots** -- where the `slot` field lands, and new work in both the
    emitter and the reader, neither of which handles an element-valued prop.
-7. **Repetition**, with the emitted form decided first.
-8. **The port surface** -- outputs and instance names, then manipulators, force
+6. **Repetition**, with the emitted form decided first.
+7. **The port surface** -- outputs and instance names, then manipulators, force
    channels and key bindings. [0011](docs/issues/0011.md) closes here. Whether
    any of it has a TSX spelling at all is the one open question in the plan, and
-   it is owed an answer before step 3 fixes the declaration block's shape.
+   it is owed an answer before parameters fix the declaration block's shape.
 
 **Running alongside, blocked by nothing:** springs (additive to the document, and
-they exercise the force path the channels in step 8 will need -- though each
+they exercise the force path the port surface will need -- though each
 spring is core work on both sides of the `physm-rs` boundary, not a warm-up; the
 local joint spring is done, and the ones that reference another frame's
 direction wait on signals) and
@@ -133,8 +124,8 @@ inconvenience).
   nine are types-first, forced by their core option classes, while
   [0014 page 5](docs/issues/0014/05-metadata.md) argues schema-first. Declared
   components take no props until promote-to-prop, so it stays open -- Karl's
-  call. Note that the deferral expires by its own terms at 0016's step 3, which
-  *is* promote-to-prop; [0016 page 8](docs/issues/0016/08-metadata.md) argues an
+  call. Note that the deferral expires by its own terms at 0016's parameters
+  step, which *is* promote-to-prop; [0016 page 8](docs/issues/0016/08-metadata.md) argues an
   answer for user-declared parameters and leaves the core nine types-first.
 - Whether an emitted constant is the answer or a placeholder. What page 6's
   first row loses is not the constant but *the fact that the uses were one
@@ -143,8 +134,8 @@ inconvenience).
   left inline. The threshold trades a false positive for a false negative
   rather than removing the guess. What would end it is the document recording
   that several props hold one value -- which is close to what promote-to-prop
-  implies -- and whether that is where this goes is Karl's call. 0016's step 4
-  *proposes* deleting the heuristic rather than tuning it, on the grounds that
+  implies -- and whether that is where this goes is Karl's call. 0016's
+  expressions step *proposes* deleting the heuristic rather than tuning it, on the grounds that
   expression identity is what it was guessing at; the call is still owed.
 - Promote to prop, or scope ids per instance: either makes a component that
   names an id reusable. Which comes first is Karl's call, and

@@ -46,33 +46,33 @@ appears to deserve.
 
 ## The spine
 
-3. **Parameters, literal values only.** A definition declares typed parameters; an
+2. **Parameters, literal values only.** A definition declares typed parameters; an
    instance passes literals; a child prop may *be* a parameter reference and
    nothing more. This is promote-to-prop, already on the frontier, and it forces
    the scope, naming and declaration-block design ([page 3](03-scope.md)) without
    needing an expression language. `Pendulum` gets its `length` here.
-4. **Structural expressions.** Arithmetic and vector operations over parameters
+3. **Structural expressions.** Arithmetic and vector operations over parameters
    and constants, stored as a DAG ([page 4](04-expressions.md)). `PendulumCart`
    can compute. `emitScene`'s constants heuristic is deleted rather than tuned.
-5. **Signals.** The second evaluation context, hanging off the pose map, plus
+4. **Signals.** The second evaluation context, hanging off the pose map, plus
    world-space decals — the wish list's line between two anchors. Says which
    solver a per-tick value is specified against ([page 2](02-values.md)).
-6. **Named slots** — [page 6](06-structure.md). Cheaper once addressing is done,
+5. **Named slots** — [page 6](06-structure.md). Cheaper once addressing is done,
    awkward before, and it needs emitter *and* reader work for element-valued
    props, which neither supports today.
-7. **Repetition.** Chain and repeat, with the emitted form decided before the
+6. **Repetition.** Chain and repeat, with the emitted form decided before the
    editor work — the emission constraint is what decides what the node can be.
-8. **The port surface.** Outputs and instance names first, then manipulators and
+7. **The port surface.** Outputs and instance names first, then manipulators and
    force channels, then key bindings. [0011](../0011.md) closes here, and the
-   emission rule has to be settled for it before step 3 fixes the declaration
-   block's shape.
+   emission rule has to be settled for it before the parameters step fixes the
+   declaration block's shape.
 
 ## Later
 
 - **Algebraic enums** — the feature is deferrable, the decision behind it is not
-  ([page 8](08-metadata.md)), and the decision has to be taken at step 3.
+  ([page 8](08-metadata.md)), and the decision has to be taken with parameters.
 - **The expression graph pane.** Deferred deliberately and blocked by nothing
-  once step 4 stores a graph rather than a tree. It is a second renderer of data
+  once expressions are stored as a graph rather than a tree. It is a second renderer of data
   that already exists, which is the whole reason to store a graph.
 - **Bidirectional code editing.** Out of scope, by [page 1](01-overview.md).
 
@@ -98,4 +98,4 @@ module and compares scenes, and never asks for the document back
 if outputs and channels turn out to have no TSX spelling, is that they belong in the
 escape hatch — which would mean [0011](../0011.md) closes by hand-writing a
 component rather than by declaring a surface. That is a large enough difference
-to want settled before step 3 fixes the shape of the declaration block.
+to want settled before the parameters step fixes the declaration block.

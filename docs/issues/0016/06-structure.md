@@ -32,7 +32,7 @@ props holding elements, which is how React expresses the same thing.
 element's `$$typeof`, which it refuses as a symbol; and the reader descends into
 `children` only, so an element-valued prop would come back as opaque data rather
 than as nodes. This is the widening [page 1](01-overview.md) promises at every
-step, and it is most of what step 6 costs.
+step, and it is most of what named slots cost.
 
 The real cost is not here — it is that a node's children stop being one list,
 which is [page 5](05-addressing.md)'s subject.

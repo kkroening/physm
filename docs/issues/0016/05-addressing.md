@@ -92,7 +92,7 @@ the wrong one**, and the third constraint is the tell: a representation that has
 to be excused for what it costs the cases not using it is usually the wrong
 shape.
 
-## Proposed: the slot belongs on the child, not in the path
+## The slot belongs on the child, not in the path
 
 Put the slot on the child node. A node's children stay **one ordered list**, and
 a child carries an optional `slot` naming which of its holder's slots it sits in
@@ -153,17 +153,39 @@ an edit to a field, and the indices behave exactly as they do now.
 
 ### What it would do to the plan
 
-[Page 10](10-staging.md) puts addressing at step 2, ahead of everything a person
-can see, because its cost grows with every site built before it. **That argument
-is about the path migration, and on this proposal there is no path migration.**
-The `slot` field arrives with named slots, in the step that introduces them, and
-costs what an optional field costs.
+## How children bind to slots
+
+Python's keyword arguments, adapted where the analogy breaks.
+_(Karl, 2026-09-16.)_
+
+- **Unnamed children go to the first slot** — the only slot in nearly every
+  case, and exactly today's behaviour.
+- **A child may name its slot** instead.
+- **Once one child names a slot, every later child must name one too.**
+
+That last rule is the load-bearing one, and it is Python's: a keyword argument
+may not be followed by a positional. Without it, `<A/> <B slot="right"/> <C/>`
+leaves `C` ambiguous — first slot, or still the right one? — and the rule
+removes the question rather than answering it with a convention nobody
+remembers.
+
+**Where the analogy breaks**, and why the first rule is not *one child per slot,
+in order*: a Python parameter takes one value, and a slot takes a **list**.
+Binding one child per slot positionally would force naming in the ordinary case
+of one slot holding several children, which is most of every scene. So
+positional binding fills the first slot, and a second slot is what makes naming
+necessary — the common case keeps looking exactly as it does today, and the
+uncommon one turns explicit at the point it stops being obvious.
+
+## What this does to the staging
+
+An earlier draft of [page 10](10-staging.md) had addressing as step 2, ahead of
+everything a person can see, because its cost grew with every site built before
+it. **That argument was about the path migration, and there is no path
+migration.** The `slot` field arrives with named slots, in the step that
+introduces them, and costs what an optional field costs.
 
 The iteration half was never a path change either — it lives in an instantiation
 trail beside the path rather than inside it, which is what "two answers rather
-than one interleaved sequence" was reaching for above. So on this proposal
-`NodePath` is, as far as this RFC can see, finished.
-
-**Not adopted here.** This is a proposal against a section that says it is not
-settled, and it retires the RFC's most invasive scheduled step — which is worth
-a second opinion before the staging is rewritten around it.
+than one interleaved sequence" was reaching for above. So `NodePath` is, as far
+as this RFC can see, finished.

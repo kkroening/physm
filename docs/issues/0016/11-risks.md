@@ -39,7 +39,7 @@ repetition count that reads state gets written, works in the editor, and
 re-assembles the scene every tick once it runs.
 
 Retrofitting the distinction means re-typing every expression already authored.
-It is cheap at step 4 and expensive at step 7.
+It is cheap when expressions land and expensive once repetition has.
 
 ## Addressing designed for slots alone
 
