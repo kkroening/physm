@@ -33,3 +33,24 @@ export { default as Weight } from './Weight';
 export { default as Anchor } from './Anchor';
 export { default as Coincidence } from './Coincidence';
 export { default as Distance } from './Distance';
+
+/**
+ * Expression constructors, re-exported so one import serves a whole module.
+ *
+ * A prop can be computed rather than stated, and the emitted module writes
+ * `position={mul(halfLength, 2)}` against this binding -- so what a person
+ * hand-writes and what the editor writes import from the same place.
+ */
+export {
+  add,
+  div,
+  dot,
+  mul,
+  neg,
+  scale,
+  sqrt,
+  sub,
+  vec,
+  xOf,
+  yOf,
+} from './../expression';

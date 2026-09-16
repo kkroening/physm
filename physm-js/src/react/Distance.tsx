@@ -1,13 +1,15 @@
 import resolveAnchor from './resolveAnchor';
 import { DistanceConstraint } from './../Constraint';
+import { computed } from './../expression';
 import { useId } from 'react';
 import { refuseChildren, useSceneNode } from './sceneNodes';
+import type { Computable } from './../expression';
 import type { ComponentMeta } from './componentMeta';
 import type { ConstraintEnd } from './resolveAnchor';
 import type { ConstraintNode } from './sceneNodes';
 import type { PositionLike } from './../Scene';
 
-export interface DistanceProps {
+interface DistanceValues {
   frame1: ConstraintEnd;
   frame2: ConstraintEnd;
   position1?: PositionLike;
@@ -15,13 +17,16 @@ export interface DistanceProps {
   length?: number | null;
 }
 
+/** What an element may be given: any of them may be computed. */
+export type DistanceProps = Computable<DistanceValues>;
+
 function describeDistance({
   frame1,
   frame2,
   position1,
   position2,
   length,
-}: DistanceProps): ConstraintNode {
+}: DistanceValues): ConstraintNode {
   return {
     slot: 'constraint',
     describe: () =>
@@ -64,7 +69,11 @@ function describeDistance({
  */
 export default function Distance(props: DistanceProps): null {
   refuseChildren('Distance', (props as { children?: unknown }).children);
-  useSceneNode(useId(), describeDistance(props), props);
+  useSceneNode(
+    useId(),
+    describeDistance(computed<DistanceValues>(props)),
+    props,
+  );
 
   return null;
 }
@@ -105,4 +114,4 @@ Distance.meta = {
     // No default: an omitted length is adopted from the gap the pose places.
     length: { kind: 'length', label: 'Length' },
   },
-} satisfies ComponentMeta<DistanceProps>;
+} satisfies ComponentMeta<DistanceValues>;

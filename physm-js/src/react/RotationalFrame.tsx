@@ -1,13 +1,15 @@
+import { computed } from './../expression';
 import CoreRotationalFrame from './../RotationalFrame';
 import FrameIdContext from './FrameIdContext';
 import { ParentKeyContext, useSceneNode } from './sceneNodes';
 import { useContext, useId } from 'react';
+import type { Computable } from './../expression';
 import type { ComponentMeta } from './componentMeta';
 import type { FrameId } from './../Frame';
 import type { FrameNode, SceneNodeContext } from './sceneNodes';
 import type { ReactElement, ReactNode } from 'react';
 
-export interface RotationalFrameProps {
+interface RotationalFrameValues {
   children?: ReactNode;
   id?: FrameId;
   position?: number | readonly number[];
@@ -16,8 +18,11 @@ export interface RotationalFrameProps {
   stiffness?: number;
 }
 
+/** What an element may be given: any of them may be computed. */
+export type RotationalFrameProps = Computable<RotationalFrameValues>;
+
 function describeRotationalFrame(
-  { id, position, initialState, resistance, stiffness }: RotationalFrameProps,
+  { id, position, initialState, resistance, stiffness }: RotationalFrameValues,
   { key }: SceneNodeContext,
 ): FrameNode {
   const frameId = id ?? key;
@@ -52,7 +57,10 @@ export default function RotationalFrame(
   const { children } = props;
   const key = useId();
   const frameId = useContext(FrameIdContext);
-  const node = describeRotationalFrame(props, { key, frameId });
+  const node = describeRotationalFrame(computed<RotationalFrameValues>(props), {
+    key,
+    frameId,
+  });
 
   useSceneNode(key, node, { ...props, frameId });
 
@@ -84,4 +92,4 @@ RotationalFrame.meta = {
     resistance: { kind: 'number', label: 'Resistance', default: 0 },
     stiffness: { kind: 'number', label: 'Stiffness', default: 0 },
   },
-} satisfies ComponentMeta<RotationalFrameProps>;
+} satisfies ComponentMeta<RotationalFrameValues>;

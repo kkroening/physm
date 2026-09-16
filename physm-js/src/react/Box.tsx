@@ -1,20 +1,25 @@
 import CoreBoxDecal from './../BoxDecal';
+import { computed } from './../expression';
 import { useId } from 'react';
 import { refuseChildren, useSceneNode } from './sceneNodes';
+import type { Computable } from './../expression';
 import type { ComponentMeta } from './componentMeta';
 import type { BoxDecalOptions } from './../BoxDecal';
 import type { SceneNode } from './sceneNodes';
 
-export type BoxProps = BoxDecalOptions;
+type BoxValues = BoxDecalOptions;
 
-function describeBox(props: BoxProps): SceneNode {
+/** What an element may be given: any of them may be computed. */
+export type BoxProps = Computable<BoxValues>;
+
+function describeBox(props: BoxValues): SceneNode {
   return { slot: 'decal', build: () => new CoreBoxDecal(props) };
 }
 
 /** A box drawn in the enclosing frame's coordinates. */
 export default function Box(props: BoxProps): null {
   refuseChildren('Box', (props as { children?: unknown }).children);
-  useSceneNode(useId(), describeBox(props), props);
+  useSceneNode(useId(), describeBox(computed<BoxValues>(props)), props);
 
   return null;
 }
@@ -36,4 +41,4 @@ Box.meta = {
     lineWidth: { kind: 'length', label: 'Line width', default: 1 },
     color: { kind: 'color', label: 'Colour', default: 'black' },
   },
-} satisfies ComponentMeta<BoxProps>;
+} satisfies ComponentMeta<BoxValues>;

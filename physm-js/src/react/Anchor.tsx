@@ -1,19 +1,24 @@
+import { computed } from './../expression';
 import FrameIdContext from './FrameIdContext';
 import { useContext, useId, useImperativeHandle } from 'react';
 import { refuseChildren, useSceneNode } from './sceneNodes';
+import type { Computable } from './../expression';
 import type { ComponentMeta } from './componentMeta';
 import type { AnchorNode, AnchorPoint, SceneNodeContext } from './sceneNodes';
 import type { PositionLike } from './../Scene';
 import type { Ref } from 'react';
 
-export interface AnchorProps {
+interface AnchorValues {
   id?: string;
   position?: PositionLike;
   ref?: Ref<AnchorPoint>;
 }
 
+/** What an element may be given: any of them may be computed. */
+export type AnchorProps = Computable<AnchorValues>;
+
 function describeAnchor(
-  { id, position }: AnchorProps,
+  { id, position }: AnchorValues,
   { frameId }: SceneNodeContext,
 ): AnchorNode {
   if (!frameId) {
@@ -77,7 +82,7 @@ export default function Anchor(props: AnchorProps): null {
   const { ref } = props;
   const frameId = useContext(FrameIdContext);
   const key = useId();
-  const node = describeAnchor(props, { key, frameId });
+  const node = describeAnchor(computed<AnchorValues>(props), { key, frameId });
 
   // The handle must never be staler than the node. A constraint reads
   // `ref.current` during assembly, which runs inside `Scene`'s `useMemo` -- and
@@ -108,4 +113,4 @@ Anchor.meta = {
     // no `[x, y]` says that.
     position: { kind: 'point', label: 'Position' },
   },
-} satisfies ComponentMeta<AnchorProps>;
+} satisfies ComponentMeta<AnchorValues>;

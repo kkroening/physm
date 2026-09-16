@@ -1,21 +1,26 @@
+import { computed } from './../expression';
 import CoreFixedFrame from './../FixedFrame';
 import FrameIdContext from './FrameIdContext';
 import { ParentKeyContext, useSceneNode } from './sceneNodes';
 import { useContext, useId } from 'react';
+import type { Computable } from './../expression';
 import type { ComponentMeta } from './componentMeta';
 import type { FrameId } from './../Frame';
 import type { FrameNode, SceneNodeContext } from './sceneNodes';
 import type { ReactElement, ReactNode } from 'react';
 
-export interface FixedFrameProps {
+interface FixedFrameValues {
   children?: ReactNode;
   id?: FrameId;
   position?: number | readonly number[];
   angle?: number;
 }
 
+/** What an element may be given: any of them may be computed. */
+export type FixedFrameProps = Computable<FixedFrameValues>;
+
 function describeFixedFrame(
-  { id, position, angle }: FixedFrameProps,
+  { id, position, angle }: FixedFrameValues,
   { key }: SceneNodeContext,
 ): FrameNode {
   const frameId = id ?? key;
@@ -42,7 +47,10 @@ export default function FixedFrame(props: FixedFrameProps): ReactElement {
   const { children } = props;
   const key = useId();
   const frameId = useContext(FrameIdContext);
-  const node = describeFixedFrame(props, { key, frameId });
+  const node = describeFixedFrame(computed<FixedFrameValues>(props), {
+    key,
+    frameId,
+  });
 
   useSceneNode(key, node, { ...props, frameId });
 
@@ -68,4 +76,4 @@ FixedFrame.meta = {
     position: { kind: 'point', label: 'Position', default: [0, 0] },
     angle: { kind: 'angle', label: 'Angle', default: 0 },
   },
-} satisfies ComponentMeta<FixedFrameProps>;
+} satisfies ComponentMeta<FixedFrameValues>;

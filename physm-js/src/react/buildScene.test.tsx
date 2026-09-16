@@ -1,4 +1,5 @@
 import Anchor from './Anchor';
+import { div, mul, sqrt, vec, xOf } from './../expression';
 import Box from './Box';
 import CartAndRope, { RIG } from './../CartAndRope';
 import Circle from './Circle';
@@ -665,5 +666,103 @@ describe('buildScene, traced', () => {
       rendered,
       circle,
     ]);
+  });
+});
+
+describe('a prop that is computed rather than stated', () => {
+  /**
+   * The same rig twice: once with every value written out, once with each
+   * arrived at by an expression.
+   *
+   * `half` is bound once and used twice, which is the sharing a graph can hold
+   * and a tree cannot -- and what the two `Weight`s get is one node, not two
+   * that agree.
+   */
+  const stated = (
+    <RotationalFrame id="arm" position={[1, 0]} resistance={2.5}>
+      <Line endPos={[3, 4]} lineWidth={0.1} />
+      <Weight mass={6} position={[3, 4]} />
+      <Circle position={[2.5, 0]} radius={5} />
+    </RotationalFrame>
+  );
+  const computedRig = (): ReactElement => {
+    const half = div(5, 2);
+
+    return (
+      <RotationalFrame id="arm" position={vec(1, 0)} resistance={half}>
+        <Line endPos={vec(3, 4)} lineWidth={div(1, 10)} />
+        <Weight mass={mul(3, 2)} position={vec(3, xOf([4, 9]))} />
+        <Circle position={vec(half, 0)} radius={sqrt(25)} />
+      </RotationalFrame>
+    );
+  };
+
+  test('the walk builds the same scene either way', () => {
+    expect(normalized(buildScene(computedRig()))).toEqual(
+      normalized(buildScene(stated)),
+    );
+  });
+
+  test('so does the mounted binding, which shares the same describe', () => {
+    let mounted: CoreScene | null = null;
+    render(
+      <Scene onSceneChange={(built) => (mounted = built)}>
+        {computedRig()}
+      </Scene>,
+    );
+
+    expect(normalized(mounted!)).toEqual(normalized(buildScene(stated)));
+  });
+
+  test('an operand of the wrong shape says which prop it was on', () => {
+    // The fold happens where the walk hands props over, so the error carries
+    // the node it came from rather than arriving from somewhere in the graph.
+    expect(() =>
+      buildScene(
+        <RotationalFrame id="arm">
+          <Weight mass={xOf(3)} />
+        </RotationalFrame>,
+      ),
+    ).toThrow(/Expected a point, and found 3/);
+  });
+
+  test('a prop no operation can produce a value for is not widened', () => {
+    // Each of these compiles only if `Computable` widened a prop it should
+    // not have -- `@ts-expect-error` fails the build when there is no error,
+    // which is the assertion. A guarantee the binding had before expressions
+    // existed, and the kind that disappears silently without a test.
+    const refused = [
+      // @ts-expect-error -- a colour is not something an expression produces
+      <Box key="a" width={1} height={1} color={mul(3, 2)} />,
+      // @ts-expect-error -- nor is a flag
+      <Box key="b" width={1} height={1} solid={mul(1, 0)} />,
+      // @ts-expect-error -- nor a frame's id
+      <RotationalFrame key="c" id={mul(3, 2)} />,
+      // @ts-expect-error -- nor a constraint's end
+      <Coincidence key="d" frame1={mul(1, 2)} frame2="b" />,
+    ];
+
+    expect(refused).toHaveLength(4);
+
+    // And the props this change is for still take one.
+    expect(() =>
+      buildScene(
+        <RotationalFrame id="arm" resistance={mul(1, 2)}>
+          <Box width={sqrt(4)} height={div(4, 2)} position={vec(0, 0)} />
+        </RotationalFrame>,
+      ),
+    ).not.toThrow();
+  });
+
+  test('a required prop is satisfied by an expression', () => {
+    // `refuseMissingProps` runs before the fold and asks only whether the prop
+    // is there, which an expression is.
+    expect(() =>
+      buildScene(
+        <RotationalFrame id="arm">
+          <Weight mass={mul(2, 3)} />
+        </RotationalFrame>,
+      ),
+    ).not.toThrow();
   });
 });
