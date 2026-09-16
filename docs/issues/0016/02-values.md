@@ -49,22 +49,43 @@ restarting is honest.
 It is wrong for a box breaking mid-swing. Nothing else in the scene should
 teleport back to its start because one body fragmented.
 
-The mechanism is close at hand and is not proposed here: the state map is keyed
-by frame id, so a rebuild can **merge** rather than reset — carry over the state
-of every id the new scene still has, and give the rest their initial state.
-Two things follow that are worth recording now.
+**The merge was already specified, and already rejected**, so the question is
+not what the mechanism is — it is whether the gameplay case escapes the reason
+it was turned down. [0014 page 8](../0014/08-play.md#editing-while-it-runs) sets
+out carrying each frame's `[q, q̇]` across a rebuild by identity, and then:
 
-- It is an argument for generated ids being **derived from the instantiation
-  path** rather than freshly minted ([page 3](03-scope.md)). A count dropping
-  from five to four should leave four frames holding their state and one gone;
-  random ids would scramble the merge.
-- The merged state can violate the *new* scene's constraints — fragments that
-  were rigid a tick ago. `Scene.getStabilizedState` is the existing tool, and
-  this is a real caller for it.
+> ⚠️ **Positional identity is where this leaks, and the editor resets rather
+> than guessing.** Delete the second of five rope segments and every segment
+> below shifts up one index — so carrying state by path would not reset the
+> shifted frames, **it would hand each its neighbour's velocity.**
 
-**Changing 0014's rule is Karl's call and is not part of this RFC.** It is
-recorded here because the gameplay case will need it, and discovering that
-during the work is worse than knowing it now.
+That reason is sound, and it covers the rope case this page wants. A count
+falling from five to four is benign only because it drops the *last* one; a
+segment removed from the middle is exactly the leak.
+
+**The escape is on the same page**: *"An explicit `key` the author wrote is
+honoured either way; the editor does not invent one."* The leak is about
+identity being **positional**, and the gameplay case is the one where it need
+not be — an engine that fragments a body or removes a segment *knows which*, so
+identity is carried rather than inferred from where something sits.
+
+So the proposition, narrowly: **a rig whose structure changes at run time must
+carry stable keys, and then merge-by-identity is sound; where it does not,
+0014's reset is still right.** Two notes if that is taken:
+
+- 0014 settles identity as **`(path, kind)`, with an explicit `id` preferred**.
+  The `kind` half is load-bearing — a frame retyped from `TrackFrame` to
+  `RotationalFrame` has `q` in metres and then in radians — and the preference
+  for an explicit `id` is the same argument as generating ids from the
+  instantiation path ([page 3](03-scope.md)).
+- The merged state can violate the *new* scene's constraints. 0014 is sharper
+  than "stabilise it" here: the stabilizer yanking shut **looks like an
+  explosion**, so re-running the consistency step and saying so beats silently
+  correcting.
+
+**Changing 0014's rule is Karl's call and is not taken here.** It is his
+decision and his prior reasoning; this page's job is to say that the gameplay
+case reopens it, and on what grounds.
 
 ## Why a repetition count must be structural
 

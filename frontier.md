@@ -50,10 +50,11 @@ the [staging page](docs/issues/0016/10-staging.md) argues the order.
    instance passes literals, a child prop may be a parameter reference and
    nothing more. This is promote-to-prop, and it forces the scope and
    declaration-block design without needing an expression language.
-3. **Structural expressions**, stored as a DAG and emitted as the host
-   language's own syntax -- `length={halfLength * 2}`, never a wrapper. The
-   emitter's constants heuristic is deleted rather than tuned, since expression
-   identity is what it was guessing at.
+3. **Structural expressions**, stored as a DAG and emitted in constructor form
+   -- `mul(halfLength, 2)`, never host arithmetic, so that signals and
+   structural values share one node set. The emitter's constants heuristic is
+   deleted rather than tuned, since expression identity is what it was guessing
+   at.
 4. **Signals**, hanging off the pose map, and with them decals drawn in world
    space. Says which solver a per-tick value is specified against, since the
    Rust path hands external forces across once per batch.

@@ -36,12 +36,13 @@ the machine underneath it.**
 ## The rule
 
 - **The document is a decidable subset of TSX, and what it emits is real TSX.**
-  Whatever the document can express, `emitScene` writes in the host language's
-  own syntax — `length={halfLength * 2}`, not a wrapper only physm can read —
-  and **building that module produces the same scene**. That is the existing
+  Whatever the document can express, `emitScene` writes as ordinary TSX, and
+  **building that module produces the same scene**. That is the existing
   discipline, and it stays: `expectRoundTrip` in the emitter's tests evaluates
   the emitted source, builds it, and compares the scene against the document's
-  own. [Page 4](04-expressions.md) is what it looks like for an expression.
+  own. A *computed* prop emits in constructor form — `mul(halfLength, 2)`, not
+  `halfLength * 2` — because a signal has no value at emit time and must survive
+  as a graph; [page 4](04-expressions.md) argues that at length.
 - **It has never meant the *document* comes back, and that is worth being exact
   about**, because the looser reading is the one that invites features which
   cannot work. Two independent reasons, neither of which needed expressions to
@@ -50,11 +51,14 @@ the machine underneath it.**
   `imported`, never `defined` — so a component in a read tree comes back as an
   opaque reference however many definitions the reader could hold. It is the way
   *in*, for a hand-written rig or for a test, and it was never the way back.
-- **Expressions widen that gap rather than opening it.** `documentFrom` reads a
-  tree the runtime has already *evaluated*, so it recovers what survives
-  evaluation: a literal does, and `halfLength * 2` arrives as a number. Which
-  makes explicit what was already true — **the document needs a save format of
-  its own** ([0017](../0017.md)), because its output was never one.
+- **Expressions do not close it either.** `documentFrom` reads a tree the
+  runtime has already *evaluated*, and a constructor call survives that — but
+  the *reference* inside it does not, since by then `halfLength` is an ordinary
+  binding holding a number. So a computed prop would come back as
+  `mul(4, 2)`: the operation preserved over an operand already folded. All of
+  which makes explicit what was true before expressions existed — **the document
+  needs a save format of its own** ([0017](../0017.md)), because its output was
+  never one.
 - **Hand-written components are the escape hatch.** Anything outside the subset
   is written as source, in the editor, and captured as an opaque definition that
   produces a tree when called — [page 7](07-handwritten.md).

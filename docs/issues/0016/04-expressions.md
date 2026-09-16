@@ -102,11 +102,20 @@ emitted module is still ordinary TSX — `mul` is a function the binding exports
 but what it builds is an **expression node**, not a product.
 
 ```tsx
-function Pendulum({ halfLength, children }: PendulumProps): ReactElement {
+function Pendulum({
+  halfLength,
+  children,
+}: {
+  halfLength: number;
+  children?: ReactNode;
+}): ReactElement {
+  const bob = vec(0, neg(mul(halfLength, 2)));
+
   return (
     <RotationalFrame initialState={[-0.6, 0]} resistance={0.4}>
-      <Line endPos={vec(0, neg(mul(halfLength, 2)))} lineWidth={0.15} />
-      <Weight mass={10} position={vec(0, neg(mul(halfLength, 2)))} />
+      <Line endPos={bob} lineWidth={0.15} />
+      <Weight mass={10} position={bob} />
+      <FixedFrame position={bob}>{children}</FixedFrame>
     </RotationalFrame>
   );
 }
@@ -122,6 +131,15 @@ write an edge with `*`.
 
 So the choice was one syntax for structural and another for signals, or one
 syntax for both. One is better, and the cost is verbosity in the near term.
+
+The `FixedFrame` is what keeps a place for children at the bob, so a pendulum
+hung from this one pivots on its ball — it is in the starter document for that
+reason, and an emitted `Pendulum` without it would build a different scene from
+the one it came from.
+
+And `bob` bound once and used three times is the sharing this page argues for,
+in the form it takes in source: one object, three references, which is a DAG
+edge rather than three identical subtrees.
 
 **Why a constructor survives evaluation when arithmetic does not.** `mul(a, b)`
 does not multiply. It returns `{ kind: 'mul', a, b }` — an expression node, the
@@ -153,11 +171,20 @@ collapses the emitted form back to infix is pure sugar and can arrive whenever �
 and in JavaScript it will always need a parser, because there is no operator
 overloading and a Proxy cannot intercept arithmetic.
 
-**And computed props now round-trip**, which they could not before. A constructor
-call leaves its AST sitting in the prop, so `documentFrom` reads it back. That
-retires one of [0017](../0017.md)'s three reasons the document needs a save
-format; the other two — a single definition from `documentFrom`, and `refOf`
-never producing a `defined` ref — are untouched.
+**A parameter is a value at call time, not a node**, and it is worth saying so
+rather than leaving it to be inferred. The alternative would let a *reference*
+survive evaluation, which sounds attractive and costs too much: a hand-written
+component could no longer write `if (halfLength > 3)`. That is structural
+branching on a parameter — which is what makes a tree's shape depend on one, and
+is repetition written by hand — and a `Select` node cannot stand in for it,
+because `Select` chooses a value where this chooses a shape.
+
+So this does **not** make a computed prop recoverable. A constructor call does
+survive into what `documentFrom` reads, but by then `halfLength` is an ordinary
+binding holding a number, so what survives is `mul(4, 2)` — the operation, over
+an operand the host already folded. And a definition's body is never read back
+at all, since `documentFrom` yields one definition. [0017](../0017.md)'s three
+reasons for a save format all stand.
 
 _(Karl, 2026-09-16, reversing his 2026-09-14 call, by first-principles reasoning
 about what a signal forces.)_
