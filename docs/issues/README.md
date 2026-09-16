@@ -11,7 +11,7 @@ Conventions and how to write a good issue: **[the shared issue tracker guide](ht
 | [0021](0021.md) | Let a definition's parameters be reordered | Enhancement | Open |
 | [0020](0020.md) | Carry a parameter across an extraction, instead of refusing one | Enhancement | Resolved |
 | [0019](0019.md) | Decide what names a component, and whether physm owns its element type | RFC | Open |
-| [0018](0018.md) | Draw the expression graph, so the representation has to be honest | Enhancement | Open |
+| [0018](0018.md) | Draw the expression graph, so the representation has to be honest | Enhancement | Resolved |
 | [0017](0017.md) | Give the document a save format, since its own output cannot carry it | RFC | Open |
 | [0016](0016.md) | Make the document a program rather than a drawing | RFC | Open |
 | [0015](0015.md) | Decide whether physm-js declares a surface, and run the dead-code check against it | RFC | Open |

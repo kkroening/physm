@@ -1,24 +1,49 @@
-import { isOperation } from './../expression';
+import { describe, isOperation } from './../expression';
 import type { ExpressionNode } from './../expression';
+
 /**
- * What a prop in a document holds: a value written into it, or the name of a
- * parameter the definition it sits in takes.
+ * What a prop in a document holds: a value written into it, the name of a
+ * parameter the definition it sits in takes, or an expression over either.
  *
  * The tag is the point of the module. A prop is read in a dozen places -- the
  * scene pane's handles, the properties pane, the tree row, the emitter -- and
  * most of them can only act on a value that is actually *there*, so what they
  * need from the type is to be stopped at the ones that are not. Reaching for
  * `.value` is how a caller says so, and the compiler names every such caller
- * whenever the union grows. [0016](../../../docs/issues/0016.md) has a third
- * member arriving: a prop holding an *expression*, a length computed from a
- * parameter or an endpoint read from a pose.
+ * whenever the union grows.
  *
- * It names only those, though, which is worth knowing before relying on it. A
- * caller that never reaches for `.value` -- one that passes a whole prop to
- * `JSON.stringify`, or to a parameter typed `unknown` -- goes on compiling and
- * silently shows or writes the wrapper. Those sites are the readonly displays
- * and the tree row's summary and find; what checks them is `Editor.test.tsx`,
- * which renders a node whose prop holds a reference and reads what each shows.
+ * ## What the tag does not name
+ *
+ * **It names the callers that reach for a field. It has never named the ones
+ * that reach for the tag**, and that distinction has now cost four defects, so
+ * it is worth stating rather than rediscovering.
+ *
+ * A caller reaching for `.value` stops compiling. A caller asking
+ * `kind === 'parameter'` -- or `kind !== 'parameter'` -- is asking a
+ * *semantic* question, and a new member answers it honestly and wrongly: an
+ * expression holding a reference three operands down reports `'operation'`,
+ * and a site that concluded "not a reference" from that went on to rename,
+ * delete or extract around it. Two of the four were a guard and the thing it
+ * guarded, blind the same way, cancelling to nothing.
+ *
+ * So when a member lands, the compile errors are the *start* of the sweep. The
+ * rest is found by reading for the questions:
+ *
+ * - **"Is this a reference?"** -- `referencesIn` and `renamedReferences` below
+ *   answer it for the whole graph, and every such site now calls one of them.
+ * - **"Is this a value I can act on?"** -- say what is wanted rather than what
+ *   is excluded. The scene pane's handle filter asks for `'literal'`; it used
+ *   to exclude `'parameter'`, and was wrong the day a third member arrived.
+ *
+ * And one on the writing side: `literalOf` takes a prop value *whole*, so it
+ * is the one constructor the compiler cannot name either. It hands a node back
+ * rather than wrapping one.
+ *
+ * A caller that passes a whole prop to `JSON.stringify`, or to a parameter
+ * typed `unknown`, is the same class seen from a third angle. Those are the
+ * readonly displays and the tree row's summary and find; what checks them is
+ * `Editor.test.tsx`, which renders a node whose prop holds each member and
+ * reads what is shown.
  */
 export type PropValue = LiteralValue | ParameterValue | ExpressionNode;
 
@@ -136,7 +161,7 @@ export function parameterOf(name: string): PropValue {
 }
 
 /** Whether `held` is a reference to a parameter rather than a value. */
-function isReference(
+export function isReference(
   held: unknown,
 ): held is { kind: 'parameter'; name: string } {
   return (
@@ -362,7 +387,7 @@ export function shownValueOf(prop: PropValue | undefined): string | null {
   if (isOperation(prop)) {
     return expressionSource(prop, {
       reference: (name) => name,
-      value: (held) => JSON.stringify(held) ?? String(held),
+      value: (held) => describe(held),
     });
   }
 

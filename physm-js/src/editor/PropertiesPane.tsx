@@ -1,3 +1,4 @@
+import ExpressionView from './ExpressionView';
 import { Fragment, useId, useRef, useState } from 'react';
 import { isOperation } from './../expression';
 import { literalOf, shownValueOf } from './propValue';
@@ -447,6 +448,7 @@ function NodeProps({
                   <span className="editor__reference">
                     {shownValueOf(held)}
                   </span>
+                  <ExpressionView prop={held} label={parameter.name} />
                 </div>
               );
             }
@@ -566,6 +568,7 @@ function NodeProps({
               <div className="editor__field" key={name}>
                 <span className="editor__label">{spec.label}</span>
                 <span className="editor__reference">{shownValueOf(held)}</span>
+                <ExpressionView prop={held} label={spec.label} />
               </div>
             );
           }
