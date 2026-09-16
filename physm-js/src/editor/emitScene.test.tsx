@@ -13,7 +13,8 @@ import TrackFrame from './../react/TrackFrame';
 import { literalOf, parameterOf } from './propValue';
 import Weight from './../react/Weight';
 import buildScene from './../react/buildScene';
-import { mul, operationNames, vec } from './../expression';
+import coreComponents from './../react/coreComponents';
+import { mul, vec } from './../expression';
 import emitScene, { rangeKey } from './emitScene';
 import ts from 'typescript';
 import {
@@ -620,10 +621,10 @@ describe('what the emitted module can import', () => {
   /**
    * Every operation, written out -- and exhaustive by construction.
    *
-   * `satisfies` fails to compile if one is missing or invented, so this cannot
-   * drift from the table; and being a literal it anchors the *runtime*
-   * enumeration to something, without which the loops below would pass against
-   * an `operationNames` that answered nothing at all.
+   * `satisfies` fails to compile if one is missing or invented, so it cannot
+   * drift from the table -- and `Object.keys` of it is therefore an exhaustive
+   * enumeration that no runtime call can quietly shorten, which is what the
+   * loops below need and what a first version of them did not have.
    */
   const EVERY_OPERATION = {
     add: true,
@@ -640,12 +641,6 @@ describe('what the emitted module can import', () => {
     worldPoint: true,
   } satisfies Record<Operation, true>;
 
-  test('the table names every operation there is', () => {
-    expect([...operationNames()].sort()).toEqual(
-      Object.keys(EVERY_OPERATION).sort(),
-    );
-  });
-
   test('the binding re-exports a constructor for every operation', () => {
     // `importsOf` collects operation names from the *document* -- whatever the
     // props happen to use -- and writes them as one named import from
@@ -658,22 +653,25 @@ describe('what the emitted module can import', () => {
     // long as it took someone to notice, which is `docs/issues/0026.md`.
     const exported = new Set(Object.keys(binding));
 
-    for (const name of operationNames()) {
+    for (const name of Object.keys(EVERY_OPERATION)) {
       expect([name, exported.has(name)]).toEqual([name, true]);
     }
   });
 
-  test('and exports nothing calling itself an operation that is not one', () => {
-    // The other direction, which is cheaper to get wrong quietly: a name the
-    // binding re-exports as though it were an operation, that `evaluate` would
-    // refuse. Only the constructors are checked -- a binding export is a
-    // function either way, so what distinguishes them is the table.
-    const names = new Set<string>(operationNames());
+  test('and no building block is named like an operation', () => {
+    // `importsOf` puts both into one `core` set and writes them as a single
+    // import, so a building block sharing a name with an operation would
+    // collapse the two into one imported name -- and the module would import
+    // whichever the binding exported under it.
+    //
+    // Walked over `coreComponents` rather than sifted out of the binding by a
+    // marker: that is the authoritative list, it cannot come back empty, and
+    // deriving it a second time here is how the first version of this test
+    // ended up able to iterate nothing and pass.
+    const names = new Set<string>(Object.keys(EVERY_OPERATION));
 
-    for (const [name, value] of Object.entries(binding)) {
-      if (typeof value === 'function' && 'sceneNode' in value) {
-        expect([name, names.has(name)]).toEqual([name, false]);
-      }
+    for (const { meta } of coreComponents) {
+      expect([meta.name, names.has(meta.name)]).toEqual([meta.name, false]);
     }
   });
 });
