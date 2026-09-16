@@ -162,6 +162,14 @@ inconvenience).
 
 ## Decisions
 
+- **A slot lives on the child node, not in the path.** A node's children stay
+  one ordered list and a child carries an optional label, so `NodePath` never
+  changes and the migration the RFC called its most invasive change does not
+  exist. Children bind to slots by Python's keyword-argument rule: unnamed go to
+  the first slot, and once one child names a slot every later child must too.
+  Recorded in
+  [0016 page 5](docs/issues/0016/05-addressing.md#the-slot-belongs-on-the-child-not-in-the-path).
+  _(Karl, 2026-09-16)_
 - **A structural edit resets simulation state; a prop edit carries it over.**
   Recorded in [0014 page 8](docs/issues/0014/08-play.md#editing-while-it-runs).
   _(Karl, 2026-09-11)_

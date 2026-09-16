@@ -41,17 +41,20 @@ re-assembles the scene every tick once it runs.
 Retrofitting the distinction means re-typing every expression already authored.
 It is cheap when expressions land and expensive once repetition has.
 
-## Addressing designed for slots alone
+## The iteration index folded into the path
 
-[Page 5](05-addressing.md) is the whole argument. The risk is *not* that the two
-halves land separately — the iteration index is additive, and landing it with
-repetition is correct. It is that the slot migration is designed without the
-trail in mind, and the two then do not fit: an iteration index folded into the
-path as another segment, say, which interleaves "which node" with "which copy of
-it" and has to be unpicked later by everything that reads a path.
+The migration this used to be about is gone — [page 5](05-addressing.md) puts the
+slot on the child node, so `NodePath` does not change for slots. The hazard it
+named survives, and now stands alone.
 
-The cheap protection is to design both now and land one, which costs a page of
-thinking and no code.
+When repetition arrives it needs to address *which copy*, and the tempting place
+to put that is a path segment. Doing so interleaves "which node" with "which copy
+of it" in one sequence, which every reader of a path then has to unpick — and it
+would undo the property the slot decision just bought, that a path names an
+authored node and nothing else.
+
+The cheap protection is to decide now that the iteration index lives in a
+separate instantiation trail, which costs a sentence and no code.
 
 ## The hand-written component that hangs the editor
 

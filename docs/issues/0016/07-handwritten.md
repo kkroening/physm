@@ -23,8 +23,8 @@ this RFC — and schedule pressure on a language design is how languages acquire
 features they regret.
 
 It is also unusually independent: it touches the definition boundary and the
-build path, and almost nothing else in this RFC. It can land while the addressing
-change is still being argued about.
+build path, and almost nothing else in this RFC. It can land whenever there is
+appetite for it.
 
 ## Why it is much simpler than bidirectional editing
 

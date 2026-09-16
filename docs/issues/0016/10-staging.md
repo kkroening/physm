@@ -15,17 +15,18 @@ each of these gets more expensive with every site built before it — the
 alternative is migrating that site too. And **the two independent tracks start
 early**, because they buy schedule room for everything that is not independent.
 
-## Prep — invisible, and worth its own steps
+## Prep — invisible, and worth its own step
 
 1. **A prop value becomes a tagged thing.** One variant today, `literal`. No
    behaviour changes, nothing renders differently, and every prop site is touched
    exactly once instead of once now and once when expressions arrive.
-2. **Addressing carries slots** — [page 5](05-addressing.md). The single most
-   invasive change here, entirely invisible, and the one whose cost grows with
-   every site built before it: each one has to learn that a node's children are
-   no longer one list. Slot components are unused when it lands. The
-   *instantiation trail* that carries an iteration index is designed alongside it
-   but is additive, and lands with repetition.
+
+**There was a second, and it turned out not to exist.** An earlier draft had
+`NodePath` learning to carry a slot, ahead of everything a person can see,
+because its cost grew with every site built before it.
+[Page 5](05-addressing.md) puts the slot on the *child node* instead, so paths
+never change and the migration is not a step. What remains arrives with named
+slots, as an optional field.
 
 ## The independent tracks
 
@@ -57,9 +58,9 @@ appears to deserve.
 4. **Signals.** The second evaluation context, hanging off the pose map, plus
    world-space decals — the wish list's line between two anchors. Says which
    solver a per-tick value is specified against ([page 2](02-values.md)).
-5. **Named slots** — [page 6](06-structure.md). Cheaper once addressing is done,
-   awkward before, and it needs emitter *and* reader work for element-valued
-   props, which neither supports today.
+5. **Named slots** — [page 6](06-structure.md). Where the `slot` field lands,
+   and where the list-boundary arithmetic it implies gets written. Needs emitter
+   *and* reader work for element-valued props, which neither supports today.
 6. **Repetition.** Chain and repeat, with the emitted form decided before the
    editor work — the emission constraint is what decides what the node can be.
 7. **The port surface.** Outputs and instance names first, then manipulators and

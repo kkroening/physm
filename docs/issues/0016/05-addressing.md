@@ -4,6 +4,13 @@
 · **Previous:** [Expressions](04-expressions.md)
 · **Next:** [Structure that computes](06-structure.md)
 
+> **This page argues its way to the opposite of how it opens.** It was written
+> when addressing looked like the RFC's one invasive change, and ends by
+> retiring it: the slot goes on the child node, and `NodePath` never changes.
+> The argument is kept in order because the wrong answer is instructive — but if
+> you arrived here for the decision, it is
+> [below](#the-slot-belongs-on-the-child-not-in-the-path).
+
 This is the only genuinely invasive change in the RFC, it is invisible to a user,
 and it is the one thing I would most want done before anything that depends on
 it. **Do it once.**
@@ -94,9 +101,11 @@ shape.
 
 ## The slot belongs on the child, not in the path
 
+_(Karl, 2026-09-16.)_
+
 Put the slot on the child node. A node's children stay **one ordered list**, and
 a child carries an optional `slot` naming which of its holder's slots it sits in
-— absent meaning the only one:
+— absent meaning the first:
 
 ```ts
 export interface DocNode {
@@ -104,7 +113,7 @@ export interface DocNode {
   readonly props: DocProps;
   readonly key?: string;
 
-  /** Which of the holder's slots this sits in; absent means the only one. */
+  /** Which of the holder's slots this sits in; absent means the first. */
   readonly slot?: string;
 
   readonly children: readonly DocNode[];
@@ -144,14 +153,22 @@ an edit to a field, and the indices behave exactly as they do now.
   scene tree reaches, not a cost worth pricing.
 - **Order *between* slots is representable and meaningless.** Harmless: the tree
   view groups by slot when it draws, so nobody sees it.
-- **Appending to a slot becomes arithmetic.** `insertionPoint` appends at
-  `node.children.length` today; appending to a named slot means *after the last
-  child carrying that label*. That is the one piece of genuinely new logic, and
-  it is local to `insertion.ts`.
+- **A list boundary becomes arithmetic**, wherever one is computed. `children.length`
+  stops answering "where does this slot end", and *after the last child carrying
+  that label* replaces it. Two sites, not one: `insertionPoint` in
+  `insertion.ts`, and `siblingCount` in `Editor.tsx`, which bounds the keyboard
+  reorder. The second is not cosmetic — with children `[A(left), B(left),
+  C(right)]`, moving `B` down currently lands it after a `right` child while
+  still labelled `left`, which is the meaningless ordering two bullets up,
+  reached by a keypress.
+- **A slot grouping row needs an identifier.** The tree keys rows by
+  `path.join('.')` and inverts it with `keys.indexOf(...)`, so rows and paths are
+  in bijection. [Page 6](06-structure.md) draws a slot as a grouping row, and a
+  grouping row is not a node — so it has no path to key on and needs a scheme of
+  its own. A slotted path would have named it for free; inventing a key is still
+  the cheaper of the two.
 - **The emitter still groups children by slot** to write them as element-valued
   props — the same work under either shape.
-
-### What it would do to the plan
 
 ## How children bind to slots
 
@@ -186,6 +203,6 @@ migration.** The `slot` field arrives with named slots, in the step that
 introduces them, and costs what an optional field costs.
 
 The iteration half was never a path change either — it lives in an instantiation
-trail beside the path rather than inside it, which is what "two answers rather
-than one interleaved sequence" was reaching for above. So `NodePath` is, as far
+trail beside the path rather than inside it: "which node" and "which copy of it"
+stay two answers rather than one interleaved sequence. So `NodePath` is, as far
 as this RFC can see, finished.

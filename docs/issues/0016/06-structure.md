@@ -34,8 +34,10 @@ element's `$$typeof`, which it refuses as a symbol; and the reader descends into
 than as nodes. This is the widening [page 1](01-overview.md) promises at every
 step, and it is most of what named slots cost.
 
-The real cost is not here — it is that a node's children stop being one list,
-which is [page 5](05-addressing.md)'s subject.
+The real cost is not here either. A node's children stay **one ordered list** —
+[page 5](05-addressing.md) is where that is argued — so what this costs is the
+optional label, the list-boundary arithmetic that goes with it, and the emitter
+and reader work above.
 
 ## Repetition
 

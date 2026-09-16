@@ -110,7 +110,7 @@ which solver it is specified against — [page 2](02-values.md).
 | `physm-rs`, across `Scene.toJsonObj` | each new core element twice — a JSON case per side, a Rust force term, and a cross-validated test |
 | `buildScene` / assembly | new node kinds to expand; the elaboration phase becomes explicit rather than incidental |
 | document model | parameters, expression-valued props, named slots, repetition, ports — the bulk of the work |
-| addressing (`NodePath`) | one invasive change, done once — [page 5](05-addressing.md) |
+| addressing (`NodePath`) | none — the slot goes on the child node instead, [page 5](05-addressing.md) |
 | `emitScene` / `documentFrom` | grows with the subset, and gates every step |
 | editor panes | properties pane gains expression editing; tree view gains parameter and port nodes; a graph pane eventually |
 | component metadata | user parameters are schema-first by necessity — [page 8](08-metadata.md) |
