@@ -41,6 +41,7 @@ import {
   parameterNameRefusal,
   parameterRemovalRefusal,
   moveParameter,
+  movedParameter,
   removeParameter,
   renameParameter,
   retypeParameter,
@@ -906,16 +907,16 @@ describe("a definition's parameters", () => {
     test('clamps at either end rather than refusing', () => {
       // The caller is a key held down, so running out of list means nothing
       // happened -- where a throw would mean the editor stopped.
-      expect(order(moveParameter(three(), 'Scene', 0, -1))).toEqual([
-        'a',
-        'b',
-        'c',
-      ]);
-      expect(order(moveParameter(three(), 'Scene', 2, 5))).toEqual([
-        'a',
-        'b',
-        'c',
-      ]);
+      //
+      // Asserted as identity rather than as order, because order cannot see
+      // it: slicing past the end of an array is benign, so an unclamped
+      // overshoot puts the parameter back where it was and reads the same.
+      const doc = three();
+
+      expect(moveParameter(doc, 'Scene', 0, -5)).toBe(doc);
+      expect(moveParameter(doc, 'Scene', 2, 5)).toBe(doc);
+      expect(movedParameter(doc, 'Scene', 0, -5)).toBe(0);
+      expect(movedParameter(doc, 'Scene', 2, 5)).toBe(2);
     });
 
     test('rewrites the emitted signature, which is the point of it', () => {

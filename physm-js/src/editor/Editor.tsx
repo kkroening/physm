@@ -36,9 +36,9 @@ import {
   insertNode,
   moveNode,
   moveParameter,
+  movedParameter,
   nameRefusal,
   nodeAt,
-  parameterAt,
   parameterRemovalRefusal,
   removeNode,
   removeParameter,
@@ -378,7 +378,7 @@ function ParameterRow({
   onSelect: (at: number) => void;
   onDeselect: () => void;
   onDelete: (at: number) => void;
-  onMove: (at: number, by: number) => void;
+  onMove: (at: number, by: -1 | 1) => void;
 }): ReactElement {
   const key = parameterKey(at);
   const isSelected = selected === key;
@@ -730,7 +730,7 @@ function TreePane({
   onSelectParameter: (at: number) => void;
   onAddParameter: () => void;
   onDeleteParameter: (at: number) => void;
-  onMoveParameter: (at: number, by: number) => void;
+  onMoveParameter: (at: number, by: -1 | 1) => void;
 }): ReactElement {
   // The path the name is being typed for: the form shows only while that is
   // still the selection, and a new selection clears it -- one made in the tree,
@@ -1334,6 +1334,14 @@ interface Picked {
 /** A node, addressed the way the editor selects one. */
 function nodeSelection({ definition, path }: ElementOrigin): NodeSelection {
   return { kind: 'node', definition, path };
+}
+
+/** The selection, if it is in the body being shown -- of whatever kind. */
+function selectionIn(
+  selection: Selection | null,
+  focus: string,
+): Selection | null {
+  return selection?.definition === focus ? selection : null;
 }
 
 /** The selection's path, if it is a node's and in the body being shown. */
@@ -2521,11 +2529,11 @@ export default function Editor({
     {
       structural,
       field = null,
-      after = selectedPath,
+      after = selectionIn(selection, focus),
     }: {
       structural: boolean;
       field?: string | null;
-      after?: NodePath | null;
+      after?: Selection | null;
     },
   ): void =>
     setHistory((current) =>
@@ -2533,7 +2541,7 @@ export default function Editor({
         doc: next,
         focus,
         structural,
-        before: selectedPath,
+        before: selectionIn(selection, focus),
         after,
         field,
       }),
@@ -2541,9 +2549,10 @@ export default function Editor({
 
   /** Replace the document, and select `path` in it -- or nothing. */
   const change = (next: SceneDocument, path: NodePath | null): void => {
-    record(next, { structural: true, after: path });
+    const to = path ? nodeSelection({ definition: focus, path }) : null;
+    record(next, { structural: true, after: to });
     restructure();
-    select(path ? nodeSelection({ definition: focus, path }) : null);
+    select(to);
   };
 
   /** Focus a component, opening a tab for it if it has none. */
@@ -2575,7 +2584,7 @@ export default function Editor({
   const travel = (next: History, edit: Step, back: boolean): void => {
     const names = new Set(next.present.doc.definitions.map(({ name }) => name));
     const to = names.has(edit.focus) ? edit.focus : next.present.doc.root;
-    const path = to === edit.focus ? (back ? edit.before : edit.after) : null;
+    const chosen = to === edit.focus ? (back ? edit.before : edit.after) : null;
     setHistory(next);
     setTabs((open) => {
       const kept = open.filter((tab) => names.has(tab));
@@ -2583,7 +2592,7 @@ export default function Editor({
       return kept.includes(to) ? kept : [...kept, to];
     });
     setFocus(to);
-    select(path ? nodeSelection({ definition: to, path }) : null);
+    select(chosen);
     if (edit.structural) {
       restructure();
     }
@@ -2784,15 +2793,13 @@ export default function Editor({
               select({
                 kind: 'parameter',
                 definition: focus,
-                at: (definitionOf(next, focus).parameters ?? []).findIndex(
-                  ({ name }) => name === parameterAt(doc, focus, at).name,
-                ),
+                at: movedParameter(doc, focus, at, by),
               });
             }}
             onExtract={(path, name) => {
               record(extractComponent(doc, focus, path, name), {
                 structural: true,
-                after: path,
+                after: nodeSelection({ definition: focus, path }),
               });
               open(name);
               restructure();
@@ -2806,7 +2813,11 @@ export default function Editor({
             selection={selection}
             onPick={setPicked}
             onEdit={(next, field, path) =>
-              record(next, { structural: false, field, after: path })
+              record(next, {
+                structural: false,
+                field,
+                after: nodeSelection({ definition: focus, path }),
+              })
             }
           />
         </div>

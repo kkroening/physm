@@ -963,6 +963,27 @@ export function removeParameter(
  * thing to do and means nothing happened, where a throw would mean the editor
  * stopped.
  */
+/**
+ * Where `moveParameter` leaves the parameter it moved.
+ *
+ * Exported for the same reason `movedPath` is: a caller that has to select
+ * what it just moved should read the answer rather than invert the move --
+ * a search for the parameter by name would rest on names being unique, which
+ * is an invariant this module does not state, and would answer `-1` where it
+ * should throw.
+ */
+export function movedParameter(
+  doc: SceneDocument,
+  definition: string,
+  at: number,
+  by: number,
+): number {
+  parameterAt(doc, definition, at);
+  const { parameters = [] } = definitionOf(doc, definition);
+
+  return Math.min(Math.max(at + by, 0), parameters.length - 1);
+}
+
 export function moveParameter(
   doc: SceneDocument,
   definition: string,
@@ -973,8 +994,7 @@ export function moveParameter(
   // clamp must not swallow: `at` names what is being moved, and a bad one is a
   // caller bug rather than the end of the list.
   const moving = parameterAt(doc, definition, at);
-  const { parameters = [] } = definitionOf(doc, definition);
-  const to = Math.min(Math.max(at + by, 0), parameters.length - 1);
+  const to = movedParameter(doc, definition, at, by);
 
   // The *document* back, not an equal one, so that a caller can tell nothing
   // happened. `withParameters` rebuilds whatever its update returns, so
