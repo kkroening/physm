@@ -1,4 +1,5 @@
-import type { NodePath, SceneDocument } from './sceneDocument';
+import type { SceneDocument } from './sceneDocument';
+import type { Selection } from './PropertiesPane';
 
 /** One state the document has been in, and how the edit that made it was made. */
 export interface Step {
@@ -10,11 +11,21 @@ export interface Step {
   /** Whether the edit changed the structure: see `useSimulation`. */
   readonly structural: boolean;
 
-  /** The selection in `focus` before the edit, which undoing it puts back. */
-  readonly before: NodePath | null;
+  /**
+   * The selection in `focus` before the edit, which undoing it puts back.
+   *
+   * A whole `Selection` rather than a `NodePath`, because the tree selects
+   * more than nodes: a parameter row is selectable too, and a step that could
+   * only hold a path recorded "nothing was selected" for every edit made on
+   * one -- so undoing a parameter edit cleared the selection where undoing a
+   * node's restores it. The declaration block is due to hold outputs and
+   * manipulators as well ([0016 page 3](../../docs/issues/0016/03-scope.md)),
+   * and each of those wants the same thing.
+   */
+  readonly before: Selection | null;
 
   /** The selection the edit made, which redoing it puts back. */
-  readonly after: NodePath | null;
+  readonly after: Selection | null;
 
   /**
    * The field a prop edit came from, so that a run of keystrokes in one field
