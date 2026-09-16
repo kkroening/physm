@@ -118,18 +118,30 @@ That is a new category of element rather than a new kind of prop, and
 [page 9](09-elements.md) takes it up — including what it does and does not say
 about [0003](../0003.md)'s uncalled `Decal.xform`.
 
-## Why "keep the pole horizontal" is a signal
+## Why a rest direction read against another frame is a signal
 
-A rotary spring that restores a frame toward its parent's zero is a trivial local
-term: torque proportional to the frame's own coordinate. The wish list's crane
-arm is not that. "Horizontal" is a *world* direction, so the rest orientation has
-to be expressed in the arm's frame, which requires the accumulated pose from the
-world down to that frame.
+A rotary spring that restores a frame toward a rest in **its own coordinate** is a
+trivial local term: torque proportional to the displacement from that rest, with
+no pose involved at all.
 
-A solver that evaluates forces from the current pose handles this without
-difficulty — but the spring's rest direction is a signal, not a constant, and
-writing it as a constant would silently give the wrong behaviour the moment
-anything above the arm rotates.
+**The crane arm is that case, which this page originally got wrong.** "Keep the
+pole horizontal" means horizontal relative to whatever the pole is mounted on,
+and a joint's coordinate is measured from exactly there — so it is a constant
+rest on a local spring and needs nothing further. `Spring.rest` is that, and
+what this page previously identified as the motivating example for signals is
+not one _(Karl, 2026-09-16)_.
+
+What remains a signal is a rest direction read against **some other frame** —
+the world, or a sibling, rather than the mount. Then the rest orientation has to
+be expressed in the arm's frame, which requires the accumulated pose down to it,
+and writing it as a constant *does* silently give the wrong behaviour the moment
+anything between the two rotates.
+
+That case is also not a property of the spring. Observing one frame from another
+is a capability, and [0030](../0030.md) is where it belongs — with the warning
+that its consumer is not cheap: a rest depending on more than one coordinate
+puts the restoring torque in every rotational ancestor's row, so the force
+vector stops being computable row by row.
 
 ## The React worry, answered
 

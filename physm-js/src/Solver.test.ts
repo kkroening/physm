@@ -408,27 +408,30 @@ describe('a frame spring', () => {
   }
 
   /**
-   * The same rotational arm, with its stiffness split across two springs.
+   * The same rotational arm, with its spring split in two at *different* rests.
    *
-   * While every spring is linear this is the *same* rig -- `18 = 11 + 7` --
-   * so it must oscillate identically, in both solvers. That is the claim the
-   * list shape rests on today, and it is the one that stops holding the moment
-   * a spring is not linear, which is what the list is for.
+   * `18 = 11 + 7` keeps the frequency, and the rests do not cancel: the pair
+   * is one spring slack at their stiffness-weighted mean, `(11*0.6 + 7*0.2)/18`.
+   * So this is still the same rig as the arm above, oscillating about a third
+   * place again -- and a solver that collapsed a frame's springs into one
+   * summed stiffness, discarding the rests, agrees with every other case here
+   * and fails only this one.
    */
+  const SPLIT_CENTRE = (11 * 0.6 + 7 * 0.2) / 18;
   const split = new Scene({
     gravity: 0,
     frames: [
       new RotationalFrame({
         id: 'arm',
-        initialState: [AMPLITUDE, 0],
-        springs: [new Spring(11), new Spring(7)],
+        initialState: [SPLIT_CENTRE + AMPLITUDE, 0],
+        springs: [new Spring(11, 0.6), new Spring(7, 0.2)],
         weights: [new Weight(2, { position: [3, 0] })],
       }),
     ],
   });
 
   /**
-   * The same arm, slack a third of the way round rather than at zero.
+   * The same arm, slack about a third of a radian from zero rather than at it.
    *
    * Everything else is the rotational arm above, so it oscillates at the same
    * frequency about a different place -- which is the whole claim: a rest
@@ -456,7 +459,12 @@ describe('a frame spring', () => {
       centre: OFFSET,
     },
     { name: 'a track joint', scene: linear, id: 'slider' },
-    { name: 'a joint with its spring split in two', scene: split, id: 'arm' },
+    {
+      name: 'a joint with its spring split in two at different rests',
+      scene: split,
+      id: 'arm',
+      centre: SPLIT_CENTRE,
+    },
   ];
 
   for (const { name, scene, id, centre } of arms) {

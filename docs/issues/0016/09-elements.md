@@ -29,18 +29,26 @@ resolution machinery exists.
 trickier" is right, and worth being precise about *why*, because the two cases
 are genuinely different:
 
-- A spring restoring a frame toward its **parent's** zero is a local term:
-  torque proportional to the frame's own coordinate, with no pose needed.
-- A spring restoring a crane arm toward **horizontal** references a world
-  direction. Its rest orientation must be expressed in the arm's frame, which
-  needs the accumulated pose from the world down — so the rest direction is a
-  signal ([page 2](02-values.md)), not a constant.
+- A spring restoring a frame toward a rest in **its own coordinate** is a local
+  term: torque proportional to the displacement from that rest, with no pose
+  needed. **The crane arm is this case**, which an earlier draft of these pages
+  had wrong: "horizontal" means horizontal relative to what the arm is mounted
+  on, and a joint's coordinate is measured from there. `Spring.rest` ships it.
+- A spring whose rest is read against **some other frame** — the world, or a
+  sibling — does reference a direction that is not the mount's. Its rest
+  orientation must be expressed in the arm's frame, which needs the accumulated
+  pose, so it is a signal ([page 2](02-values.md)) rather than a constant.
 
-The second is not hard for a solver that evaluates forces from the current pose,
-but writing it as though it were the first gives silently wrong behaviour as soon
-as anything above the arm rotates. The distinction belongs in the component's
-props rather than in the author's memory: a rotary spring says what it is
-restoring *toward*, and that target is typed.
+The second is harder than it looks even for a solver that evaluates forces from
+the current pose, because a rest depending on more than one coordinate puts the
+restoring torque in every rotational ancestor's row — and writing it as though
+it were the first still gives silently wrong behaviour as soon as anything
+between the two frames rotates. [0030](../0030.md) holds it.
+
+The distinction belongs in the component's props rather than in the author's
+memory: a rotary spring says what it is restoring *toward*. A rest in the
+frame's own coordinate says it by being one, and a rest read elsewhere will say
+it by naming the frame it is read against.
 
 Neither adds constraint rows, so neither disturbs the over-determination
 accounting [0002](../0002.md) is about.

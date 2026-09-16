@@ -233,7 +233,7 @@ which is why the composite moment below is indexed by the *column*, the deeper o
 
 ```math
 \begin{aligned}
-f_i \;=\;\; & \underbrace{\sum_{w \in D(i)} m_w\langle V_i x_w, \mathbf{g}\rangle \;-\; k_i q^i}_{-\,\partial_i U}
+f_i \;=\;\; & \underbrace{\sum_{w \in D(i)} m_w\langle V_i x_w, \mathbf{g}\rangle \;+\; Q_i^{\text{spring}}}_{-\,\partial_i U}
   \;\underbrace{-\sum_{w \in D(i)} b_w \langle V_i x_w, S_{f(w)}x_w\rangle \;-\; c_i\dot q^i}_{-\,\partial\mathcal{F}/\partial\dot q^i \;\text{(Rayleigh)}} \\[1.4ex]
   & +\; \underbrace{Q_i^{\text{ext}}}_{\text{external}}
   \;\underbrace{-\sum_{w \in D(i)} m_w\langle V_i x_w, A_{f(w)}x_w\rangle}_{-\,\Gamma_{i,jk}\dot q^j\dot q^k}
@@ -271,7 +271,7 @@ g_{ij} \;=\; \mathrm{tr}\!\big(V_i^{\mathsf T} V_j\, \mathcal{J}_j\big),
 ```
 
 ```math
-f_i \;=\; \big\langle V_i,\, \mathcal{K}_i \big\rangle_F \;-\; c_i\dot q^i \;-\; k_i q^i \;+\; Q_i^{\text{ext}},
+f_i \;=\; \big\langle V_i,\, \mathcal{K}_i \big\rangle_F \;-\; c_i\dot q^i \;+\; Q_i^{\text{spring}} \;+\; Q_i^{\text{ext}},
 \qquad
 \mathcal{K}_i \;\equiv\; \sum_{w \in D(i)} u_w\, x_w^{\mathsf T},
 \qquad
@@ -286,7 +286,7 @@ by the same **leaf-to-root** recurrence — the mirror image of sweeps 1, 3 and 
 ```
 
 Since `sort_frames` already orders parents before children, one reverse pass over that same
-array computes them. The joint-local terms $`-c_i\dot q^i`$, $`-k_i q^i`$ and
+array computes them. The joint-local terms $`-c_i\dot q^i`$, $`Q_i^{\text{spring}}`$ and
 $`Q_i^{\text{ext}}`$ need no accumulation — they belong to $i$ alone.
 
 The spring sits beside the resistance term in the code and belongs with gravity in the
@@ -298,12 +298,13 @@ A frame's springs add, so the whole of it is
 Q_i^{\text{spring}} \;=\; -\sum_{s \,\text{on}\, i} k_{i,s}\bigl(q^i - r_{i,s}\bigr)
 ```
 
-It is conservative, and unlike the weight sums it needs no pose — the frame's own
-coordinate is the whole of its input, **rest included**. That is what makes "hold the arm
+$`Q_i^{\text{spring}}`$ is what the two displayed equations above stand for, and this is
+its only definition. It is conservative, and unlike the weight sums it needs no pose — the
+frame's own coordinate is the whole of its input, **rest included**. That is what makes "hold the arm
 at this angle" local: the angle is measured from what the arm is mounted on, because the
 coordinate is. A rest measured against some *other* frame is not a property of the spring
 at all — it is one frame observed from another, which is
-[0030](../docs/issues/0030.md)'s question and needs the accumulated pose that this term
+[0030](issues/0030.md)'s question and needs the accumulated pose that this term
 conspicuously does not.
 
 This is the **Composite Rigid Body Algorithm**, and the $`\mathcal{K}`$ half is the backward

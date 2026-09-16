@@ -14,8 +14,9 @@ use crate::Error;
 ///
 /// A list on the frame rather than a number on it, mirroring `physm-js`'s
 /// `Spring`: there may be several, and while each is linear their sum is one
-/// spring of the summed stiffness. That stops being true the moment one is
-/// not, which is where a stop that engages past a threshold would go.
+/// spring at the summed stiffness, slack at the stiffness-weighted mean of
+/// their rests -- so two at different rests do not reduce, and a non-linear
+/// one, when it arrives, will not reduce at all.
 #[derive(Debug, PartialEq)]
 pub struct Spring {
     pub stiffness: f64,
