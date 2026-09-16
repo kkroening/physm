@@ -331,7 +331,9 @@ function walkChildren(children: ReactNode, walk: Walk): void {
  * `trace`, when given, is told of each frame and decal as it is built, with the
  * elements it came from: the root's first, and the one that built it last. It
  * is how a tool holding the rig as data leads what is drawn back to what wrote
- * it.
+ * it. A world-space decal is not a shape at that point -- it is remade on every
+ * pose -- so what is traced for one is its `WorldDecal` **maker**, which is
+ * also what a hit on it hands back.
  *
  * And one thing it cannot do: **resolve an `<Anchor>` named by ref.** A ref is
  * filled in by an effect, and nothing here runs one. Name the anchor by `id`.

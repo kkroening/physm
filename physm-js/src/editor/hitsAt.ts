@@ -21,7 +21,7 @@ import type { Vec3 } from './../Vec3';
 const REACH = 3;
 
 /** A decal, and the transform it is drawn under. */
-interface Drawn {
+interface Placed {
   readonly decal: Decal;
   readonly xformMatrix: Mat3;
 }
@@ -71,7 +71,7 @@ function toScreen(xformMatrix: Mat3, point: Vec3): ScreenPoint {
 }
 
 /** Whether a click at `point` hits a decal, drawn as `DecalView` draws it. */
-function isHit({ decal, xformMatrix }: Drawn, point: ScreenPoint): boolean {
+function isHit({ decal, xformMatrix }: Placed, point: ScreenPoint): boolean {
   const shape = decal as BoxDecal | CircleDecal | LineDecal;
   const scale = mat3.scaleFactor(xformMatrix);
 
@@ -132,12 +132,12 @@ function drawnInWorld(
   scene: CoreScene,
   poses: PoseMap,
   viewXform: Mat3,
-): { drawn: Drawn; made: WorldDecal }[] {
+): { placed: Placed; made: WorldDecal }[] {
   return scene.worldDecals.flatMap((made) => {
     try {
       return [
         {
-          drawn: { decal: made({ scene, poses }), xformMatrix: viewXform },
+          placed: { decal: made({ scene, poses }), xformMatrix: viewXform },
           made,
         },
       ];
@@ -152,7 +152,7 @@ function drawnUnder(
   frames: readonly Frame[],
   poses: PoseMap,
   viewXform: Mat3,
-): Drawn[] {
+): Placed[] {
   return frames.flatMap((frame) => {
     const xformMatrix = mat3.multiply(viewXform, poseIn(poses, frame.id));
 
@@ -172,6 +172,10 @@ function drawnUnder(
  * gizmo, the cross and its +x pointer, which the editor draws over everything. Screen space throughout,
  * because a gizmo is a fixed size on screen and a shape's reach should be too.
  *
+ * A hit is usually one of those shapes, and may be a `WorldDecal` **maker**
+ * instead: a world-space decal is remade on every pose, so there is no shape
+ * to hand back that anything else would recognise -- see `drawnInWorld`.
+ *
  * The poses rather than the state they were made from: a caller asking this on
  * every pointer move has already solved the scene's pose for the marks it
  * draws, and solving it again here would answer one question with two poses.
@@ -190,19 +194,20 @@ export default function hitsAt(
           REACH,
     )
     .map((placement) => placement.frame);
-  const decals: (Decal | WorldDecal)[] = [
+  const decals = [
     ...scene.decals.map((decal) => ({ decal, xformMatrix })),
     ...drawnUnder(scene.frames, poses, xformMatrix),
   ]
     .filter((drawn) => isHit(drawn, point))
     .map((drawn) => drawn.decal);
 
-  // Last in draw order, so first once reversed: a world-space decal is drawn
-  // over the frames, and what a click finds should be what a person sees on
-  // top. What comes back is the maker rather than the shape -- see
-  // `drawnInWorld`.
+  // Last in draw order, so first once the shapes are reversed: a world-space
+  // decal is drawn over every other decal, and what a click finds should be
+  // what a person sees on top. A frame's gizmo still wins, as it does over an
+  // ordinary decal, because the editor draws gizmos over everything. What
+  // comes back is the maker rather than the shape -- see `drawnInWorld`.
   const world = drawnInWorld(scene, poses, xformMatrix)
-    .filter(({ drawn }) => isHit(drawn, point))
+    .filter(({ placed }) => isHit(placed, point))
     .map(({ made }) => made);
 
   return [...frames.reverse(), ...[...decals, ...world].reverse()];

@@ -1198,12 +1198,18 @@ function TreePane({
 }
 
 /**
- * A built scene, and the way back from what it draws to the node that wrote it.
+ * Anything the scene draws, as the trace and a hit both address it.
  *
- * `Drawn` rather than `Frame | Decal` because a world-space decal is not a
+ * `Frame | Decal` would not cover it, because a world-space decal is not a
  * shape until the scene is posed: it is remade on every pose, so what the
  * trace can record and what a hit can hand back is the **maker**, and the
  * lookups below take it in the shape they were given it.
+ */
+type Drawn = Frame | Decal | WorldDecal;
+
+/**
+ * A built scene, and the way back from what it draws to the node that wrote
+ * it.
  */
 interface Built {
   readonly scene: CoreScene;
@@ -1221,9 +1227,6 @@ interface Built {
   /** The node that built something, in whatever body wrote it. */
   readonly expandedOf: (built: Drawn) => Selection | null;
 }
-
-/** Anything the scene draws, as the trace and a hit both address it. */
-type Drawn = Frame | Decal | WorldDecal;
 
 /**
  * The focused body's node nearest to what built something: the last element on
@@ -1633,6 +1636,13 @@ function ScenePane({
    *
    * One sweep: `hitsAt` places every frame's gizmo and walks every decal, so
    * asking it twice for one pointer move solves the scene's pose twice over.
+   *
+   * The pose is what is hoisted, and not the world decals `hitsAt` also makes
+   * from it: those are remade on every call, and `SceneView` makes the same
+   * ones again on every animation frame. Hoisting them would move a
+   * scene-walking concern into this render to save arithmetic nothing has
+   * measured as costing anything -- the same trade `SceneView`'s own doc
+   * names where it walks the scene a second time to draw the gizmos over it.
    */
   const poses =
     'scene' in built && drawn

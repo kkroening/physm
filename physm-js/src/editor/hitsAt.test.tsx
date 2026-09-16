@@ -2,12 +2,12 @@ import Box from './../react/Box';
 import Circle from './../react/Circle';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
-import WorldLine from './../react/WorldLine';
 import TrackFrame from './../react/TrackFrame';
+import WorldLine from './../react/WorldLine';
 import buildScene from './../react/buildScene';
-import { worldPoint } from './../expression';
 import getViewXformMatrix from './../getViewXformMatrix';
 import hitsAt from './hitsAt';
+import { worldPoint } from './../expression';
 import type CoreScene from './../Scene';
 import type { StateMap } from './../Frame';
 
@@ -230,17 +230,24 @@ describe('hitsAt', () => {
   });
 
   test('it is found above the shapes it is drawn over', () => {
-    // Drawn after the frames, so a click where both lie finds it first --
-    // topmost first is what the order means.
+    // Drawn after every other decal, so a click where they all lie finds it
+    // first among the shapes -- topmost first is what the order means. A
+    // frame's gizmo still comes before it, as it does before an ordinary
+    // decal, because the editor draws gizmos over everything.
     const scene = buildScene(
       <>
         <Line startPos={[-5, 0]} endPos={[5, 0]} lineWidth={0.4} />
+        <TrackFrame id="cart">
+          <Line startPos={[-5, 0]} endPos={[5, 0]} lineWidth={0.4} />
+        </TrackFrame>
         <WorldLine startPos={[-5, 0]} endPos={[5, 0]} lineWidth={0.4} />
       </>,
     );
     const [made] = scene.worldDecals;
     const [under] = scene.decals;
+    const frame = scene.frames[0]!;
+    const [inFrame] = frame.decals;
 
-    expectHits(hits(scene, at(0, 0)), [made, under]);
+    expectHits(hits(scene, at(0, 0)), [frame, made, inFrame, under]);
   });
 });
