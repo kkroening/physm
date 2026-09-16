@@ -20,6 +20,15 @@
  */
 export type PropValue = LiteralValue | ParameterValue;
 
+/**
+ * A prop value the module can hold by name.
+ *
+ * Only a literal: a reference is already a name, and there is nothing to
+ * hoist. Named here rather than narrowed at each use, so the emitter's
+ * constants map carries the fact in its type.
+ */
+export type SharedValue = LiteralValue;
+
 /** A plain value, written where it is used. */
 type LiteralValue = {
   readonly kind: 'literal';
@@ -60,9 +69,38 @@ type ParameterValue = {
  */
 export type DocProps = Readonly<Record<string, PropValue>>;
 
-/** A plain value, held as a prop. */
-export function literalOf(value: unknown): PropValue {
-  return { kind: 'literal', value };
+/**
+ * Which literal node each value object has already been given.
+ *
+ * Reading one authored element tree, so that two props given *the same* array
+ * end up holding one node rather than two equal ones. That is a fact the
+ * source states and the document would otherwise lose -- and losing it is what
+ * made the emitter guess sharing back from equality, which it can get wrong in
+ * both directions.
+ *
+ * One of these per read, never shared between them: a building block's
+ * declared `initial` is one object across every instance of it, and two
+ * separately inserted boxes are not two views of one value.
+ */
+export type Sharing = WeakMap<object, PropValue>;
+
+/**
+ * A plain value, held as a prop.
+ *
+ * With a `sharing`, a value *object* seen again gives back the node it was
+ * given before. A primitive never shares: two props holding `4` are two props
+ * holding four, not one value seen twice, and nothing about the source says
+ * otherwise.
+ */
+export function literalOf(value: unknown, sharing?: Sharing): PropValue {
+  if (!sharing || value === null || typeof value !== 'object') {
+    return { kind: 'literal', value };
+  }
+
+  const held = sharing.get(value) ?? { kind: 'literal' as const, value };
+  sharing.set(value, held);
+
+  return held;
 }
 
 /**
@@ -71,9 +109,13 @@ export function literalOf(value: unknown): PropValue {
  */
 export function literalProps(
   plain: Readonly<Record<string, unknown>>,
+  sharing?: Sharing,
 ): DocProps {
   return Object.fromEntries(
-    Object.entries(plain).map(([name, value]) => [name, literalOf(value)]),
+    Object.entries(plain).map(([name, value]) => [
+      name,
+      literalOf(value, sharing),
+    ]),
   );
 }
 

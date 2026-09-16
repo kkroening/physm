@@ -276,12 +276,15 @@ function demo(): SceneDocument {
 }
 
 /** One point, under three tuple-typed props of an imported composite. */
+/** One point object, so the props holding it hold *it* and not a copy. */
+const AT = [4, 0] as const;
+
 function struts(): SceneDocument {
   return documentFrom(
     <TrackFrame id="cart">
-      <Strut at={[4, 0]} />
-      <Strut at={[4, 0]} />
-      <Strut at={[4, 0]} />
+      <Strut at={AT} />
+      <Strut at={AT} />
+      <Strut at={AT} />
     </TrackFrame>,
   );
 }
@@ -293,10 +296,10 @@ function struts(): SceneDocument {
 function shared(): SceneDocument {
   return documentFrom(
     <RotationalFrame id="arm">
-      <Line endPos={[4, 0]} lineWidth={0.15} />
-      <Circle position={[4, 0]} radius={0.5} />
-      <Weight mass={10} position={[4, 0]} />
-      <Strut at={[4, 0]} />
+      <Line endPos={AT} lineWidth={0.15} />
+      <Circle position={AT} radius={0.5} />
+      <Weight mass={10} position={AT} />
+      <Strut at={AT} />
     </RotationalFrame>,
   );
 }
@@ -559,9 +562,9 @@ describe('a parameter the emitter cannot write', () => {
           parameters: [{ name: 'POSITION', type: 'scalar', default: 1 }],
           body: nodesFrom(
             <RotationalFrame>
-              <Weight mass={1} position={[4, 0]} />
-              <Weight mass={2} position={[4, 0]} />
-              <Weight mass={3} position={[4, 0]} />
+              <Weight mass={1} position={AT} />
+              <Weight mass={2} position={AT} />
+              <Weight mass={3} position={AT} />
             </RotationalFrame>,
           ),
         },
@@ -795,6 +798,58 @@ describe('emitScene', () => {
     );
   });
 
+  test('refuses a name it cannot write even where the value has one', () => {
+    // A prop whose value the module holds by name never reaches `attribute`,
+    // so the two refusals in there had to come out of it: whether a prop is
+    // checked must not depend on whether its value is shared with another.
+    // Both are reachable from ordinary JSX -- on React 19 a `ref` arrives in
+    // `props` like any other prop.
+    const shared = (prop: string, value: unknown): SceneDocument => {
+      const held = literalOf(value);
+      const [frame] = nodesFrom(
+        <RotationalFrame id="arm">
+          <Box width={1} height={1} />
+          <Circle radius={1} />
+        </RotationalFrame>,
+      );
+
+      return {
+        root: 'Scene',
+        definitions: [
+          {
+            name: 'Scene',
+            body: [
+              {
+                ...frame!,
+                children: frame!.children.map((child) => ({
+                  ...child,
+                  props: { ...child.props, [prop]: held },
+                })),
+              },
+            ],
+          },
+        ],
+      };
+    };
+
+    expect(() => emitScene(shared('ref', { current: null }))).toThrow(
+      /A ref cannot be written/,
+    );
+
+    // `const DATA-FOO = …` is a module that does not parse, which is worse
+    // than one that says the wrong thing.
+    expect(() => emitScene(shared('data-foo', { a: 1 }))).toThrow(
+      /'data-foo' cannot be written as a JSX attribute/,
+    );
+
+    // A value the emitter cannot write is no candidate for a name either.
+    // Named, the `const` write would throw from outside the per-node `try`,
+    // and the error would arrive without the node it came from.
+    expect(() => emitScene(shared('color', { at: () => 1 }))).toThrow(
+      /Cannot write 'color' on <Box> at Scene\/0\.0:/,
+    );
+  });
+
   test('records where each node landed', () => {
     const { source, ranges } = emitScene(
       documentFrom(
@@ -819,13 +874,13 @@ describe('emitScene', () => {
 });
 
 describe('emitScene, repeated values', () => {
-  test('a value written more than once is named, and used by name', () => {
+  test('a value held in more than one place is named, and used by name', () => {
     const source = expectRoundTrip(
       documentFrom(
         <RotationalFrame id="arm">
-          <Line endPos={[4, 0]} lineWidth={0.15} />
-          <Circle position={[4, 0]} radius={0.5} />
-          <Weight mass={10} position={[4, 0]} />
+          <Line endPos={AT} lineWidth={0.15} />
+          <Circle position={AT} radius={0.5} />
+          <Weight mass={10} position={AT} />
         </RotationalFrame>,
       ),
     );
@@ -837,6 +892,42 @@ describe('emitScene, repeated values', () => {
     expect(source).toContain('endPos={POSITION}');
     expect(source).toContain('position={POSITION}');
     expect(source).not.toContain('[4, 0]}');
+  });
+
+  test('two props that agree are two values, however many of them there are', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <RotationalFrame id="arm">
+          <Line endPos={[4, 0]} lineWidth={0.15} />
+          <Circle position={[4, 0]} radius={0.5} />
+          <Weight mass={10} position={[4, 0]} />
+        </RotationalFrame>,
+      ),
+    );
+
+    // The same three props as above, written out rather than sharing one
+    // point. Nothing in that source says they are one value, so nothing here
+    // says so either -- where counting uses would have named all three
+    // together at the third.
+    expect(source).not.toContain('const ');
+    expect(source).toContain('endPos={[4, 0]}');
+    expect(source).toContain('position={[4, 0]}');
+  });
+
+  test('a value shared twice is named, which a guess needed three for', () => {
+    const source = expectRoundTrip(
+      documentFrom(
+        <RotationalFrame id="arm">
+          <Line endPos={AT} lineWidth={0.15} />
+          <Circle position={AT} radius={0.5} />
+        </RotationalFrame>,
+      ),
+    );
+
+    // A guess needs corroboration and a fact does not: two props holding one
+    // node say they are one value as plainly as three would.
+    expect(source).toContain('const END_POS = [4, 0];');
+    expect(source).toContain('position={END_POS}');
   });
 
   test('what is written once, and what is not compound, stays where it is', () => {
@@ -857,7 +948,24 @@ describe('emitScene, repeated values', () => {
     expect(source).toContain('position={[1, 0]}');
   });
 
-  test('a compound value written twice is left where it is', () => {
+  test('the sharing survives the round trip, which is what names it', () => {
+    const doc = documentFrom(
+      <RotationalFrame id="arm">
+        <Line endPos={AT} lineWidth={0.15} />
+        <Weight mass={10} position={AT} />
+      </RotationalFrame>,
+    );
+    const Root = evaluate(emitScene(doc).source);
+    const again = documentFrom(Root());
+    const [line, weight] = again.definitions[0]!.body[0]!.children;
+
+    // Read back, the emitted `const POSITION` is one binding in two props, so
+    // the document records the same sharing it started with. Losing it here
+    // would mean a document degraded a little on every pass through source.
+    expect(line!.props.endPos).toBe(weight!.props.position);
+  });
+
+  test('a coincidence stays a coincidence', () => {
     const source = expectRoundTrip(
       documentFrom(
         <TrackFrame id="cart" position={[12, -0.5]}>
@@ -866,9 +974,9 @@ describe('emitScene, repeated values', () => {
       ),
     );
 
-    // The demo's own coincidence: a cart dragged onto the ground line's end.
-    // Two uses is where the threshold sits, so it is stated here rather than
-    // borrowed from tests about snapping that name the literal in passing.
+    // The demo's own: a cart dragged onto the ground line's end. Equal values
+    // arrived at separately, which naming together would have said were one
+    // -- and a later drag of either would have had to take it back.
     expect(source).not.toContain('const ');
     expect(source).toContain('position={[12, -0.5]}');
     expect(source).toContain('endPos={[12, -0.5]}');
@@ -877,9 +985,10 @@ describe('emitScene, repeated values', () => {
   test('what an imported component is given is left alone', () => {
     const source = expectRoundTrip(struts());
 
-    // Three uses, and still inline: the emitter cannot see `Strut`'s types,
-    // and a hoisted `const AT = [4, 0]` widens to `number[]`, which its
-    // tuple-typed prop would refuse. The type-check test emits this one too.
+    // One point in three props, and still inline: the emitter cannot see
+    // `Strut`'s types, and a hoisted `const AT = [4, 0]` widens to `number[]`,
+    // which its tuple-typed prop would refuse. The type-check test emits this
+    // one too.
     expect(source).not.toContain('const ');
     expect(source).toContain('at={[4, 0]}');
   });
@@ -898,16 +1007,17 @@ describe('emitScene, repeated values', () => {
   });
 
   test('a tie between prop names goes the same way every time', () => {
+    const tip = [2, 0] as const;
     const source = expectRoundTrip(
       documentFrom(
         <>
           <RotationalFrame id="a">
-            <Line endPos={[2, 0]} lineWidth={0.1} />
-            <Circle position={[2, 0]} radius={0.3} />
+            <Line endPos={tip} lineWidth={0.1} />
+            <Circle position={tip} radius={0.3} />
           </RotationalFrame>
           <RotationalFrame id="b">
-            <Line endPos={[2, 0]} lineWidth={0.1} />
-            <Weight mass={1} position={[2, 0]} />
+            <Line endPos={tip} lineWidth={0.1} />
+            <Weight mass={1} position={tip} />
           </RotationalFrame>
         </>,
       ),
@@ -926,9 +1036,9 @@ describe('emitScene, repeated values', () => {
     // beside `function POSITION()` would not even evaluate.
     const [arm] = nodesFrom(
       <RotationalFrame id="arm">
-        <Line endPos={[4, 0]} lineWidth={0.15} />
-        <Circle position={[4, 0]} radius={0.5} />
-        <Weight mass={10} position={[4, 0]} />
+        <Line endPos={AT} lineWidth={0.15} />
+        <Circle position={AT} radius={0.5} />
+        <Weight mass={10} position={AT} />
       </RotationalFrame>,
     );
     const source = expectRoundTrip({
