@@ -2,8 +2,10 @@ import Box from './../react/Box';
 import Circle from './../react/Circle';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
+import WorldLine from './../react/WorldLine';
 import TrackFrame from './../react/TrackFrame';
 import buildScene from './../react/buildScene';
+import { worldPoint } from './../expression';
 import getViewXformMatrix from './../getViewXformMatrix';
 import hitsAt from './hitsAt';
 import type CoreScene from './../Scene';
@@ -164,5 +166,81 @@ describe('hitsAt', () => {
     expect(hits(scene, at(4, 0))).toContain(tip);
     expect(hits(scene, at(0, 4), turned)).toContain(tip);
     expect(hits(scene, at(4, 0), turned)).not.toContain(tip);
+  });
+
+  test('a world-space decal is hit, and what comes back is its maker', () => {
+    // It is remade on every pose, so the shape a click lands on is a different
+    // object each time and no caller could recognise one. The maker is the
+    // part that stays put, and is what the trace recorded.
+    const scene = buildScene(
+      <>
+        <TrackFrame id="cart" initialState={[2, 0]} />
+        <WorldLine
+          startPos={worldPoint('cart', [0, 0])}
+          endPos={[2, 4]}
+          lineWidth={0.2}
+        />
+      </>,
+    );
+    const [made] = scene.worldDecals;
+
+    expect(hits(scene, at(2, 2))).toContain(made);
+    expect(hits(scene, at(-3, 2))).not.toContain(made);
+  });
+
+  test('it follows the pose, as the thing a person sees does', () => {
+    const scene = buildScene(
+      <>
+        <TrackFrame id="cart" initialState={[2, 0]} />
+        <WorldLine
+          startPos={worldPoint('cart', [0, 0])}
+          endPos={[2, 4]}
+          lineWidth={0.2}
+        />
+      </>,
+    );
+    const [made] = scene.worldDecals;
+    const slid: StateMap = new Map([['cart', [-4, 0] as const]]);
+
+    // The line now runs from (-4, 0) to (2, 4), so the old midpoint is off it
+    // and the new one is on.
+    expect(hits(scene, at(2, 2), slid)).not.toContain(made);
+    expect(hits(scene, at(-1, 2), slid)).toContain(made);
+  });
+
+  test('one that cannot be made costs itself, not the pointer', () => {
+    // This runs on every pointer move, so a maker that cannot answer -- a
+    // frame id naming nothing, a rig that has diverged -- must cost its own
+    // hit rather than the whole test. It is not drawn either, so there is
+    // nothing there to hit.
+    const scene = buildScene(
+      <>
+        <Line startPos={[-5, 0]} endPos={[5, 0]} lineWidth={0.4} />
+        <WorldLine
+          startPos={worldPoint('elbow', [0, 0])}
+          endPos={[5, 0]}
+          lineWidth={0.4}
+        />
+      </>,
+    );
+    const [under] = scene.decals;
+
+    expect(() => hits(scene, at(0, 0))).not.toThrow();
+    expectHits(hits(scene, at(0, 0)), [under]);
+  });
+
+  test('it is found above the shapes it is drawn over', () => {
+    // Drawn after the frames, so a click where both lie finds it first --
+    // topmost first is what the order means.
+    const scene = buildScene(
+      <>
+        <Line startPos={[-5, 0]} endPos={[5, 0]} lineWidth={0.4} />
+        <WorldLine startPos={[-5, 0]} endPos={[5, 0]} lineWidth={0.4} />
+      </>,
+    );
+    const [made] = scene.worldDecals;
+    const [under] = scene.decals;
+
+    expectHits(hits(scene, at(0, 0)), [made, under]);
   });
 });

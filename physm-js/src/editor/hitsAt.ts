@@ -6,6 +6,7 @@ import type CircleDecal from './../CircleDecal';
 import { poseIn } from './../Scene';
 import type CoreScene from './../Scene';
 import type Decal from './../Decal';
+import type { WorldDecal } from './../Decal';
 import type Frame from './../Frame';
 import type LineDecal from './../LineDecal';
 import type { Mat3 } from './../Mat3';
@@ -114,6 +115,38 @@ function isHit({ decal, xformMatrix }: Drawn, point: ScreenPoint): boolean {
   }
 }
 
+/**
+ * Every world-space decal that can be made from this pose, with the maker each
+ * came from, bottom first.
+ *
+ * The **maker** rather than the shape, because that is what the caller can do
+ * anything with: a world decal is remade on every pose, so the shape a click
+ * lands on is a different object from the one any earlier pass saw, and the
+ * maker is the only part of it that stays the same. `buildScene`'s trace
+ * records makers for exactly that reason.
+ *
+ * A maker that cannot answer is skipped rather than allowed to throw -- it is
+ * not drawn either, and hit-testing runs on every pointer move.
+ */
+function drawnInWorld(
+  scene: CoreScene,
+  poses: PoseMap,
+  viewXform: Mat3,
+): { drawn: Drawn; made: WorldDecal }[] {
+  return scene.worldDecals.flatMap((made) => {
+    try {
+      return [
+        {
+          drawn: { decal: made({ scene, poses }), xformMatrix: viewXform },
+          made,
+        },
+      ];
+    } catch {
+      return [];
+    }
+  });
+}
+
 /** Every decal from `frames` down, bottom first, as `FrameView` draws them. */
 function drawnUnder(
   frames: readonly Frame[],
@@ -148,7 +181,7 @@ export default function hitsAt(
   poses: PoseMap,
   xformMatrix: Mat3,
   point: ScreenPoint,
-): (Frame | Decal)[] {
+): (Frame | Decal | WorldDecal)[] {
   const frames = placeGizmos(scene, poses, xformMatrix)
     .filter(
       (placement) =>
@@ -157,12 +190,20 @@ export default function hitsAt(
           REACH,
     )
     .map((placement) => placement.frame);
-  const decals = [
+  const decals: (Decal | WorldDecal)[] = [
     ...scene.decals.map((decal) => ({ decal, xformMatrix })),
     ...drawnUnder(scene.frames, poses, xformMatrix),
   ]
     .filter((drawn) => isHit(drawn, point))
     .map((drawn) => drawn.decal);
 
-  return [...frames.reverse(), ...decals.reverse()];
+  // Last in draw order, so first once reversed: a world-space decal is drawn
+  // over the frames, and what a click finds should be what a person sees on
+  // top. What comes back is the maker rather than the shape -- see
+  // `drawnInWorld`.
+  const world = drawnInWorld(scene, poses, xformMatrix)
+    .filter(({ drawn }) => isHit(drawn, point))
+    .map(({ made }) => made);
+
+  return [...frames.reverse(), ...[...decals, ...world].reverse()];
 }

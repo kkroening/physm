@@ -8,6 +8,7 @@ import JsSolver from './../JsSolver';
 import Line from './../react/Line';
 import RotationalFrame from './../react/RotationalFrame';
 import TrackFrame from './../react/TrackFrame';
+import WorldLine from './../react/WorldLine';
 import Weight from './../react/Weight';
 import coreComponents from './../react/coreComponents';
 import emitScene, { rangeKey } from './emitScene';
@@ -2210,6 +2211,29 @@ describe('Editor, picking', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  test('a click on a world-space line selects the node that wrote it', () => {
+    // It has no shape when the trace runs -- it is remade on every pose -- so
+    // the way back from a click is the maker rather than the object clicked,
+    // and this is the test that the two ends of that agree.
+    const [cart] = nodesFrom(<TrackFrame id="cart" />);
+    const [line] = nodesFrom(
+      <WorldLine startPos={[0, 0]} endPos={[4, 0]} lineWidth={0.4} />,
+    );
+    const { container } = render(
+      <Editor
+        initialDocument={{
+          root: 'Scene',
+          definitions: [{ name: 'Scene', body: [cart!, line!] }],
+        }}
+      />,
+    );
+
+    // Along the line, and clear of the cart's own gizmo at the origin.
+    clickScene(container, [54, 0]);
+
+    expect(shown()).toBe('WorldLine');
   });
 
   test('a click selects the topmost thing it hit', () => {
