@@ -15,7 +15,7 @@ import { InvalidStateMapError } from './../Solver';
 import buildScene from './../react/buildScene';
 import { documentFrom, elementOf, nodesFrom } from './sceneDocument';
 import { literalOf, parameterOf } from './propValue';
-import { mul, vec } from './../expression';
+import { div, mul, vec } from './../expression';
 import type { DocNode, SceneDocument } from './sceneDocument';
 import type { PropValue } from './propValue';
 import { vi } from 'vitest';
@@ -1111,6 +1111,50 @@ describe('Editor, a prop the document computes', () => {
     // Whatever the drag caught, it was not the weight's position: there is no
     // value there to move, and writing one would replace the graph.
     expect(code()).toContain('position={vec(mul(1, 1), 0)}');
+  });
+
+  test('the pane draws the expression as the nodes it is stored as', () => {
+    const half = div(8, 2);
+    render(
+      <Editor
+        initialDocument={documentFrom(
+          <RotationalFrame id="arm">
+            <Weight mass={1} position={vec(half, half)} />
+          </RotationalFrame>,
+        )}
+      />,
+    );
+    const drawn = within(select('Weight')).getByRole('img', {
+      name: 'Position as a graph',
+    });
+
+    // One `div` for one stored node, with an edge each way into the `vec` --
+    // which is the whole reason the drawing is worth having: a viewer that
+    // merged equal subtrees would agree with a representation that had thrown
+    // its sharing away.
+    expect(
+      [...drawn.querySelectorAll('text')].filter(
+        (node) => node.textContent === 'div',
+      ),
+    ).toHaveLength(1);
+    expect(drawn.querySelectorAll('line')).toHaveLength(4);
+
+    // Left to right, leaves first: every edge runs the same way.
+    for (const line of drawn.querySelectorAll('line')) {
+      expect(Number(line.getAttribute('x1'))).toBeLessThanOrEqual(
+        Number(line.getAttribute('x2')),
+      );
+    }
+  });
+
+  test('a prop that is not computed is drawn as nothing', () => {
+    render(<Editor initialDocument={computing()} />);
+
+    expect(
+      within(select('Weight')).queryByRole('img', {
+        name: 'Position as a graph',
+      }),
+    ).toBeNull();
   });
 
   test("an instance's computed argument is shown, and offers no editor", () => {

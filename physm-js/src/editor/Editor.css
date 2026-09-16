@@ -597,6 +597,43 @@
   cursor: default;
 }
 
+/* A prop's expression, drawn as the nodes and edges it is stored as: leaves at
+   the left, the whole expression at the right, every edge running one way. */
+.editor__graph {
+  width: 100%;
+  max-height: 12rem;
+  margin-top: 0.3rem;
+  font-size: 0.65rem;
+}
+
+.editor__graph line {
+  stroke: #b5c6d8;
+  stroke-width: 1;
+}
+
+.editor__graph rect {
+  fill: #fff;
+  stroke: #b5c6d8;
+}
+
+.editor__graph text {
+  fill: #4a5a68;
+  text-anchor: middle;
+  font-family: inherit;
+}
+
+/* The three kinds a node can be, in the colours they are shown in elsewhere:
+   an operation like a component, a reference like one in a prop row. */
+.editor__graph [data-kind='operation'] text {
+  fill: #2d6a4f;
+  font-weight: 600;
+}
+
+.editor__graph [data-kind='reference'] text {
+  fill: #2f6f4f;
+  font-style: italic;
+}
+
 .editor__readonly {
   display: grid;
   grid-template-columns: auto 1fr;

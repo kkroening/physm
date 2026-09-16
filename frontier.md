@@ -14,23 +14,15 @@ file is what actually decides what happens next, and is expected to diverge.
 
 ## In view
 
-**The document holds an expression.** A prop value gains the operation as a
-third variant, resolution goes *into* the graph so a reference inside one finds
-the instance's argument, and the emitter writes the call rather than the value
-it folds to.
+**Typing `halfLength * 2` into a prop box**, which is the last of what a person
+touches. The pane shows a computed prop and draws it; what it cannot do is take
+one. That wants a parser from the surface syntax to the node set -- infix and
+calls in, a graph out -- and a refusal that reads like the length field's
+rather than a stack trace.
 
-*(Reordered: this was to follow the graph viewer, on 0018's argument that the
-viewer is a design check worth having while there are three node kinds. The
-node kinds exist, but the **document** still holds only two of them -- so a
-viewer over a document would draw literals and references and never an
-operation, which is the kind the check is for. The viewer goes next instead,
-over a document that can hold one.)*
-
-**Then the viewer** ([0018](docs/issues/0018.md)), then typing `halfLength * 2`
-into a prop box. The viewer earns its place as a check -- "a graph you cannot
-draw is a graph you have stored wrongly" -- and it is worth having before the
-prop box, because the prop box is the thing that will produce graphs nobody
-hand-wrote.
+The viewer is done and is the reason to do the parser next rather than first:
+it is the thing that makes a graph nobody hand-wrote inspectable on the day it
+first exists.
 
 **Still open, and owed an answer around here:**
 
@@ -246,6 +238,11 @@ wrongly -- so it is worth early and is never urgent.
   components. A shared subexpression stays one node through resolution. Shown
   in the tree and the properties pane as the call that built it, not yet
   editable.
+- **The expression graph, drawn** — a computed prop shows the nodes and edges
+  it is stored as, beneath the prop itself. One node per stored object
+  identity, never per equal subtree, which is what makes it a check on the
+  representation rather than a second opinion about it. Resolves
+  [0018](docs/issues/0018.md).
 - **Expression nodes** — a prop can be computed rather than stated:
   `position={vec(3, mul(halfLength, 2))}`. A constructor returns a node rather
   than a result, so one form serves a hand-written component, the module the
